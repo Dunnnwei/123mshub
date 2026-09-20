@@ -1,0 +1,23 @@
+{
+  "name": "mshub-web",
+  "private": true,
+  "version": "0.8.1",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build && node scripts/copy-dist.mjs",
+    "preview": "vite preview --host 127.0.0.1",
+    "check": "vue-tsc --noEmit",
+    "test": "node --test tests/*.test.js"
+  },
+  "dependencies": {
+    "@lucide/vue": "1.26.0",
+    "vue": "3.5.13"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "5.2.1",
+    "typescript": "5.7.3",
+    "vite": "^6.4.3",
+    "vue-tsc": "^3.3.8"
+  }
+}

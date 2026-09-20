@@ -1,0 +1,36 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+dist/
+build/
+release/
+web/node_modules/
+web/dist/
+.env
+*.log
+test-output/
+
+# 同步盘上的日常使用程序（两机共用，仅仓库根目录）
+/app/
+
+# Playwright MCP 测试快照（本地测试产物）
+.playwright-mcp/
+
+# 本地个人工作文档与一次性数据（不发布）
+.tmp-verify/
+开发文档/
+123hot-方案.md
+*交接*.md
+WorkBuddy-*.md
+verify-*.png
+scripts/dsh-skill-sources.json
+scripts/merge-dsh-skillhub.py
+
+# 123mshub 冒烟/调试残留
+.tmp-*/
+memory-page.png
+inbox-*.png

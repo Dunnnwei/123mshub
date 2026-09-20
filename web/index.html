@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#F7F5F2" />
+    <script>
+      /* 防闪白：渲染前定主题——手动选择 > 系统偏好（123UI v3.3）
+         隐私模式等 localStorage 不可用时回退系统偏好；同步 theme-color 防顶栏闪色 */
+      (function () {
+        var saved = null;
+        try { saved = localStorage.getItem('theme'); } catch (e) { /* 存储被禁用 */ }
+        var theme = saved === 'dark' || saved === 'light'
+          ? saved
+          : (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        document.documentElement.dataset.theme = theme;
+        document.querySelector('meta[name="theme-color"]')
+          ?.setAttribute('content', theme === 'dark' ? '#030711' : '#F7F5F2');
+      })();
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Noto+Serif+SC:wght@600;700&display=swap" rel="stylesheet">
+    <title>123 MSHub · 共享大脑管理器</title>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
