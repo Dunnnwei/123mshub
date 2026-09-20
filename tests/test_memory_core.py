@@ -25,6 +25,10 @@ class TestNameSanitize:
     def test_uppercase_and_spaces_normalized(self) -> None:
         assert sanitize_name("My First Note") == "my-first-note"
 
+    def test_fullwidth_nfkc_normalized(self) -> None:
+        # 全角字母数字经 NFKC 归一化后成为合法 kebab（v1.2.0 吸收）
+        assert sanitize_name("ＭＳ Ｈｕｂ") == "ms-hub"
+
     def test_chinese_and_punct_stripped_to_empty_raises(self) -> None:
         with pytest.raises(ValidationError):
             sanitize_name("中文标题")
@@ -67,6 +71,18 @@ class TestFrontmatter:
         fields, body = split_frontmatter("就是一段正文。\n")
         assert fields == {}
         assert "就是一段正文" in body
+
+    def test_bom_tolerated(self, tmp_path: Path) -> None:
+        """Windows 编辑器默认写 BOM：解析必须先剥掉（Engramory 0.1.12 同款教训）。"""
+        from mshub.memory import parse_entry_file
+
+        bom_file = tmp_path / "bom-note.md"
+        bom_file.write_bytes(
+            "\ufeff---\nname: bom-note\ntitle: 带 BOM\ntype: user\n---\n\n正文\n".encode("utf-8")
+        )
+        entry = parse_entry_file(bom_file)
+        assert entry.title == "带 BOM"
+        assert entry.body == "正文"
 
     def test_unclosed_frontmatter_tolerated(self) -> None:
         fields, body = split_frontmatter("---\nname: broken\n没有闭合")

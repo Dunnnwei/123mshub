@@ -862,7 +862,13 @@ class SkillRepository:
     def library_prompt(self) -> str:
         """MSHub 全局注入提示词：记忆读取 + 技能使用 + 记忆投递的超集（含连通暗号）。"""
         root = self.config_store.require_repo_root()
-        return build_injection_prompt(root, self.memory.memory_root())
+        _, database = self._storage()
+        return build_injection_prompt(
+            root,
+            self.memory.memory_root(),
+            memory_count=self.memory.stats()["total"],
+            skill_count=len(database.list_skills()),
+        )
 
     def rebuild(self) -> dict[str, Any]:
         root, database = self._storage()

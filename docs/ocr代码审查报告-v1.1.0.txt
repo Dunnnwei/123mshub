@@ -1,0 +1,267 @@
+Review complete: 28 finding(s) across 12 selected item(s).
+
+─── web/src/components/MemoryDrawer.vue:68-69 ───
+[bug · high] sanitizeSlug 会删除所有非 a-z0-9- 字符，纯中文标题（如「我的第一条记忆」）净化后得到空串；随后 nameInvalid 因 `(name.value
+|| title.value) && !namePreview.value` 判定为 true，canSave 恒为
+false，保存按钮被禁用。这与下方提示「纯中文标题会自动生成兜底名」直接矛盾，导致用户无法创建中文标题的记忆条目（后端 create_entry 对空 name 走的是
+sanitize_name(title) 而非 slug_from_title，同样会抛错）。建议在前端为空结果时仿照后端 slug_from_title 生成兜底名（日期+短哈希），或放开
+nameInvalid 并让后端改走 slug_from_title。
+
+- const namePreview = computed(() => sanitizeSlug(name.value || title.value))
+- const nameInvalid = computed(() => Boolean((name.value || title.value) && !namePreview.value))
++ const namePreview = computed(() => {
++   const slug = sanitizeSlug(name.value || title.value)
++   if (slug || !title.value.trim()) return slug
++   const stamp = new Date().toISOString().slice(5, 10).replace('-', '')
++   let hash = 0
++   for (const ch of title.value) hash = (hash * 31 + ch.codePointAt(0)) % 0xFFFF
++   return `note-${stamp}-${hash.toString(16).padStart(4, '0')}`
++ })
+
+
+─── web/src/components/MemoryView.vue:87-93 ───
+[bug · medium] refreshEntries 与 refreshStats 都没有 try/catch：refreshAll 用 try/finally
+兜底后异常仍会向上抛出。onMounted 以及 watch(search/typeFilter/sort) 触发的请求一旦失败（api.request 会 throw），就会产生未处理的
+Promise rejection，用户也看不到任何错误提示。建议在 refreshEntries 内捕获异常并 emit('toast', { type: 'error', message:
+err.message })，失败时保留旧列表数据。
+
+
+
+─── web/src/components/MemoryView.vue:71-72 ───
+[bug · medium] watch(typeFilter) 与 watch(sort) 直接调用 refreshEntries，既没有防抖也没有请求序号/取消保护。快速切换筛选或排序时会并发多个
+memoryEntries 请求，先发后至的响应可能覆盖最后一次选择的结果，导致列表与当前筛选条件不一致。建议复用 search 的防抖逻辑，或维护一个递增的请求序号，只接受最新一次请求的响应。
+
+
+
+─── web/src/components/MemoryView.vue:23-23 ───
+[maintainability · low] searchTimer 只在下次 watch(search) 触发时被清理，组件没有 onUnmounted 钩子；组件销毁后定时器仍可能触发
+refreshEntries 发起无效请求。建议补充 `onUnmounted(() => { if (searchTimer.value)
+window.clearTimeout(searchTimer.value) })`。
+
+
+
+─── web/src/markdown.js:18-19 ───
+[bug · low] renderInline 先做行内代码替换，随后仍在整串（包括刚生成的 `<code>...</code>`）上继续执行加粗、斜体、双链和链接替换，导致代码片段里的
+`**`、`[文本](http://…)` 等 Markdown 语法被二次解析（例如 `**x**` 会被渲染成
+`<code><strong>x</strong></code>`），预览格式失真。建议先把代码片段提取为占位符，对非代码部分执行其余规则后再还原，或让其余规则跳过 `<code>` 内容。
+
+
+
+─── web/src/components/ImportModal.vue:55-62 ───
+[bug · medium] 组件没有 watch(props.open) 也没有在关闭时调用 reset()。SettingsView 用 `:open="importOpen"`
+常驻渲染该组件（无 v-if），关闭后 stage/preview/result 等状态会保留；再次打开会直接显示上一次的「导入完成」或预览界面，而不是初始的选择目录界面。建议 `watch(()
+=> props.open, (open) => { if (open) reset() })`——后台任务已提交，重置本地展示状态不影响任务继续执行。
+
+
+
+─── web/src/components/ImportModal.vue:269-269 ───
+[bug · low] `class="kind-{{ item.kind }}"` 在 Vue 中是静态字符串，不会做插值，渲染结果就是字面类名 `kind-{{ item.kind }}`（预览里
+kind 徽标的样式永远不生效）。应改为动态绑定，如 `:class="`kind-${item.kind}`"`（记忆与技能两处预览列表都需要改）。
+
+-                   <b class="kind-{{ item.kind }}">{{ item.kind }}</b>
++                   <b :class="`kind-${item.kind}`">{{ item.kind }}</b>
+
+
+─── src/mshub/importer.py:276-276 ───
+[bug · medium] `_skipped` 会过滤掉所有以 `.` 开头的目录，因此 `.engramory-memory/` 下的 md 永远不会进入 `md_files`。当来源只存在
+`.engramory-memory/MEMORY.md`（没有根目录 MEMORY.md）时，本分支的 `base` 就是 `.engramory-memory`，`claim([p for p
+in md_files if p.parent == base])` 恒为空列表，该布局的记忆会被静默漏掉。建议对此分支直接 `base.glob("*.md")` 收集候选（`claim` 内部已按
+`collected` 去重），或让 `_skipped` 豁免 `.engramory-memory` 目录。
+
+-             count = claim([p for p in md_files if p.parent == base], "engramory", titles)
++             count = claim(sorted(base.glob("*.md")), "engramory", titles)
+
+
+─── src/mshub/importer.py:423-426 ───
+[bug · medium] `shutil.copytree` 在复制中途失败时不会回滚已创建的目标目录；此处的 `except OSError` 只记录
+`skills_failed`，残留的部分目录 `target` 仍然存在。下次运行时 `target.exists()` 命中，直接进入
+`skills_skipped`，残缺技能将永远无法被修复或覆盖。建议在失败分支清理目标目录（`shutil.rmtree(target,
+ignore_errors=True)`），或先复制到临时目录再原子改名。
+
+                      shutil.copytree(candidate.path, target, copy_function=robust_copy2)
+                      result["skills_imported"].append(f"{candidate.dir_name}（{candidate.library}）")
+                  except OSError as exc:
++                     shutil.rmtree(target, ignore_errors=True)
+                      result["skills_failed"].append(f"{candidate.dir_name}: {exc}")
+
+
+─── src/mshub/importer.py:321-326 ───
+[maintainability · low] `index.json` 分支只对索引文件自身所在路径做了 `_skipped` 检查，而 `add_skill` 对索引中 `dir`
+字段引用到的技能目录没有再做跳过校验；manifest/SKILL.md 分支都有目录级 `_skipped(directory.relative_to(source).parts)` 检查。若索引把
+`dir` 指向 `node_modules` 等应跳过的目录，扫描结果与另外两个分支不一致。建议在 `add_skill` 内（或本分支处）对被引用目录统一执行 `_skipped` 校验。
+
+
+
+─── src/mshub/importer.py:380-381 ───
+[other · low] `run` 调用 `_scan_internal` 时未传入 `progress` 回调，`_scan_internal` 内部的
+5%/15%/30%/40%/55%/65% 等进度上报全部变成空操作，后台任务进度会从 3% 直接跳到 45%（或更晚）。建议改为
+`self._scan_internal(source_value, progress=report_progress)`，`report_progress` 的签名与
+`_scan_internal` 期望的回调一致。
+
+          report_progress(3, "正在扫描来源目录")
+-         report = self._scan_internal(source_value)
++         report = self._scan_internal(source_value, progress=report_progress)
+
+
+─── tests/test_importer.py:141-143 ───
+[test · low] 该断言以 `or True` 结尾，恒为真，不验证任何行为（`repo` 是否被 scan 创建都无意义）。建议删除此断言，保留下方对 `memory/notes`
+未写入的有效检查，或改为明确断言 scan 不写任何文件。
+
+
+
+─── tests/test_importer.py:194-194 ───
+[test · low] `assert second["skills_skipped"] or True` 恒为真（DSH 源中无技能，`skills_skipped`
+本就应为空列表），不验证任何行为。建议改为明确断言，例如 `assert second["skills_skipped"] == []`。
+
+-         assert second["skills_skipped"] or True
++         assert second["skills_skipped"] == []
+
+
+─── src/mshub/memory_service.py:218-219 ───
+[bug · high] `_reconcile_cache` 对每个 notes 文件 stem 直接 `validate_name(name)`，而 `parse_entry_file`
+内部也会对非 kebab-case 的 `path.stem` 走 `sanitize_name` 并抛错。notes 目录里一旦出现手工复制/外部写入的中文名、含空格等非 kebab-case 的
+.md 文件，对账会抛 ValidationError 并中断整个 `list_entries`/`stats`/`heal`，导致单条脏文件名拖垮整个记忆列表，与模块 docstring
+声明的「坏行容忍——绝不让单条脏数据拖垮整个列表」相悖（且「手改文件无需重启即可被看到」是已承诺的场景）。建议按文件单独 try/except，记录跳过原因后
+continue，或把这类文件当作冲突副本隔离，而不是让整个对账失败。
+
++             try:
+              entry = parse_entry_file(notes / f"{name}.md")
+              entry.name = validate_name(name)
++             except ValidationError:
++                 # 脏文件名/坏条目不拖垮整个列表：跳过，留待 heal() 隔离处理
++                 continue
++             cache.upsert(entry, mtime_ns, size)
+
+
+─── src/mshub/tidy.py:60-60 ───
+[bug · medium] `list_entries` 返回的 item 由 `_row_to_item` 构造，并不包含 `body` 字段，因此 `entry.get("body")` 恒为
+None，`empty_body` 会把所有记忆都误判为「正文为空」写进日报并给出错误的整理建议（导入完成后 `importer.run` 也会调用
+`run_tidy(use_ai=False)`，同样受影响）。建议按 notes 文件读取正文后再判断（notes 文件才是事实源），例如复用下方 broken_links 的读文件逻辑。
+
+-         empty_body = [entry["name"] for entry in entries if not str(entry.get("body") or "").strip()]
++         notes_dir = self.memory.memory_root() / "notes"
++         empty_body = [
++             entry["name"] for entry in entries
++             if not self._body_text(notes_dir / f"{entry['name']}.md").strip()
++         ]
+
+
+─── src/mshub/memory_service.py:288-289 ───
+[bug · medium] 当标题为纯中文且请求未携带 name 时，`sanitize_name(title)` 会把所有非 ASCII 字符剥掉得到空串并抛
+ValidationError（「条目名不能为空」）。`MemoryEntryCreate.name` 默认为空串，因此「纯中文标题 + 不手填条目名」这一合法输入会直接 400，而
+memory.py 里的 `slug_from_title` 正是为此兜底设计（纯中文标题生成 note-MMDD-xxxx）却未被使用。建议在 title 回退分支改用
+`slug_from_title(title)`（需同时修复其 hash 不稳定问题）。
+
+          raw_name = str(payload.get("name") or "").strip()
+-         name = sanitize_name(raw_name) if raw_name else sanitize_name(title)
++         name = sanitize_name(raw_name) if raw_name else slug_from_title(title)
+
+
+─── src/mshub/memory.py:137-137 ───
+[bug · low] 内置 `hash()` 对 str 受 PYTHONHASHSEED 影响，同一中文标题在不同进程/不同运行中会得到不同的 digest，导致生成的兜底 name
+不稳定，会破坏条目名作为长期标识的一致性（重复检测、双链、索引都会依赖稳定的 name）。建议改用确定性的摘要，例如
+hashlib.sha256(str(title).encode('utf-8')).hexdigest()[:4]。
+
+-     digest = format(abs(hash(str(title))) % 0xFFFF, "04x")
++     import hashlib
++ 
++     digest = hashlib.sha256(str(title).encode("utf-8")).hexdigest()[:4]
+
+
+─── src/mshub/memory_service.py:532-532 ───
+[maintainability · low] `request_body` 从未设置过 `response_format` 字段，`pop("response_format", None)`
+恒为空操作，BAD_REQUEST 重试发送的请求与第一次完全相同，重试分支实际无效。该写法疑似从 scanner.py 复制遗留（scanner 里确实先设置了 response_format 再在
+400 时降级）。建议删除这个无意义的重试，或若确需兼容不支持该参数的网关，应先真正设置再在失败时剥离。
+
+
+
+─── src/mshub/tidy.py:202-204 ───
+[maintainability · low] 这里的 400 重试与首次请求完全相同（`request_body` 中没有任何需要降级剥离的字段），重试没有意义，疑似从 scanner.py
+的「不支持 response_format 时降级重试」逻辑复制残留。建议删除该分支，避免对 400 场景做无谓的第二次调用。
+
+
+
+─── src/mshub/importer.py:394-399 ───
+[bug · high] 此处 `except ValidationError: raise` 会让单条记忆条目的名字非法时直接中止整个导入任务。`_import_memory_entry` 内部调用
+`sanitize_name(raw_name)`，当来源文件 frontmatter 的 `name` 为空、或为纯中文等无法转成 kebab-case 的值（`sanitize_name`
+会把它清洗为空串后由 `validate_name` 抛 `ValidationError`），异常会从循环里冒泡到 `run()`
+之外，已写入的部分条目也被丢弃，且后续的索引重建/技能导入/整理都不会执行——这与注释「单条失败不断整批」的意图直接矛盾。建议像下面的 `except Exception` 一样按条目捕获
+`ValidationError` 并记入 `memory_failed` 后继续（或用 `slug_from_title` 生成兜底名）。
+
+                  try:
+                      self._import_memory_entry(notes_dir, candidate, result)
+-                 except ValidationError:
+-                     raise
++                 except ValidationError as exc:
++                     result["memory_failed"].append(f"{candidate.path.name}: {exc}")
+                  except Exception as exc:  # 单条失败不断整批
+                      result["memory_failed"].append(f"{candidate.path.name}: {exc}")
+
+
+─── src/mshub/importer.py:489-496 ───
+[bug · medium] 重名避让只按「文件名是否存在」判断，不比较文件内容：对同一冲突来源重复执行导入时，第一次生成 `user-profile-2`，第二次会跳过已存在的 `-2`、再生成
+`-3`，依此类推，重复副本会无限累积（且 `entry.name` 写入 frontmatter 后内容也不相等，无法用后续的内容比对兜底）。建议在避让循环里对已存在的候选文件做内容（忽略 name
+字段的正文/标题）比对，命中即记入 `memory_skipped_same` 并返回；或按内容哈希推导确定性的目标名，使重复导入能幂等地识别为「已存在」。
+
+
+
+─── web/src/components/MemoryDrawer.vue:39-40 ───
+[bug · medium] watch 只监听了 props.open，没有监听 props.entry / props.mode。当抽屉已经打开时（drawerOpen 保持
+true），点击「打开它」会触发父组件 MemoryView.openEntryByName → openEntry 重新设置 drawerEntry / drawerMode，但
+props.open 没有发生 false→true 的跳变，watch 不会重新执行，抽屉里仍显示旧的条目（或仍停留在 create 模式）。建议把 entry/mode 也纳入监听，例如
+`watch(() => [props.open, props.entry, props.mode], ([open]) => { if (!open) return ...
+})`，确保切换条目时重新初始化表单。
+
+- watch(() => props.open, (open) => {
++ watch(
++   () => [props.open, props.entry, props.mode],
++   ([open]) => {
+    if (!open) return
+
+
+─── web/src/components/MemoryView.vue:61-61 ───
+[bug · low] existingNames 由当前 entries 列表计算，而 entries 是经过 typeFilter/search
+过滤后的结果。用户带着搜索或类型筛选打开新建/编辑抽屉时，冲突检测会漏掉那些不在当前列表里的条目，导致本应被拦截的重名（以及「打开它」入口）不生效，最终只能等到后端保存时报「已有同名条目」。建议单独维
+护一份未过滤的全部条目名列表（例如新增一个 unfilteredEntries 或由 memoryStats/专门接口提供），供抽屉做重名校验。
+
+- const existingNames = computed(() => entries.value.map((entry) => entry.name))
++ // 冲突校验需基于全量条目，不能用当前过滤后的列表
++ const existingNames = computed(() => allEntries.value.map((entry) => entry.name))
+
+
+─── src/mshub/memory.py:44-46 ───
+[maintainability · low] `FRONTMATTER_FIELDS` 定义后从未被引用（模块内及整个代码库均无使用），属于死代码，建议删除或后续按声明校验 frontmatter
+字段时再使用。
+
+
+
+─── src/mshub/memory.py:166-170 ───
+[bug · low] `_parse_scalar_list` 无条件按逗号切分，且 `_quote_yaml` 不会给含逗号的 tag 加引号，因此包含逗号的标签（如「AI, 大模型」）在写出
+`tags: [AI, 大模型]` 后再读回会被拆成两个标签，破坏读写回环一致性。建议按 `_quote_yaml` 的引号规则切分，或让 `_quote_yaml` 对含逗号的标量也加引号。
+
+
+
+─── src/mshub/memory_service.py:100-106 ───
+[maintainability · low] `_MemoryCache.get_row` 在服务层中从未被调用，且 `InboxItem`、`AppConfig`、`SkillRepoError`
+三个导入也未使用，属于死代码。建议删除以保持模块整洁。
+
+
+
+─── web/src/components/MemoryView.vue:25-25 ───
+[maintainability · low] inboxLoading 被声明并在 openInbox 里写入 true/false，但模板中从未读取它（MemoryInbox 也没有
+loading prop），属于死状态，加载中界面不会有任何反馈。要么在模板/子组件里实际使用它展示加载态，要么删除该变量避免误导。
+
+- const inboxLoading = ref(false)
++ // 若无需展示加载态，可删除 inboxLoading；否则应将其透传给 MemoryInbox 用于渲染
+
+
+─── web/src/components/MemoryInbox.vue:48-49 ───
+[bug · low] aiComplete 无论用户是否已经填写过标题，都会用 AI 返回的 result.title 直接覆盖表单标题，与 MemoryDrawer
+里「标题为空时才补全」的行为不一致；用户手动输入的标题会被无声替换。建议与抽屉逻辑保持一致：`if (result.title && !form.title.trim()) form.title =
+result.title`。
+
+-     if (result.title) form.title = result.title
+-     if (result.description) form.description = result.description
++     if (result.title && !form.title.trim()) form.title = result.title
++     if (result.description && !form.description.trim()) form.description = result.description
+

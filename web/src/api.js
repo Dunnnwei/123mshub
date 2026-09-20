@@ -38,6 +38,7 @@ export const api = {
   aiPresets: () => request('/api/config/ai-presets'),
   saveConfig: (body) => request('/api/config', { method: 'PUT', body: JSON.stringify(body) }),
   selectDirectory: () => request('/api/system/select-directory', { method: 'POST' }),
+  selectImportDirectory: () => request('/api/system/select-import-directory', { method: 'POST' }),
   openDirectory: (name) => request('/api/system/open-directory', { method: 'POST', body: JSON.stringify({ name }) }),
   listSkills: () => request('/api/skills'),
   listTags: () => request('/api/tags'),

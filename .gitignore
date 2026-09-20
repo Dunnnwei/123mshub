@@ -34,3 +34,7 @@ scripts/merge-dsh-skillhub.py
 .tmp-*/
 memory-page.png
 inbox-*.png
+.ocr-review-result.txt
+
+# 前端构建产物（npm run build 拷贝而来，不入库）
+src/mshub/web/

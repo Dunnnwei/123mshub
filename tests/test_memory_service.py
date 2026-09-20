@@ -85,6 +85,29 @@ class TestCrud:
         with pytest.raises(ValidationError):
             service.create_entry({"name": "no-title"})
 
+    def test_pure_chinese_title_gets_fallback_slug(self, service: MemoryService) -> None:
+        """纯中文标题 + 不手填条目名：自动兜底 note-MMDD-xxxx，不再 400（ocr 审查修复）。"""
+        created = service.create_entry({"title": "我的第一条中文记忆", "body": "正文"})
+        assert created["name"].startswith("note-")
+        assert created["title"] == "我的第一条中文记忆"
+        # 兜底名确定性：同标题重复生成得到相同名字（哈希不受 PYTHONHASHSEED 影响）
+        from mshub.memory import slug_from_title
+
+        assert slug_from_title("我的第一条中文记忆") == slug_from_title("我的第一条中文记忆")
+
+    def test_dirty_filename_does_not_break_listing(self, service: MemoryService) -> None:
+        """notes 里混入中文文件名：列表/统计不被拖垮（ocr 审查 #high 修复）。"""
+        service.create_entry({"title": "正常条目", "name": "normal-note"})
+        root = service.memory_root()
+        (root / "notes" / "中文文件名.md").write_text(
+            "---\ntitle: 脏条目\n---\n正文", encoding="utf-8"
+        )
+        listing = service.list_entries()
+        names = [item["name"] for item in listing["items"]]
+        assert "normal-note" in names
+        assert "中文文件名" not in names  # 脏名跳过，不拖垮
+        assert service.stats()["total"] == 1
+
 
 class TestIndex:
     def test_index_rebuilt_and_stable(self, service: MemoryService) -> None:

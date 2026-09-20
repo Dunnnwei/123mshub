@@ -112,7 +112,8 @@ class TestInjectionPromptApi:
         assert "123 MSHub 共享大脑接入" in prompt
         assert "记忆读取协议" in prompt
         assert "记忆投递协议" in prompt
-        assert "AI猛如虎" in prompt
+        assert "天王盖地虎" in prompt
+        assert "AI镇河妖" in prompt
         assert str(tmp_path / "repo") in prompt
 
     def test_duty_prompt(self, tmp_path: Path) -> None:
@@ -120,6 +121,7 @@ class TestInjectionPromptApi:
         prompt = client.get("/api/memory/duty-prompt").json()["prompt"]
         assert "值守整理员" in prompt
         assert "值守权限" in prompt or "值守职责" in prompt
+        assert "天王盖地虎" in prompt
         assert "reports\\" in prompt
         assert "日报" in prompt
 

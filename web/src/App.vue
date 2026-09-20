@@ -6,7 +6,8 @@ import {
 } from '@lucide/vue'
 import { api } from './api'
 import { startJobPolling, stopJobPolling, wakeJobPolling, jobStore } from './jobStore'
-import logoUrl from './assets/123uilogo.svg'
+import logoUrl from './assets/123mshublogo.svg'
+import logoHeiUrl from './assets/123mshublogohei.svg'
 import AddSkillModal from './components/AddSkillModal.vue'
 import ConfirmModal from './components/ConfirmModal.vue'
 import DetailDrawer from './components/DetailDrawer.vue'
@@ -598,12 +599,12 @@ function currentBusy(skill) {
 
 <template>
   <div v-if="loading" class="app-loading">
-    <img class="brand-logo brand-logo-lg" :src="logoUrl" alt="123mshub" />
+    <img class="brand-logo brand-logo-lg" :src="theme === 'dark' ? logoHeiUrl : logoUrl" alt="123mshub" />
     <div class="loading-lines"><span></span><span></span></div>
   </div>
 
   <div v-else-if="fatalError" class="fatal-state">
-    <img class="brand-logo brand-logo-lg" :src="logoUrl" alt="123mshub" />
+    <img class="brand-logo brand-logo-lg" :src="theme === 'dark' ? logoHeiUrl : logoUrl" alt="123mshub" />
     <h1>无法连接本地服务</h1>
     <p>{{ fatalError }}</p>
     <button class="primary-button" type="button" @click="loadApp">重新连接</button>
@@ -612,7 +613,7 @@ function currentBusy(skill) {
   <div v-else class="app-shell" :class="{ 'has-tasks': jobStore.items.length > 0 }">
     <aside class="sidebar" :class="{ 'mobile-open': mobileNavOpen }">
       <div class="brand-lockup">
-        <img class="brand-logo" :src="logoUrl" alt="123 MSHub" />
+        <img class="brand-logo" :src="theme === 'dark' ? logoHeiUrl : logoUrl" alt="123 MSHub" />
         <div><strong>123 MSHub</strong><span>本地共享大脑管理器</span></div>
         <button class="mobile-close" type="button" aria-label="关闭导航" @click="mobileNavOpen = false">
           <X :size="20" />

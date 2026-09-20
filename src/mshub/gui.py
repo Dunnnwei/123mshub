@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import socket
 import sys
 import threading
@@ -46,6 +47,11 @@ def show_message(title: str, message: str, *, error: bool = False) -> None:
     print(f"{title}: {message}", file=sys.stderr)
 
 
+def _force_exit() -> None:
+    """关窗后的硬退出（独立函数便于测试打桩）。"""
+    os._exit(0)
+
+
 def _browser_fallback(url: str, reason: str) -> None:
     webbrowser.open(url)
     show_message(
@@ -59,11 +65,15 @@ def _browser_fallback(url: str, reason: str) -> None:
 
 def launch(host: str = "127.0.0.1", port: int = 8766) -> None:
     if not _port_available(host, port):
-        message = (
-            f"端口 {port} 已被其他程序占用，{PRODUCT_NAME} 无法启动。\n\n"
-            "请先退出已经运行的 123mshub，或关闭占用该端口的程序后重试。"
+        # 双开或端口被占：只提示一次即退出——不重试、不驻留。
+        # 关窗强退（见 _force_exit）保证端口被占时几乎必然是「真的还有一个实例在跑」。
+        show_message(
+            f"{PRODUCT_NAME} 已在运行",
+            f"请勿双开：端口 {port} 已被占用。\n\n"
+            "若 123 MSHub 已在运行，请从任务栏找回窗口；"
+            "若要重启，请先退出已运行的实例后再启动。",
+            error=True,
         )
-        show_message(f"{PRODUCT_NAME} 启动失败", message, error=True)
         return
 
     server = uvicorn.Server(
@@ -96,3 +106,6 @@ def launch(host: str = "127.0.0.1", port: int = 8766) -> None:
     finally:
         server.should_exit = True
         thread.join(timeout=5)
+    # WebView2/COM 相关线程在部分环境不随主线程退出，残留进程会一直占住端口，
+    # 使下一次启动误报「端口被占用」：窗口关闭即强制退出进程。
+    _force_exit()

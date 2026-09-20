@@ -44,7 +44,9 @@ def test_install_manifest_index_and_prompt(config_store, fake_fetcher, monkeypat
     assert "记忆读取协议" in library_prompt
     assert "技能库使用协议" in library_prompt
     assert "记忆投递协议" in library_prompt
-    assert "AI猛如虎" in library_prompt
+    assert "天王盖地虎" in library_prompt
+    assert "AI镇河妖" in library_prompt
+    assert "1项技能" in library_prompt
     assert str(root) in library_prompt
 
     with pytest.raises(ConflictError):

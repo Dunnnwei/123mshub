@@ -116,6 +116,7 @@ Write-Host "使用 PyInstaller 生成单文件 EXE..."
     --onefile `
     --windowed `
     --name 123mshub `
+    --icon (Join-Path $projectRoot "packaging\123mshub.ico") `
     --distpath $releaseDir `
     --workpath $workDir `
     --specpath $specDir `
@@ -159,7 +160,7 @@ $readmeLite = Join-Path $releaseDir "README.md"
 
 - 首次启动：设定仓库位置（建议放进同步盘）；AI 接口与 GitHub Token 可选；
 - 复制「注入提示词」发给你的 agent，它就能读共享记忆、用共享技能库、往 inbox 投递新知识；
-- 连通暗号：向 agent 发 ``AI猛如虎``，应只回「Token任你烧！/ 暗号对齐，123mshub已接入。」。
+- 连通暗号：向 agent 发 ``天王盖地虎``，应只回「AI镇河妖！暗号对齐，123mshub已接入，当前仓库拥有X条记忆，X项技能。」。
 
 ## 校验与安全
 

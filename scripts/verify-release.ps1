@@ -234,7 +234,7 @@ try {
     # 路径断言用服务端 resolve 后的绝对路径（$repoRoot 可能是 8.3 短路径形式）
     foreach ($needle in @(
         "123 MSHub 共享大脑接入", "记忆读取协议", "技能库使用协议", "记忆投递协议",
-        "AI猛如虎", $health.repo_root
+        "天王盖地虎", "AI镇河妖", $health.repo_root
     )) {
         if ($promptData.prompt -notlike "*$needle*") {
             throw "注入提示词缺少关键内容：$needle"

@@ -1,18 +1,34 @@
 /* ============================================================
-   123mshub · 123UI 品牌风格 v3.3（亮/暗双主题）
+   123mshub · 123UI 品牌风格 v4（亮/暗双主题 · 层次工程版）
    亮色系：米杏纸底 + 白卡片；暗色系：近黑蓝底 + 深蓝层次卡（Nocturne 版式）
    铁律：无纯黑（正文浅底 #000A1E / 深底 #FFFFFF）、无黄色、蓝底只放浅字、
         糖果色仅限真实状态语义（绿=安全 红=风险）；
         暗底小号蓝字一律 #568EFD（--accent-text），皇家蓝留大标题与蓝底；
         主题切换 data-theme + localStorage 记忆 + index.html 防闪白脚本
+   v4 升级：墨色三档层级（--ink/--ink-2/--ink-3，同墨色透明度阶）；
+        海拔系统 --elev-1/2/3（暗色加 --elev-tint 明度叠加）；
+        统一焦点环 --focus-ring；::selection 选区染色；两主题滚动条；
+        动效 token（--dur-1/2/3、--ease-standard）；等宽栈 --font-mono。
+        v3.3 全部变量名保留为别名，组件零改动升级。
    ============================================================ */
 
 :root {
   --font-display: "Fraunces", "Noto Serif SC", "Source Han Serif SC", Georgia, serif;
   --font-body: -apple-system, "PingFang SC", "Microsoft YaHei", "Noto Sans SC", "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "Cascadia Mono", Consolas, "JetBrains Mono", monospace;
   --radius: 16px;
   --radius-small: 10px;
   --sidebar: 236px;
+
+  /* v4 动效与组件 token */
+  --dur-1: 120ms;
+  --dur-2: 200ms;
+  --dur-3: 320ms;
+  --ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
+  /* v4.1 iOS 式弹簧（linear() 近似 spring damping≈0.8，不支持时由 @supports 回退） */
+  --ease-spring: linear(0, 0.32, 0.57, 0.76, 0.9, 0.97, 1.01, 1, 0.99, 1);
+  --btn-h: 40px;
+  --focus-ring: 0 0 0 3px var(--ring);
 
   font-family: var(--font-body);
   font-synthesis: none;
@@ -30,10 +46,12 @@
   --surface-raised: #FFFFFF;
   --surface-muted: #EBE7E0;
 
-  --ink: #000A1E;              /* v3.3：正文与小字同色，层次靠字号字重 */
+  --ink: #000A1E;              /* v4：正文档（三档层级：ink/ink-2/ink-3） */
   --ink-soft: #000A1E;
-  --muted: #000A1E;
-  --faint: #000A1E;
+  --ink-2: rgba(0, 10, 30, 0.68);   /* v4 次级文字：label/说明/副信息 */
+  --ink-3: rgba(0, 10, 30, 0.52);   /* v4 辅助文字：meta/计数/占位 */
+  --muted: var(--ink-2);       /* v4：默认指次级档（回退 v3.3 一色制就指回 --ink） */
+  --faint: var(--ink-3);       /* v4：默认指辅助档 */
 
   --line: #E8E4DC;
   --line-strong: #D9D3C6;
@@ -46,6 +64,21 @@
   --accent-text: #0156FC;      /* 主题底上的蓝字/图标（暗色自动提亮） */
   --accent-text-strong: #0148D2;
   --placeholder: rgba(2, 44, 129, 0.4);
+  --ring: rgba(1, 86, 252, 0.18);      /* v4 焦点环色 */
+  --selection: rgba(1, 86, 252, 0.18); /* v4 选区染色 */
+  --elev-1: 0 1px 2px rgba(0, 10, 30, 0.05);   /* v4 海拔：静卡 */
+  --elev-2: 0 8px 24px rgba(1, 40, 150, 0.1);  /* v4 海拔：浮起 */
+  --elev-3: 0 24px 72px rgba(1, 40, 150, 0.14);/* v4 海拔：模态/抽屉 */
+
+  /* v4.2 玻璃材质（iOS 27 级：品牌色零改动 + 暗化边缘 + 更亮镜面高光 + tint 三档） */
+  --glass-bg: rgba(255, 255, 255, 0.72);        /* regular 档：表单密度可读档 */
+  --glass-bg-clear: rgba(255, 255, 255, 0.6);   /* clear 档：装饰性小浮层 */
+  --glass-bg-tinted: rgba(255, 255, 255, 0.86); /* tinted 档：高可读/小浮钮 */
+  --glass-bg-strong: var(--glass-bg-tinted);
+  --glass-blur: saturate(1.6) blur(20px);
+  --glass-line: rgba(255, 255, 255, 0.55);      /* 玻璃边缘（折射描边） */
+  --glass-hi: inset 0 1px 0 rgba(255, 255, 255, 0.85); /* v4.2 更亮顶部镜面高光 */
+  --glass-edge: inset 0 -1px 0 rgba(0, 10, 30, 0.1);   /* v4.2 暗化下边缘（深度/分离感） */
   --hover-veil: rgba(255, 255, 255, 0.75);  /* 列表行悬停 */
   --hover-soft: rgba(255, 255, 255, 0.72);  /* 侧栏导航悬停 */
   --count-bg: rgba(2, 44, 129, 0.09);       /* 导航计数胶囊底 */
@@ -92,8 +125,10 @@
 
   --ink: #FFFFFF;
   --ink-soft: #FFFFFF;
-  --muted: #FFFFFF;
-  --faint: #FFFFFF;
+  --ink-2: rgba(255, 255, 255, 0.72);  /* v4 次级文字 */
+  --ink-3: rgba(255, 255, 255, 0.56);  /* v4 辅助文字 */
+  --muted: var(--ink-2);
+  --faint: var(--ink-3);
 
   --line: #1B2E55;
   --line-strong: #243862;
@@ -106,6 +141,22 @@
   --accent-text: #568EFD;      /* 暗底小号蓝字铁律 */
   --accent-text-strong: #568EFD;
   --placeholder: rgba(255, 255, 255, 0.45);
+  --ring: rgba(86, 142, 253, 0.32);     /* v4 焦点环色 */
+  --selection: rgba(86, 142, 253, 0.35);/* v4 选区染色 */
+  --elev-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --elev-2: 0 8px 24px rgba(0, 0, 0, 0.45);
+  --elev-3: 0 24px 72px rgba(0, 0, 0, 0.5);
+  --elev-tint: rgba(255, 255, 255, 0.04); /* v4 暗色海拔明度叠加 */
+
+  /* v4.2 玻璃材质（暗色 = 深蓝卡 #0C1730 的半透明形态） */
+  --glass-bg: rgba(12, 23, 48, 0.6);
+  --glass-bg-clear: rgba(12, 23, 48, 0.48);
+  --glass-bg-tinted: rgba(12, 23, 48, 0.78);
+  --glass-bg-strong: var(--glass-bg-tinted);
+  --glass-blur: saturate(1.4) blur(24px);
+  --glass-line: rgba(255, 255, 255, 0.14);
+  --glass-hi: inset 0 1px 0 rgba(255, 255, 255, 0.13); /* v4.2 更亮镜面高光 */
+  --glass-edge: inset 0 -1px 0 rgba(0, 0, 0, 0.4);     /* v4.2 暗化下边缘 */
   --hover-veil: rgba(1, 86, 252, 0.07);
   --hover-soft: rgba(255, 255, 255, 0.06);
   --count-bg: rgba(255, 255, 255, 0.08);
@@ -159,9 +210,42 @@ body {
   line-height: 1.55;
 }
 
+/* v4 选区染色：两主题跟随 */
+::selection {
+  background: var(--selection);
+  color: var(--ink);
+}
+
 /* 滚动条跟随主题（继承到所有滚动容器，含暗色） */
 html {
   scrollbar-color: var(--line-strong) transparent;
+}
+
+/* v4 WebKit 滚动条细化：细圆胶囊、hover 辅助墨色 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: content-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--ink-3);
+  background-clip: content-box;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 /* 换肤过渡：克制丝滑，与品牌动效同气质（references/theme-system.md） */
@@ -213,13 +297,15 @@ button {
   color: inherit;
 }
 
+/* v4 统一焦点环：不再各组件自写光圈 */
 button:focus-visible,
 a:focus-visible,
 input:focus-visible,
 select:focus-visible,
-textarea:focus-visible {
-  outline: 2px solid var(--accent-text);
-  outline-offset: 2px;
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 
 button:disabled {
@@ -245,7 +331,7 @@ p {
 }
 
 code {
-  font-family: "Cascadia Code", "Microsoft YaHei UI", monospace;
+  font-family: var(--font-mono);
 }
 
 /* 品牌签名：悬停轻抖（reduced-motion 下关闭） */
@@ -274,7 +360,7 @@ code {
 .skill-list,
 .security-section,
 .settings-form > .settings-section {
-  animation: rise-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: rise-in 0.5s var(--ease-standard) both;
 }
 
 .toolbar { animation-delay: 0.06s; }
@@ -469,7 +555,7 @@ code {
 /* 切换按钮图标：日/月交替旋转（reduced-motion 由全局规则关闭） */
 .theme-icon-enter-active,
 .theme-icon-leave-active {
-  transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.16s ease-out;
+  transition: transform 0.22s var(--ease-standard), opacity 0.16s ease-out;
 }
 
 .theme-icon-enter-from {
@@ -539,7 +625,7 @@ code {
 .secondary-button,
 .danger-confirm-button {
   display: inline-flex;
-  min-height: 40px;
+  min-height: var(--btn-h);
   align-items: center;
   justify-content: center;
   gap: 8px;
@@ -549,7 +635,7 @@ code {
   line-height: 1;
   white-space: nowrap;
   cursor: pointer;
-  transition: background 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
+  transition: background var(--dur-1) var(--ease-standard), border-color var(--dur-1) var(--ease-standard), box-shadow var(--dur-1) var(--ease-standard), transform var(--dur-1) var(--ease-standard);
 }
 
 .primary-button {
@@ -561,7 +647,14 @@ code {
 .primary-button:hover:not(:disabled) {
   border-color: var(--accent-text-strong);
   background: var(--blue-deep);
-  animation: t-nudge 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+  animation: t-nudge 0.24s var(--ease-standard);
+}
+
+/* v4 按压感：唯一许可的按下位移 */
+.primary-button:active:not(:disabled),
+.secondary-button:active:not(:disabled),
+.danger-confirm-button:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
 .secondary-button {
@@ -573,7 +666,7 @@ code {
 .secondary-button:hover:not(:disabled) {
   border-color: var(--accent-text);
   color: var(--accent-text);
-  animation: t-nudge 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+  animation: t-nudge 0.24s var(--ease-standard);
 }
 
 .add-skill-button {
@@ -609,7 +702,7 @@ code {
 
 .search-field:focus-within {
   border-color: var(--accent-text);
-  box-shadow: 0 0 0 3px rgba(1, 86, 252, 0.12);
+  box-shadow: var(--focus-ring);
 }
 
 .search-field input {
@@ -856,7 +949,9 @@ code {
 
 .skill-meta {
   display: grid;
-  grid-template-columns: 50px 74px 1fr;
+  /* 首列须放得下「GitHub 源」单行（11.5px 字 + 两侧 8px 内边距 ≈ 70px），
+     窄了会折行成两行、徽章视觉歪斜（v1.2.2 修正） */
+  grid-template-columns: 74px 74px 1fr;
   align-items: center;
   gap: 8px;
 }
@@ -955,7 +1050,7 @@ code {
 
 .version-label {
   overflow: hidden;
-  font-family: "Cascadia Code", monospace;
+  font-family: var(--font-mono);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1142,6 +1237,7 @@ code {
   font-weight: 700;
   letter-spacing: 0.1em;
   padding: 3px 0;
+  text-indent: 1em;   /* 小字 + 大圆角背景置顶行时，文字右移一个中文字宽，消除顶边感 */
 }
 
 .modal-body {
@@ -1216,7 +1312,7 @@ code {
 .field-block textarea:focus,
 .file-search:focus {
   border-color: var(--accent-text);
-  box-shadow: 0 0 0 3px rgba(1, 86, 252, 0.12);
+  box-shadow: var(--focus-ring);
 }
 
 .field-block small,
@@ -1255,7 +1351,7 @@ code {
 
 .tag-input-shell:focus-within {
   border-color: var(--accent-text);
-  box-shadow: 0 0 0 3px rgba(1, 86, 252, 0.12);
+  box-shadow: var(--focus-ring);
 }
 
 .tag-input-shell.disabled {
@@ -1638,7 +1734,7 @@ code {
   min-height: 29px;
   padding: 3px 12px;
   color: var(--muted);
-  font-family: "Cascadia Code", "Microsoft YaHei UI", monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
 }
 
@@ -1683,7 +1779,7 @@ code {
 
 .scan-route:hover {
   border-color: var(--blue-400);
-  animation: t-nudge 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+  animation: t-nudge 0.24s var(--ease-standard);
 }
 
 .scan-route.selected {
@@ -2121,7 +2217,7 @@ code {
 
 .path-box span {
   overflow: hidden;
-  font-family: "Cascadia Code", monospace;
+  font-family: var(--font-mono);
   font-size: 9px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2793,7 +2889,7 @@ code {
   height: 100%;
   border-radius: 999px;
   background: var(--blue);
-  transition: width 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: width 0.4s var(--ease-standard);
 }
 
 .task-progress-track i.indeterminate {
@@ -3486,7 +3582,7 @@ code {
 
 .trust-button:hover:not(:disabled) {
   border-color: var(--accent-text);
-  animation: t-nudge 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+  animation: t-nudge 0.24s var(--ease-standard);
 }
 
 .trust-inline-button {
@@ -3644,17 +3740,23 @@ code {
   align-items: center;
   gap: 8px;
   padding: 10px 14px;
-  border-radius: var(--radius-small);
+  border-radius: 12px;
   border: 1px solid var(--line);
   background: var(--surface);
-  color: var(--ink);
+  box-shadow: var(--elev-1);
+  color: var(--ink-2);
   font-size: 13px;
   cursor: pointer;
-  transition: border-color 0.15s ease, background 0.15s ease;
+  transition: border-color var(--dur-1) var(--ease-standard), background var(--dur-1) var(--ease-standard);
+}
+
+.memory-stat:hover:not(.muted) {
+  border-color: var(--blue-400);
 }
 
 .memory-stat b {
-  font-size: 16px;
+  font-family: var(--font-display);
+  font-size: 17px;
   font-weight: 700;
   color: var(--accent-text);
 }
@@ -3812,6 +3914,17 @@ code {
   max-width: 760px;
 }
 
+/* 「放大编辑窗口」：仅放大几何（宽度与正文区最小高度），视觉规格不动 */
+.memory-drawer.memory-drawer-expanded {
+  width: min(1200px, 96vw);
+  max-width: min(1200px, 96vw);
+}
+
+.memory-drawer-expanded .memory-body-editor,
+.memory-drawer-expanded .memory-body-preview {
+  min-height: 55vh;
+}
+
 .memory-drawer-content {
   display: flex;
   flex-direction: column;
@@ -3909,7 +4022,7 @@ code {
 }
 
 .memory-body-editor {
-  font-family: ui-monospace, "Cascadia Mono", Consolas, "Courier New", monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
   line-height: 1.7;
   min-height: 260px;
@@ -3948,7 +4061,7 @@ code {
   border-radius: 5px;
   padding: 1px 6px;
   font-size: 12.5px;
-  font-family: ui-monospace, Consolas, monospace;
+  font-family: var(--font-mono);
 }
 .md-preview pre {
   background: var(--surface-muted);
@@ -3983,7 +4096,7 @@ code {
   background: var(--blue-tint);
   color: var(--accent-text-strong);
   font-size: 12px;
-  font-family: ui-monospace, Consolas, monospace;
+  font-family: var(--font-mono);
   cursor: pointer;
 }
 
@@ -4092,7 +4205,7 @@ code {
 }
 
 .inbox-file {
-  font-family: ui-monospace, Consolas, monospace;
+  font-family: var(--font-mono);
   opacity: 0.65;
 }
 
@@ -4148,7 +4261,7 @@ code {
   border: 1px solid var(--line);
   font-size: 12.5px;
   line-height: 1.65;
-  font-family: ui-monospace, Consolas, monospace;
+  font-family: var(--font-mono);
   white-space: pre-wrap;
   word-break: break-word;
   max-height: 420px;
@@ -4195,7 +4308,7 @@ code {
   border: 1px solid var(--line);
   font-size: 12.5px;
   line-height: 1.7;
-  font-family: ui-monospace, Consolas, monospace;
+  font-family: var(--font-mono);
   white-space: pre-wrap;
   word-break: break-word;
   max-height: 60vh;
@@ -4229,7 +4342,7 @@ code {
   background: none;
   color: var(--ink);
   font-size: 12px;
-  font-family: ui-monospace, Consolas, monospace;
+  font-family: var(--font-mono);
   cursor: pointer;
 }
 
@@ -4310,6 +4423,10 @@ code {
 .provider-chip {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  text-align: center;
+  line-height: 1.6;
   padding: 2px 8px;
   border-radius: 999px;
   font-size: 11.5px;
@@ -4416,7 +4533,7 @@ code {
 
 .import-source {
   font-size: 12.5px;
-  font-family: ui-monospace, Consolas, monospace;
+  font-family: var(--font-mono);
   opacity: 0.8;
   word-break: break-all;
   margin: 0 0 12px;
@@ -4650,6 +4767,68 @@ code {
 }
 
 .import-manual-path input:focus-visible {
-  outline: 2px solid var(--blue-400);
-  outline-offset: 1px;
+  outline: none;
+  border-color: var(--accent-text);
+  box-shadow: var(--focus-ring);
+}
+
+/* ============================================================
+   v4.2 玻璃材质层（iOS 27 级 Liquid Glass · 品牌色零改动）
+   浮层四件套：玻璃体 + 边缘折射描边 + 顶部镜面高光 + 暗化下边缘；
+   不支持 backdrop-filter 自动回退实色卡，reduced-transparency 同理。
+   ============================================================ */
+
+.modal-panel,
+.detail-drawer,
+.task-panel,
+.task-fab,
+.toast-message,
+.mobile-menu {
+  border-color: var(--glass-line);
+}
+
+.modal-panel,
+.detail-drawer,
+.task-panel,
+.toast-message,
+.mobile-menu {
+  background: var(--glass-bg);
+  box-shadow: var(--glass-hi), var(--glass-edge), var(--elev-3);
+}
+
+.task-fab {
+  background: var(--glass-bg-strong);
+  box-shadow: var(--glass-hi), var(--glass-edge), var(--elev-2);
+}
+
+@supports ((backdrop-filter: blur(2px)) or (-webkit-backdrop-filter: blur(2px))) {
+  .modal-panel,
+  .detail-drawer,
+  .task-panel,
+  .task-fab,
+  .toast-message,
+  .mobile-menu {
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+  }
+}
+
+/* 用户系统开了"降低透明度"：回退实色卡，保可读 */
+@media (prefers-reduced-transparency: reduce) {
+  .modal-panel,
+  .detail-drawer,
+  .task-panel,
+  .task-fab,
+  .toast-message,
+  .mobile-menu {
+    background: var(--surface-raised);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+/* ---- v4.2 徽章统一配方：浅底 + 同色 28% 描边（currentColor 派生，亮暗自动） ---- */
+.status-badge,
+.provider-chip {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 28%, transparent);
 }
