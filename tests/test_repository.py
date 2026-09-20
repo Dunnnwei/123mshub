@@ -46,6 +46,8 @@ def test_install_manifest_index_and_prompt(config_store, fake_fetcher, monkeypat
     assert "记忆投递协议" in library_prompt
     assert "天王盖地虎" in library_prompt
     assert "AI镇河妖" in library_prompt
+    assert "仓库触发词" in library_prompt
+    assert "「总机」「mshub」「本地仓库」「记忆仓库」" in library_prompt
     assert "1项技能" in library_prompt
     assert str(root) in library_prompt
 

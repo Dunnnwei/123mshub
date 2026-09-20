@@ -114,6 +114,7 @@ class TestInjectionPromptApi:
         assert "记忆投递协议" in prompt
         assert "天王盖地虎" in prompt
         assert "AI镇河妖" in prompt
+        assert "仓库触发词" in prompt
         assert str(tmp_path / "repo") in prompt
 
     def test_duty_prompt(self, tmp_path: Path) -> None:
