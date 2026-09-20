@@ -1,6 +1,8 @@
 # 123 MSHub（Memory & Skill Hub）
 
 > 123mshub —— 本地 agent 的共享大脑管理器。目录、仓库名、EXE 与路径等简短场合一律写作 `123mshub`。
+>
+> **免费 · 全开源（MIT）**——没有账号、没有云端、没有订阅，数据全在你自己的文件夹里。
 
 **123 MSHub** 是一个给「人」用的 Windows 桌面工具，为你的本地 agent（ZCode、WorkBuddy、
 Claude Desktop、Cursor 等）管理两类共享资产：
