@@ -4,18 +4,19 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import QSettings, Qt, QTimer
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
-    QComboBox, QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout, QLabel,
+    QApplication, QComboBox, QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout, QLabel,
     QLineEdit, QListWidget, QListWidgetItem, QMessageBox, QPlainTextEdit,
     QPushButton, QSplitter, QTableWidget, QTableWidgetItem, QVBoxLayout,
-    QWidget, QCheckBox, QHeaderView, QTextBrowser, QGroupBox, QFileDialog,
+    QWidget, QCheckBox, QHeaderView, QTextBrowser, QGroupBox, QFileDialog, QFrame,
 )
 
 from ..memory_facade import MemoryFacade
 from ..task_runner import TaskRunner, RequestScope
 from ..job_controller import JobController
+from ..i18n import tr
 
 
 def _error(payload: object) -> str:
@@ -73,10 +74,10 @@ class SkillsPage(QWidget):
         self.edit_button = QPushButton("编辑信息"); self.edit_button.clicked.connect(self.edit_metadata); action.addWidget(self.edit_button)
         detail_layout.addLayout(action)
         prompt = QHBoxLayout(); self.prompt_button = QPushButton("复制指定技能提示词"); self.prompt_button.clicked.connect(self.copy_skill_prompt); prompt.addWidget(self.prompt_button); self.install_prompt_button = QPushButton("复制安装提示词"); self.install_prompt_button.clicked.connect(self.copy_install_prompt); prompt.addWidget(self.install_prompt_button); detail_layout.addLayout(prompt)
-        splitter.addWidget(detail); splitter.setSizes([720, 420]); root.addWidget(splitter, 1)
+        splitter.addWidget(detail); splitter.setSizes([720, 420]); self.content_splitter = splitter; empty = QFrame(objectName="emptyCard"); empty_layout = QVBoxLayout(empty); empty_layout.addWidget(QLabel("还没有技能或程序", objectName="title"), alignment=Qt.AlignmentFlag.AlignHCenter); empty_layout.addWidget(QLabel("从 GitHub URL、owner/repo 或本地目录添加第一项资产。", objectName="muted"), alignment=Qt.AlignmentFlag.AlignHCenter); empty_add = QPushButton("添加技能 / 程序"); empty_add.setObjectName("primary"); empty_add.clicked.connect(self.open_add); empty_layout.addWidget(empty_add, alignment=Qt.AlignmentFlag.AlignHCenter); self.empty_card = empty; root.addWidget(empty); root.addWidget(splitter, 1); empty.hide()
         batch = QHBoxLayout(); batch.addWidget(QLabel("已勾选条目：")); self.batch_check = QPushButton("批量离线检查"); self.batch_check.clicked.connect(lambda: self.batch_scan("offline")); batch.addWidget(self.batch_check); self.batch_ai_check = QPushButton("批量 AI 检查"); self.batch_ai_check.clicked.connect(lambda: self.batch_scan("ai")); batch.addWidget(self.batch_ai_check); self.batch_update = QPushButton("批量更新 GitHub"); self.batch_update.clicked.connect(self.batch_update_github); batch.addWidget(self.batch_update); self.batch_trust = QPushButton("批量信任"); self.batch_trust.clicked.connect(self.batch_trust_items); batch.addWidget(self.batch_trust); self.batch_translate = QPushButton("批量中文翻译"); self.batch_translate.clicked.connect(self.batch_translate_items); batch.addWidget(self.batch_translate); batch.addStretch(); root.addLayout(batch)
         self.status = QLabel(""); self.status.setObjectName("status"); root.addWidget(self.status)
-        self._timer = QTimer(self); self._timer.setSingleShot(True); self._timer.setInterval(300); self._timer.timeout.connect(self._refresh_now)
+        self._timer = QTimer(self); self._timer.setSingleShot(True); self._timer.setInterval(300); self._timer.timeout.connect(self._refresh_now); self.metadata_dialog = None
 
     def _debounced(self): self._timer.start()
 
@@ -101,15 +102,19 @@ class SkillsPage(QWidget):
         for row, item in enumerate(self.items):
             check = QCheckBox(); self.table.setCellWidget(row, 0, check)
             name = QTableWidgetItem(str(item.get("name") or "")); name.setData(Qt.ItemDataRole.UserRole, item.get("name", "")); name.setData(Qt.ItemDataRole.UserRole + 1, item.get("library", "")); self.table.setItem(row, 1, name)
-            provider = item.get("provider") or "github"; source = "GitHub 源" if provider == "github" else "本地自研"
+            provider = item.get("provider") or "github"; source = tr("GitHub 源") if provider == "github" else tr("本地自研")
             source_item = QTableWidgetItem(source); source_item.setToolTip("本地自研技能无在线源头，版本请在编辑信息中手动维护。" if provider == "local" else "可检查版本、更新")
             self.table.setItem(row, 2, source_item)
             self.table.setItem(row, 3, QTableWidgetItem(str(item.get("description_zh") or item.get("description") or "")))
             self.table.setItem(row, 4, QTableWidgetItem(str(item.get("security_status") or "unchecked")))
             self.table.setItem(row, 5, QTableWidgetItem(", ".join(item.get("tags") or [])))
             self.table.setItem(row, 6, QTableWidgetItem(str(item.get("updated_at") or "")[:19].replace("T", " ")))
-        self._set_status(f"已加载 {len(self.items)} 项")
+        self.empty_card.setVisible(not self.items); self.content_splitter.setVisible(bool(self.items)); self._set_status(f"已加载 {len(self.items)} 项")
         if self.items: self.table.selectRow(0)
+
+    def retranslate(self):
+        if self.items:
+            self._apply_rows()
 
     def _selection_changed(self):
         rows = self.table.selectionModel().selectedRows()
@@ -153,7 +158,11 @@ class SkillsPage(QWidget):
     def edit_metadata(self):
         item = self._selected()
         if item:
-            MetadataDialog(self, item).exec()
+            if not hasattr(self, "metadata_dialog") or self.metadata_dialog is None:
+                self.metadata_dialog = MetadataDialog(self, item)
+            else:
+                self.metadata_dialog.load_item(item)
+            self.metadata_dialog.show(); self.metadata_dialog.raise_(); self.metadata_dialog.activateWindow()
 
     def _checked(self):
         return self.table.selected_names()
@@ -198,15 +207,39 @@ class SkillsPage(QWidget):
 
 class MetadataDialog(QDialog):
     def __init__(self, page, item):
-        super().__init__(page); self.page, self.item = page, item; self.setWindowTitle("编辑技能信息"); self.resize(700, 500)
+        super().__init__(page); self.page, self.item = page, item; self.setWindowTitle("编辑技能信息"); self.resize(700, 500); self.setModal(False); self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, False)
         root = QVBoxLayout(self); form = QFormLayout()
-        self.name = QLineEdit(str(item.get("name") or "")); form.addRow("条目身份", self.name)
-        self.directory = QLineEdit(Path(str(item.get("local_dir") or "")).name); self.directory.textChanged.connect(self._directory_hint); form.addRow("目录名", self.directory)
-        self.provider = QComboBox(); self.provider.addItem("GitHub", "github"); self.provider.addItem("本地自研", "local"); self.provider.setCurrentIndex(max(0, self.provider.findData(item.get("provider", "github")))); form.addRow("来源", self.provider)
-        self.source = QLineEdit(str(item.get("source_url") or "")); self.source.textChanged.connect(self._source_hint); form.addRow("来源地址", self.source)
+        self.name = QLineEdit(); form.addRow("条目身份", self.name)
+        self.directory = QLineEdit(); self.directory.textChanged.connect(self._directory_hint); form.addRow("目录名", self.directory)
+        self.provider = QComboBox(); self.provider.addItem("GitHub", "github"); self.provider.addItem("本地自研", "local"); form.addRow("来源", self.provider)
+        self.source = QLineEdit(); self.source.textChanged.connect(self._source_hint); form.addRow("来源地址", self.source)
         self.source_hint = QLabel(""); self.source_hint.setObjectName("muted"); form.addRow("解析预览", self.source_hint)
-        self.library = QComboBox(); self.library.addItem("共享技能库", "skills"); self.library.addItem("程序库", "github"); self.library.setCurrentIndex(max(0, self.library.findData(item.get("library", "skills")))); form.addRow("所属库", self.library)
-        self.version = QLineEdit(str(item.get("version") or "")); form.addRow("版本", self.version); self.description = QLineEdit(str(item.get("description") or "")); form.addRow("说明", self.description); self.description_zh = QLineEdit(str(item.get("description_zh") or "")); form.addRow("中文备注", self.description_zh); root.addLayout(form); note = QLabel("改名只改变身份；目录字段才决定仓库归属。目录不能包含 /、\\ 或以点开头。"); note.setObjectName("muted"); root.addWidget(note); buttons = QDialogButtonBox(); save = buttons.addButton("保存", QDialogButtonBox.ButtonRole.AcceptRole); close = buttons.addButton("取消", QDialogButtonBox.ButtonRole.RejectRole); root.addWidget(buttons); save.clicked.connect(self.save); close.clicked.connect(self.reject); self._directory_hint(); self._source_hint()
+        self.library = QComboBox(); self.library.addItem("共享技能库", "skills"); self.library.addItem("程序库", "github"); form.addRow("所属库", self.library)
+        self.version = QLineEdit(); form.addRow("版本", self.version); self.description = QLineEdit(); form.addRow("说明", self.description); self.description_zh = QLineEdit(); form.addRow("中文备注", self.description_zh); root.addLayout(form); note = QLabel("改名只改变身份；目录字段才决定仓库归属。目录不能包含 /、\\ 或以点开头。"); note.setObjectName("muted"); root.addWidget(note); buttons = QDialogButtonBox(); save = buttons.addButton("保存", QDialogButtonBox.ButtonRole.AcceptRole); close = buttons.addButton("关闭", QDialogButtonBox.ButtonRole.RejectRole); root.addWidget(buttons); save.clicked.connect(self.save); close.clicked.connect(self._hide); self._restore_geometry(); self.load_item(item)
+
+    def _restore_geometry(self):
+        settings = QSettings(str(self.page.facade.config_store.config_dir / "native-ui.ini"), QSettings.Format.IniFormat)
+        geometry = settings.value("skill-editor/geometry")
+        if geometry:
+            self.restoreGeometry(geometry)
+        else:
+            screen = QApplication.primaryScreen().availableGeometry()
+            self.resize(min(1100, int(screen.width() * .85)), int(screen.height() * .75))
+
+    def _save_geometry(self):
+        settings = QSettings(str(self.page.facade.config_store.config_dir / "native-ui.ini"), QSettings.Format.IniFormat)
+        settings.setValue("skill-editor/geometry", self.saveGeometry())
+
+    def _hide(self):
+        self._save_geometry()
+        self.hide()
+
+    def closeEvent(self, event):
+        self._save_geometry(); event.accept()
+
+    def load_item(self, item):
+        self.item = item
+        self.name.setText(str(item.get("name") or "")); self.directory.setText(Path(str(item.get("local_dir") or "")).name); self.provider.setCurrentIndex(max(0, self.provider.findData(item.get("provider", "github")))); self.source.setText(str(item.get("source_url") or "")); self.library.setCurrentIndex(max(0, self.library.findData(item.get("library", "skills")))); self.version.setText(str(item.get("version") or "")); self.description.setText(str(item.get("description") or "")); self.description_zh.setText(str(item.get("description_zh") or "")); self._directory_hint(); self._source_hint(); self.setWindowTitle(f"编辑技能信息 · {item.get('name', '')}")
 
     def _directory_hint(self):
         value = self.directory.text().strip(); self.directory.setStyleSheet("color:#B42318" if "/" in value or "\\" in value or value.startswith(".") else "")
@@ -222,7 +255,7 @@ class MetadataDialog(QDialog):
     def save(self):
         updates = {"name": self.name.text().strip(), "dir_name": self.directory.text().strip(), "provider": self.provider.currentData(), "source_url": self.source.text().strip(), "target_library": self.library.currentData(), "version": self.version.text().strip(), "description": self.description.text().strip(), "description_zh": self.description_zh.text().strip()}
         self.page.jobs.submit("metadata", f"保存技能信息 {self.item['name']}", lambda: self.page.facade.skill_update_metadata(self.item["name"], updates, self.item.get("library", "")))
-        self.accept()
+        self.page._set_status("技能信息已提交后台保存")
 
 
 class AddSkillDialog(QDialog):
@@ -272,7 +305,8 @@ class SecurityPage(QWidget):
     def _apply(self, data):
         self.items = list(data.get("items") or {}); self.table.setRowCount(len(self.items))
         for row, item in enumerate(self.items):
-            for col, value in enumerate((item.get("name", ""), item.get("provider", ""), item.get("security_status", "unchecked"), str(item.get("updated_at", ""))[:19], str(item.get("security_findings", "")))): self.table.setItem(row, col, QTableWidgetItem(str(value)))
+            provider = tr("GitHub 源") if item.get("provider") == "github" else tr("本地自研")
+            for col, value in enumerate((item.get("name", ""), provider, item.get("security_status", "unchecked"), str(item.get("updated_at", ""))[:19], str(item.get("security_findings", "")))): self.table.setItem(row, col, QTableWidgetItem(str(value)))
         self.status.setText(f"共 {len(self.items)} 项；需要确认的条目可直接信任或检查")
 
     def _show_report(self):
@@ -289,3 +323,7 @@ class SecurityPage(QWidget):
             self.jobs.submit("scan", f"安全检查 {item['name']}", lambda report, item=item: self.facade.skill_scan(item["name"], item.get("library", ""), route=route, progress=report), progress=True)
 
     def showEvent(self, event): self.refresh(); super().showEvent(event)
+
+    def retranslate(self):
+        if self.items:
+            self._apply({"items": self.items})

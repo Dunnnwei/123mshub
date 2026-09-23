@@ -3,20 +3,22 @@ from __future__ import annotations
 
 from typing import Any
 
-from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtCore import Qt, QSettings, QTimer, Signal
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QComboBox, QDialog, QDialogButtonBox, QFormLayout, QFrame, QHBoxLayout,
     QLabel, QLineEdit, QListWidget, QListWidgetItem, QMessageBox, QPushButton,
     QPlainTextEdit, QSplitter, QStackedWidget, QTextBrowser, QVBoxLayout,
-    QWidget, QCheckBox, QScrollArea, QToolButton,
+    QWidget, QCheckBox, QScrollArea, QToolButton, QApplication,
 )
 
 from ..memory_facade import MemoryFacade
 from ..task_runner import TaskRunner, RequestScope
 from ..widgets import MarkdownView
+from ..i18n import tr
 
 TYPE_OPTIONS = [("用户", "user"), ("项目", "project"), ("参考", "reference"), ("反馈", "feedback")]
+TYPE_LABELS = dict(TYPE_OPTIONS)
 TYPE_COLORS = {"user": "#8B5CF6", "project": "#0156FC", "reference": "#0891B2", "feedback": "#D97706"}
 
 
@@ -41,10 +43,13 @@ class MemoryPage(QWidget):
     def _build_ui(self):
         root = QVBoxLayout(self); root.setContentsMargins(30, 26, 30, 24); root.setSpacing(12)
         head = QHBoxLayout(); title_box = QVBoxLayout(); eyebrow = QLabel("SHARED MEMORY"); eyebrow.setObjectName("eyebrow"); title = QLabel("记忆库"); title.setObjectName("title"); sub = QLabel("条目文件是事实源；搜索、整理与收编都可回看。 "); sub.setObjectName("muted"); title_box.addWidget(eyebrow); title_box.addWidget(title); title_box.addWidget(sub); head.addLayout(title_box); head.addStretch()
-        self.copy_button = QPushButton("复制注入提示词"); self.copy_button.setObjectName("primary"); self.copy_button.clicked.connect(self.copy_prompt); head.addWidget(self.copy_button); root.addLayout(head)
+        self.copy_button = QPushButton("复制注入提示词"); self.copy_button.setObjectName("primary"); self.copy_button.clicked.connect(self.copy_prompt); head.addWidget(self.copy_button)
+        self.new_window_button = QPushButton("新建记忆"); self.new_window_button.clicked.connect(self.open_new_editor); head.addWidget(self.new_window_button)
+        self.edit_window_button = QPushButton("编辑选中"); self.edit_window_button.clicked.connect(self.edit_selected); head.addWidget(self.edit_window_button); root.addLayout(head)
         self.stats_row = QHBoxLayout(); self.stat_buttons: dict[str, QPushButton] = {}
-        for key, label in (("total", "总数"), ("user", "user"), ("project", "project"), ("reference", "reference"), ("feedback", "feedback"), ("this_week", "本周新增"), ("inbox_pending", "待收编")):
-            button = QPushButton(f"{label} 0"); button.setFlat(True); button.clicked.connect(lambda _checked=False, key=key: self._stat_filter(key)); self.stat_buttons[key] = button; self.stats_row.addWidget(button)
+        for key, label in (("total", "总数"), ("user", "用户"), ("project", "项目"), ("reference", "参考"), ("feedback", "反馈"), ("this_week", "本周新增"), ("inbox_pending", "待收编")):
+            button = QPushButton(f"{label} 0"); button.setObjectName("stat"); button.setProperty("i18n_stat", label); button.setProperty("i18n_count", "0")
+            button.setFlat(True); button.clicked.connect(lambda _checked=False, key=key: self._stat_filter(key)); self.stat_buttons[key] = button; self.stats_row.addWidget(button)
         self.stats_row.addStretch(); root.addLayout(self.stats_row)
         toolbar = QHBoxLayout(); self.search = QLineEdit(); self.search.setPlaceholderText("搜索标题、描述、标签或正文全文"); self.search.setClearButtonEnabled(True); self.search.textChanged.connect(self.refresh); toolbar.addWidget(self.search, 1)
         self.type_filter = QComboBox(); self.type_filter.addItem("全部类型", ""); [self.type_filter.addItem(label, value) for label, value in TYPE_OPTIONS]; self.type_filter.currentIndexChanged.connect(self.refresh); toolbar.addWidget(self.type_filter)
@@ -52,15 +57,17 @@ class MemoryPage(QWidget):
         self.inbox_button = QPushButton("投递箱"); self.inbox_button.clicked.connect(self.open_inbox); toolbar.addWidget(self.inbox_button); root.addLayout(toolbar)
         batch = QHBoxLayout(); self.batch_hint = QLabel("勾选列表中的条目进行批量操作"); self.batch_hint.setObjectName("muted"); batch.addWidget(self.batch_hint); batch.addStretch(); self.batch_type = QComboBox(); self.batch_type.addItem("批量改分类…", ""); [self.batch_type.addItem(label, value) for label, value in TYPE_OPTIONS]; batch.addWidget(self.batch_type); self.batch_type.activated.connect(self.batch_update_type); self.batch_tags = QLineEdit(); self.batch_tags.setPlaceholderText("批量标签（逗号）"); self.batch_tags.setMaximumWidth(180); batch.addWidget(self.batch_tags); bt = QPushButton("应用标签"); bt.clicked.connect(self.batch_update_tags); batch.addWidget(bt); ai = QPushButton("AI 补全主题"); ai.clicked.connect(self.batch_ai); batch.addWidget(ai); bd = QPushButton("批量软删除"); bd.setObjectName("danger"); bd.clicked.connect(self.batch_delete); batch.addWidget(bd); root.addLayout(batch)
         splitter = QSplitter(Qt.Orientation.Horizontal); splitter.setChildrenCollapsible(False)
-        self.entry_list = QListWidget(); self.entry_list.setMinimumWidth(340); self.entry_list.currentItemChanged.connect(self._selection_changed); splitter.addWidget(self.entry_list)
+        self.entry_list = QListWidget(); self.entry_list.setObjectName("memoryList"); self.entry_list.setMinimumWidth(340); self.entry_list.currentItemChanged.connect(self._selection_changed); self.entry_list.itemDoubleClicked.connect(lambda _item: self.edit_selected()); splitter.addWidget(self.entry_list)
+        self.empty_card = QFrame(objectName="emptyCard"); empty_layout = QVBoxLayout(self.empty_card); empty_layout.setContentsMargins(36, 36, 36, 36); empty_layout.setSpacing(10); empty_title = QLabel("还没有记忆条目"); empty_title.setObjectName("title"); empty_layout.addWidget(empty_title, alignment=Qt.AlignmentFlag.AlignHCenter); empty_layout.addWidget(QLabel("先建立一条可复用的共享记忆，或者复制注入提示词给 Agent。", objectName="muted"), alignment=Qt.AlignmentFlag.AlignHCenter); empty_actions = QHBoxLayout(); empty_new = QPushButton("新建一条记忆"); empty_new.setObjectName("primary"); empty_new.clicked.connect(self.open_new_editor); empty_prompt = QPushButton("复制注入提示词"); empty_prompt.clicked.connect(self.copy_prompt); empty_actions.addWidget(empty_new); empty_actions.addWidget(empty_prompt); empty_layout.addLayout(empty_actions); root.addWidget(self.empty_card); self.empty_card.hide()
         detail = QFrame(); detail.setObjectName("surface"); dl = QVBoxLayout(detail); dl.setContentsMargins(20, 18, 20, 18); dl.setSpacing(9)
-        dh = QHBoxLayout(); self.detail_title = QLabel("选择一条记忆"); self.detail_title.setStyleSheet("font-size:20px;font-weight:650"); dh.addWidget(self.detail_title); dh.addStretch(); self.new_button = QPushButton("新建"); self.new_button.clicked.connect(self.new_entry); dh.addWidget(self.new_button); self.max_button = QPushButton("放大编辑"); self.max_button.clicked.connect(self._toggle_max); dh.addWidget(self.max_button); dl.addLayout(dh)
-        form = QFormLayout(); self.name_edit = QLineEdit(); self.name_edit.setPlaceholderText("kebab-case，改名会重命名文件"); self.name_preview = QLabel(""); self.name_preview.setObjectName("muted"); self.collision_label = QLabel(""); self.collision_label.setStyleSheet("color:#B42318"); nrow = QVBoxLayout(); nrow.addWidget(self.name_edit); nrow.addWidget(self.name_preview); nrow.addWidget(self.collision_label); form.addRow("条目名", nrow); self.title_edit = QLineEdit(); form.addRow("标题", self.title_edit); self.description_edit = QLineEdit(); form.addRow("一句话描述", self.description_edit); self.type_edit = QComboBox(); [self.type_edit.addItem(label, value) for label, value in TYPE_OPTIONS]; form.addRow("类型", self.type_edit); self.tags_edit = QLineEdit(); self.tags_edit.setPlaceholderText("Enter 或中英文逗号确认，最多 12 个"); form.addRow("标签", self.tags_edit); dl.addLayout(form)
+        dh = QHBoxLayout(); self.detail_title = QLabel("选择一条记忆"); self.detail_title.setStyleSheet("font-size:20px;font-weight:650"); dh.addWidget(self.detail_title); dh.addStretch(); self.new_button = QPushButton("新建"); self.new_button.clicked.connect(self.new_entry); dh.addWidget(self.new_button); dl.addLayout(dh)
+        form = QFormLayout(); self.name_edit = QLineEdit(); self.name_edit.setPlaceholderText("kebab-case，改名会重命名文件"); self.name_preview = QLabel(""); self.name_preview.setObjectName("muted"); self.collision_label = QLabel(""); self.collision_label.setStyleSheet("color:#B42318"); self.open_collision_button = QPushButton("打开它"); self.open_collision_button.setVisible(False); self.open_collision_button.clicked.connect(self._open_collision); collision_row = QHBoxLayout(); collision_row.setContentsMargins(0, 0, 0, 0); collision_row.addWidget(self.collision_label, 1); collision_row.addWidget(self.open_collision_button); nrow = QVBoxLayout(); nrow.addWidget(self.name_edit); nrow.addWidget(self.name_preview); nrow.addLayout(collision_row); form.addRow("条目名", nrow); self.title_edit = QLineEdit(); form.addRow("标题", self.title_edit); self.description_edit = QLineEdit(); form.addRow("一句话描述", self.description_edit); self.type_edit = QComboBox(); [self.type_edit.addItem(label, value) for label, value in TYPE_OPTIONS]; form.addRow("类型", self.type_edit); self.tags_edit = QLineEdit(); self.tags_edit.setPlaceholderText("Enter 或中英文逗号确认，最多 12 个"); form.addRow("标签", self.tags_edit); dl.addLayout(form)
         self.created_label = QLabel(""); self.created_label.setObjectName("muted"); self.updated_label = QLabel(""); self.updated_label.setObjectName("muted"); dl.addWidget(self.created_label); dl.addWidget(self.updated_label)
         mode = QHBoxLayout(); self.edit_mode = QPushButton("编辑"); self.preview_mode = QPushButton("预览"); self.edit_mode.clicked.connect(lambda: self.body_stack.setCurrentIndex(0)); self.preview_mode.clicked.connect(self._show_preview); mode.addWidget(QLabel("正文")); mode.addStretch(); mode.addWidget(self.edit_mode); mode.addWidget(self.preview_mode); dl.addLayout(mode)
         self.body_stack = QStackedWidget(); self.body_edit = QPlainTextEdit(); self.body_edit.setFont(QFont("Cascadia Mono", 10)); self.body_edit.setPlaceholderText("正文支持 [[双链]]；显式保存，不自动保存。"); self.preview = MarkdownView(); self.body_stack.addWidget(self.body_edit); self.body_stack.addWidget(self.preview); dl.addWidget(self.body_stack, 1)
         links_row = QHBoxLayout(); links_row.addWidget(QLabel("双链")); self.links_box = links_row; links_row.addStretch(); dl.addLayout(links_row)
-        actions = QHBoxLayout(); self.status = QLabel(""); self.status.setObjectName("status"); actions.addWidget(self.status, 1); ai_desc = QPushButton("AI 生成描述"); ai_desc.clicked.connect(self.ai_description); actions.addWidget(ai_desc); self.delete_button = QPushButton("软删除"); self.delete_button.setObjectName("danger"); self.delete_button.clicked.connect(self.delete_current); actions.addWidget(self.delete_button); self.save_button = QPushButton("保存"); self.save_button.setObjectName("primary"); self.save_button.clicked.connect(self.save_current); actions.addWidget(self.save_button); dl.addLayout(actions); splitter.addWidget(detail); splitter.setSizes([350, 760]); root.addWidget(splitter, 1)
+        actions = QHBoxLayout(); self.status = QLabel(""); self.status.setObjectName("status"); actions.addWidget(self.status, 1); ai_desc = QPushButton("AI 生成描述"); ai_desc.clicked.connect(self.ai_description); actions.addWidget(ai_desc); self.delete_button = QPushButton("软删除"); self.delete_button.setObjectName("danger"); self.delete_button.clicked.connect(self.delete_current); actions.addWidget(self.delete_button); self.save_button = QPushButton("保存"); self.save_button.setObjectName("primary"); self.save_button.clicked.connect(self.save_current); actions.addWidget(self.save_button); dl.addLayout(actions)
+        self.editor_dialog = QDialog(self); self.editor_dialog.setWindowTitle("记忆编辑"); self.editor_dialog.setModal(False); self.editor_dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, False); editor_layout = QVBoxLayout(self.editor_dialog); editor_layout.setContentsMargins(0, 0, 0, 0); editor_layout.addWidget(detail); self._restore_editor_geometry(); self.editor_dialog.finished.connect(lambda _code: self._save_editor_geometry()); self.editor_dialog.hide(); self.edit_window_button.setEnabled(False); self.content_splitter = splitter; splitter.setSizes([1100, 0]); root.addWidget(splitter, 1)
         tidy = QHBoxLayout(); tidy_button = QPushButton("归纳整理"); tidy_button.clicked.connect(self.tidy); reports = QPushButton("整理日报"); reports.clicked.connect(self.show_reports); duty = QPushButton("复制值守提示词"); duty.clicked.connect(self.copy_duty); index = QPushButton("查看索引源文件"); index.clicked.connect(self.show_index); tidy.addWidget(tidy_button); tidy.addWidget(reports); tidy.addWidget(duty); tidy.addWidget(index); tidy.addStretch(); root.addLayout(tidy)
         for widget in (self.name_edit, self.title_edit, self.description_edit, self.tags_edit, self.body_edit): widget.textChanged.connect(self._mark_dirty)
         self.name_edit.textChanged.connect(lambda _text: (self.name_preview.setText(self._name_preview(self.name_edit.text())), self._name_timer.start()))
@@ -85,11 +92,12 @@ class MemoryPage(QWidget):
         self._timer.stop(); result = self.facade.list_entries(query=self.search.text().strip(), type_filter=str(self.type_filter.currentData() or ""), sort=str(self.sort.currentData() or "updated")); self._apply_listing(result); return result
 
     def _apply_listing(self, result):
+        self._last_result = result
         self._items = list(result.get("items") or []); selected = self._current_name; self.entry_list.blockSignals(True); self.entry_list.clear()
         for item in self._items:
             row = QListWidgetItem(); row.setData(Qt.ItemDataRole.UserRole, item.get("name", "")); row.setSizeHint(self.entry_list.sizeHint())
-            self.entry_list.addItem(row); box = QWidget(); lay = QHBoxLayout(box); lay.setContentsMargins(4, 6, 4, 6); check = QCheckBox(); check.setProperty("memory_name", item.get("name", "")); lay.addWidget(check); text = QVBoxLayout(); title = QLabel(str(item.get("title") or item.get("name") or "")); title.setStyleSheet("font-weight:600"); desc = QLabel(str(item.get("description") or "")); desc.setObjectName("muted"); badge = QLabel(f"{item.get('type','reference')} · {item.get('source','manual')} · {', '.join(item.get('tags') or [])} · {str(item.get('updated',''))[:10]}"); badge.setStyleSheet(f"color:{TYPE_COLORS.get(item.get('type'), '#0156FC')};font-size:11px"); text.addWidget(title); text.addWidget(desc); text.addWidget(badge); lay.addLayout(text, 1); self.entry_list.setItemWidget(row, box)
-        self.entry_list.blockSignals(False); self._apply_stats(result); self._set_status(f"已刷新 {len(self._items)} 条")
+            self.entry_list.addItem(row); box = QWidget(); lay = QHBoxLayout(box); lay.setContentsMargins(4, 6, 4, 6); check = QCheckBox(); check.setProperty("memory_name", item.get("name", "")); lay.addWidget(check); text = QVBoxLayout(); title = QLabel(str(item.get("title") or item.get("name") or "")); title.setStyleSheet("font-weight:600"); desc = QLabel(str(item.get("description") or "")); desc.setObjectName("muted"); type_label = tr(TYPE_LABELS.get(item.get("type"), "参考")); source_label = tr("手工") if item.get("source") == "manual" else str(item.get("source") or ""); badge = QLabel(f"{type_label} · {source_label} · {', '.join(item.get('tags') or [])} · {str(item.get('updated',''))[:10]}"); badge.setStyleSheet(f"color:{TYPE_COLORS.get(item.get('type'), '#0156FC')};font-size:11px"); text.addWidget(title); text.addWidget(desc); text.addWidget(badge); lay.addLayout(text, 1); self.entry_list.setItemWidget(row, box)
+        self.entry_list.blockSignals(False); self._apply_stats(result); self.empty_card.setVisible(not self._items); self.content_splitter.setVisible(bool(self._items)); self.edit_window_button.setEnabled(bool(self._items)); self._set_status(f"已刷新 {len(self._items)} 条")
         if selected:
             for i in range(self.entry_list.count()):
                 if self.entry_list.item(i).data(Qt.ItemDataRole.UserRole) == selected: self.entry_list.setCurrentRow(i); break
@@ -98,9 +106,23 @@ class MemoryPage(QWidget):
     def _apply_stats(self, result):
         stats = result.get("stats") or {"total": len(self._items), "inbox_pending": result.get("inbox_pending", 0), "types": {}}
         types = stats.get("types") or {}
-        for key in ("total", "this_week", "inbox_pending"): self.stat_buttons[key].setText(f"{ {'total':'总数','this_week':'本周新增','inbox_pending':'待收编'}[key] } {stats.get(key, 0)}")
-        for key in ("user", "project", "reference", "feedback"): self.stat_buttons[key].setText(f"{key} {types.get(key, 0)}")
-        pending = int(stats.get("inbox_pending") or result.get("inbox_pending") or 0); self.inbox_button.setText(f"投递箱 · {pending}" if pending else "投递箱")
+        for key in ("total", "user", "project", "reference", "feedback", "this_week", "inbox_pending"):
+            label = self.stat_buttons[key].property("i18n_stat")
+            count = str(stats.get(key, types.get(key, 0)))
+            self.stat_buttons[key].setProperty("i18n_count", count)
+            self.stat_buttons[key].setText(f"{tr(label)} {count}")
+        pending = int(stats.get("inbox_pending") or result.get("inbox_pending") or 0)
+        inbox_label = tr("投递箱")
+        self.inbox_button.setText(f"{inbox_label} · {pending}" if pending else inbox_label)
+
+    def retranslate(self):
+        if hasattr(self, "_last_result"):
+            self._apply_listing(self._last_result)
+        result = getattr(self, "_last_result", {}) or {}
+        stats = result.get("stats") or {}
+        pending = int(stats.get("inbox_pending") or result.get("inbox_pending") or 0)
+        inbox_label = tr("投递箱")
+        self.inbox_button.setText(f"{inbox_label} · {pending}" if pending else inbox_label)
 
     def _stat_filter(self, key):
         if key in {"user", "project", "reference", "feedback"}: self.type_filter.setCurrentIndex(max(0, self.type_filter.findData(key)))
@@ -122,13 +144,17 @@ class MemoryPage(QWidget):
             return
         self._load_detail(str(current.data(Qt.ItemDataRole.UserRole)))
 
-    def _load_detail(self, name):
-        self.scope.call("detail", self.facade.get_entry, self._apply_detail, lambda msg: self._set_status(f"详情读取失败：{msg}"), name)
+    def _load_detail(self, name, show=False):
+        def done(entry):
+            self._apply_detail(entry)
+            if show:
+                self._show_editor()
+        self.scope.call("detail", self.facade.get_entry, done, lambda msg: self._set_status(f"详情读取失败：{msg}"), name)
 
     def load_detail_sync(self, name): result = self.facade.get_entry(name); self._apply_detail(result); return result
 
     def _apply_detail(self, entry):
-        self._loading = True; self._creating = False; self._dirty = False; self._current_name = str(entry.get("name") or ""); self.detail_title.setText(str(entry.get("title") or self._current_name)); self.name_edit.setText(self._current_name); self.title_edit.setText(str(entry.get("title") or "")); self.description_edit.setText(str(entry.get("description") or "")); self.type_edit.setCurrentIndex(max(0, self.type_edit.findData(entry.get("type", "reference")))); self.tags_edit.setText(", ".join(entry.get("tags") or [])); self.body_edit.setPlainText(str(entry.get("body") or "")); self.preview.setMarkdown(str(entry.get("body") or "")); self.created_label.setText(f"创建：{entry.get('created') or '未知'}"); self.updated_label.setText(f"更新：{entry.get('updated') or '未知'}"); self._set_links(entry.get("links") or []); self.name_preview.setText(self._name_preview(self._current_name)); self._loading = False; self._set_editor_enabled(True); self._set_status("已加载")
+        self._loading = True; self._creating = False; self._dirty = False; self._collision_name = ""; self.collision_label.clear(); self.open_collision_button.setVisible(False); self._current_name = str(entry.get("name") or ""); self.detail_title.setText(str(entry.get("title") or self._current_name)); self.name_edit.setText(self._current_name); self.title_edit.setText(str(entry.get("title") or "")); self.description_edit.setText(str(entry.get("description") or "")); self.type_edit.setCurrentIndex(max(0, self.type_edit.findData(entry.get("type", "reference")))); self.tags_edit.setText(", ".join(entry.get("tags") or [])); self.body_edit.setPlainText(str(entry.get("body") or "")); self.preview.setMarkdown(str(entry.get("body") or "")); self.created_label.setText(f"创建：{entry.get('created') or '未知'}"); self.updated_label.setText(f"更新：{entry.get('updated') or '未知'}"); self._set_links(entry.get("links") or []); self.name_preview.setText(self._name_preview(self._current_name)); self._loading = False; self._set_editor_enabled(True); self._set_status("已加载")
 
     def _set_links(self, links):
         while self.links_box.count() > 2:
@@ -152,14 +178,51 @@ class MemoryPage(QWidget):
     def _check_name(self):
         candidate = self.name_edit.text().strip()
         if not candidate or candidate == self._current_name:
-            self.collision_label.clear()
+            self._collision_name = ""
+            self.collision_label.clear(); self.open_collision_button.setVisible(False)
             return
         self.scope.call("collision", self.facade.get_entry,
-                        lambda _entry: self.collision_label.setText("已有同名条目；请换一个名称，或打开已有条目。"),
-                        lambda _message: self.collision_label.clear(), candidate)
+                        lambda _entry: self._show_collision(candidate),
+                        lambda _message: (self.collision_label.clear(), self.open_collision_button.setVisible(False)), candidate)
+
+    def _show_collision(self, name):
+        self._collision_name = str(name)
+        self.collision_label.setText("已有同名条目")
+        self.open_collision_button.setVisible(True)
+
+    def _open_collision(self):
+        name = getattr(self, "_collision_name", "")
+        if not name:
+            return
+        self._load_detail(name, show=True)
+
+    def _restore_editor_geometry(self):
+        settings = QSettings(str(self.facade.config_store.config_dir / "native-ui.ini"), QSettings.Format.IniFormat)
+        geometry = settings.value("memory-editor/geometry")
+        if geometry:
+            self.editor_dialog.restoreGeometry(geometry)
+        else:
+            screen = QApplication.primaryScreen().availableGeometry()
+            self.editor_dialog.resize(min(1100, int(screen.width() * .85)), int(screen.height() * .75))
+
+    def _save_editor_geometry(self):
+        settings = QSettings(str(self.facade.config_store.config_dir / "native-ui.ini"), QSettings.Format.IniFormat)
+        settings.setValue("memory-editor/geometry", self.editor_dialog.saveGeometry())
+
+    def _show_editor(self):
+        self.editor_dialog.show(); self.editor_dialog.raise_(); self.editor_dialog.activateWindow()
+
+    def edit_selected(self):
+        item = self.entry_list.currentItem()
+        name = str(item.data(Qt.ItemDataRole.UserRole)) if item else self._current_name
+        if name:
+            self._load_detail(name, show=True)
+
+    def open_new_editor(self):
+        self.new_entry(); self._show_editor()
 
     def new_entry(self):
-        self._creating = True; self._current_name = ""; self._dirty = False; self.detail_title.setText("新建记忆"); self._loading = True
+        self._creating = True; self._current_name = ""; self._collision_name = ""; self.collision_label.clear(); self.open_collision_button.setVisible(False); self._dirty = False; self.detail_title.setText("新建记忆"); self._loading = True
         for field in (self.name_edit, self.title_edit, self.description_edit, self.tags_edit): field.clear()
         self.body_edit.clear(); self._set_links([]); self.created_label.clear(); self.updated_label.clear(); self._loading = False; self._set_editor_enabled(True); self.title_edit.setFocus(); self._set_status("填写后保存")
 

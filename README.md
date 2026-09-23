@@ -23,6 +23,8 @@ Claude Desktop、Cursor 等）管理两类共享资产：
 1. **解压即用**：从 [GitHub Releases](https://github.com/Dunnnwei/123mshub/releases) 下载
    最新 `123mshub-v1.3.3-win64.zip`，解压到任意目录，双击 `123mshub.exe`；主 EXE 已内置
    Python、FastAPI、前端静态资源和 Sigma 图谱，不需要另装 Python、Node.js、npm 或 pip；
+   `native/v2` 的 v1.4.2 onedir 验证产物位于 `release/native-v1.4.2/123mshub/`，
+   图谱页使用 QtWebEngine 本地资源，不启动 localhost 服务；
 2. **首启三件事**：
    - 设定**仓库位置**（本地一个文件夹，建议放进你的同步盘）；
    - **AI 接口**可填可不填（安全审查 B 路线 + 记忆辅助共用；不填程序照用，只是没有 AI 能力）；

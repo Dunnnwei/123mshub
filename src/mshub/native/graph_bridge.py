@@ -5,9 +5,10 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from PySide6.QtCore import QObject, Signal, Slot
+from PySide6.QtCore import QObject, QSettings, Signal, Slot
 
 from .memory_facade import MemoryFacade
+from .theme import graph_palette
 
 
 class GraphBridge(QObject):
@@ -20,6 +21,18 @@ class GraphBridge(QObject):
         self._theme = theme
         self._graph_settings: dict[str, Any] = {}
         self._graph_cache: dict[str, str] = {}
+        self._settings_store = QSettings(str(facade.config_store.config_dir / "native-graph.ini"), QSettings.Format.IniFormat)
+        self._graph_settings = {
+            "includeTags": False, "showOrphans": True, "labelThreshold": 8,
+            "nodeScale": 1, "selectedTypes": {"user": True, "project": True, "reference": True, "feedback": True},
+            "forces": {"center": 1, "repel": 100, "link": 1, "distance": 80},
+        }
+        try:
+            saved = json.loads(str(self._settings_store.value("graph", "{}")))
+            if isinstance(saved, dict):
+                self._graph_settings = {**self._graph_settings, **saved}
+        except (TypeError, ValueError):
+            pass
 
     @Slot(str, result=str)
     def getGraph(self, kinds: str = "link") -> str:
@@ -56,6 +69,7 @@ class GraphBridge(QObject):
         if not isinstance(parsed, dict):
             return False
         self._graph_settings = parsed
+        self._settings_store.setValue("graph", json.dumps(parsed, ensure_ascii=False))
         return True
 
     @Slot(result=str)
@@ -65,3 +79,7 @@ class GraphBridge(QObject):
     def set_theme(self, theme: str) -> None:
         self._theme = str(theme)
         self.themeChanged.emit(self._theme)
+
+    @Slot(result=str)
+    def getPalette(self) -> str:
+        return json.dumps(graph_palette(self._theme), ensure_ascii=False)

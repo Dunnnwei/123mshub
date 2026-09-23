@@ -21,7 +21,11 @@ graph_datas = [
     if path.is_file()
 ]
 
-datas = graph_datas + [(str(project_root / "README.md"), ".")]
+icon_root = project_root / "packaging/native/icons"
+datas = graph_datas + [(str(project_root / "README.md"), ".")] + [
+    (str(icon_root / name), "mshub/native/icons")
+    for name in ("123mshublogo.ico", "123mshublogohei.ico")
+]
 # PyInstaller's official PySide6 hooks collect the exact Qt DLLs, WebEngine
 # helper/resources and translations referenced by these imports.  Do not use
 # collect_all("PySide6"): it drags in every QML module and every language pack
@@ -56,6 +60,7 @@ exe = EXE(
     [],
     [],
     name="123mshub",
+    icon=str(icon_root / "123mshublogo.ico"),
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

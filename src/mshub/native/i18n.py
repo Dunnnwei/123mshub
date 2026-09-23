@@ -1,19 +1,19 @@
 """Qt translator for native chrome. User content is never a translation key."""
 from PySide6.QtCore import QCoreApplication, QEvent, QLocale, QObject, QTranslator, Signal
 from PySide6.QtWidgets import (QApplication, QAbstractButton, QComboBox, QDockWidget,
-    QGroupBox, QLabel, QLineEdit, QListWidget, QPlainTextEdit, QTabWidget, QTableWidget, QWidget)
+    QGroupBox, QLabel, QLineEdit, QListWidget, QPlainTextEdit, QPushButton, QTabWidget, QTableWidget, QWidget)
 
 EN = {
     "记忆库": "Memory", "记忆图示": "Memory graph", "技能库": "Skills",
     "安全中心": "Safety", "设置": "Settings", "本地共享记忆与技能": "Shared memory & skills",
-    "复制注入提示词": "Copy connection prompt", "准备就绪": "Ready", "后台任务": "Background tasks",
+    "复制注入提示词": "Copy connection prompt", "准备就绪": "Ready", "后台任务": "Background tasks", "编辑选中": "Edit selected", "关于 123 MSHub": "About 123 MSHub", "记忆编辑": "Memory editor",
     "选择一条记忆": "Select a memory", "新建": "New", "新建记忆": "New memory",
     "标题": "Title", "条目名": "Entry name", "一句话描述": "Description", "描述": "Description",
     "类型": "Type", "标签": "Tags", "正文": "Body", "编辑": "Edit", "预览": "Preview",
     "保存": "Save", "软删除": "Move to trash", "放大编辑": "Expand editor", "还原编辑": "Restore editor",
     "AI 生成描述": "AI description", "全部类型": "All types", "最近更新": "Updated",
     "创建时间": "Created", "名称": "Name", "用户": "User", "项目": "Project", "参考": "Reference",
-    "反馈": "Feedback", "投递箱": "Inbox", "应用标签": "Apply tags", "AI 补全主题": "AI complete",
+    "总数": "Total", "本周新增": "New this week", "待收编": "Inbox", "反馈": "Feedback", "投递箱": "Inbox", "应用标签": "Apply tags", "AI 补全主题": "AI complete",
     "批量软删除": "Trash selected", "批量改分类…": "Change type…", "归纳整理": "Tidy memories",
     "整理日报": "Tidy reports", "复制值守提示词": "Copy duty prompt", "查看索引源文件": "View index source",
     "搜索标题、描述、标签或正文全文": "Search title, description, tags or full text",
@@ -26,7 +26,7 @@ EN = {
     "添加技能 / 程序": "Add skill / program", "全部来源": "All sources", "GitHub 源": "GitHub source",
     "本地自研": "Local author", "全部资产": "All assets", "技能": "Skill", "程序": "Program", "刷新": "Refresh",
     "搜索名称、中文备注、来源地址或标签": "Search name, description, source or tags",
-    "来源": "Source", "中文备注": "Chinese description", "安全": "Safety", "更新时间": "Updated",
+    "来源": "Source", "手工": "Manual", "agent": "Agent", "中文备注": "Chinese description", "安全": "Safety", "更新时间": "Updated",
     "导入来源": "Imported from", "技能详情": "Skill details", "选择一项": "Select an item", "选": "Select",
     "离线检查": "Offline check", "AI 检查": "AI check", "信任放行": "Trust", "更新": "Update",
     "复制指定技能提示词": "Copy skill prompt", "复制安装提示词": "Copy install prompt", "编辑信息": "Edit metadata",
@@ -84,6 +84,10 @@ def localize(root):
                 if source in EN:
                     widget.setProperty("i18n_" + key, source)
                     getattr(widget, setter)(tr(source))
+        if isinstance(widget, QPushButton) and widget.property("i18n_stat"):
+            source = str(widget.property("i18n_stat"))
+            count = str(widget.property("i18n_count") or "0")
+            widget.setText(f"{tr(source)} {count}")
         if isinstance(widget, QComboBox) and not widget.isEditable():
             blocked = widget.blockSignals(True)
             for i in range(widget.count()):

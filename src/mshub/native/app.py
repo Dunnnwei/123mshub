@@ -54,7 +54,10 @@ def main(argv: list[str] | None = None) -> int:
     from .session_config import SessionConfigStore
     from .memory_facade import MemoryFacade
 
+    from .branding import apply_brand_icon, set_windows_app_id
+    set_windows_app_id()
     app = QApplication.instance() or QApplication(sys.argv)
+    apply_brand_icon("light")
     append_smoke("qapplication-created")
     app.setApplicationName("123 MSHub")
     app.setOrganizationName("123mshub")

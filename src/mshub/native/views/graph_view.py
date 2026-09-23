@@ -111,6 +111,7 @@ class GraphView(QWidget):
         self.web_view.setPage(page)
         self.web_view.urlChanged.connect(self._guard_url)
         self.web_view.loadFinished.connect(self._loaded)
+        self.bridge.themeChanged.connect(self._push_palette)
         self.bridge.openMemoryRequested.connect(self.openMemoryRequested)
         layout.addWidget(self.web_view)
         if self.graph_path.is_file():
@@ -125,8 +126,16 @@ class GraphView(QWidget):
 
     def _loaded(self, ok: bool) -> None:
         self.statusMessage.emit("图谱已加载" if ok else "图谱加载失败，请检查本地资源")
+        if ok:
+            self._push_palette(self.bridge.getTheme())
+
+    def _push_palette(self, _theme: str = "") -> None:
+        if self.web_view is None:
+            return
+        self.web_view.page().runJavaScript(
+            "window.mshubSetPalette && window.mshubSetPalette(%s)" % self.bridge.getPalette()
+        )
 
     def set_theme(self, theme: str) -> None:
         self.bridge.set_theme(theme)
-        if self.web_view is not None:
-            self.web_view.page().runJavaScript(f"window.mshubSetTheme && window.mshubSetTheme({theme!r})")
+        self._push_palette(theme)

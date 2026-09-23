@@ -1,3 +1,20 @@
+# 123 MSHub v1.4.2 原生版迭代
+
+> 工作分支：`native/v2`。本切片补齐原生 UI 与图谱岛交互，不改变记忆/技能服务层语义。
+
+## 变化
+
+- 图谱主题改为 Qt → QWebChannel 显式 palette 同步，file/qrc 页面保留同步 FA2 降级；增加闲置微动、三组设置面板、设置持久化和大图自动关闭微动策略。
+- 记忆统计、类型控件、技能来源和安全中心来源统一中英文词条；空状态引导卡、重名“打开它”导航和日报双栏查看器补齐。
+- 记忆编辑和技能元数据编辑改为复用的非模态可调窗口，保存窗口几何且不挤压列表。
+- 亮/暗 ICO 接入 QApplication、侧栏、关于页和 PyInstaller；Windows AppUserModelID 固定为 `Dunnnwei.123mshub`；标题动态显示 `123 MSHub v1.4.2`。
+
+## 验证
+
+- Python 测试 193 passed（191 项原有核心基线 + 2 项 v1.4.2 原生覆盖）；图谱前端测试 7 passed。
+- PyInstaller onedir 图谱冒烟通过，产物位于 `release/native-v1.4.2/123mshub/`，目录体积约 359.70 MB；SHA-256 见 `release/native-v1.4.2/SHA256SUMS.txt`。
+- 亮/暗主题并排截图、真实仓库投递→收编→图谱新节点和真实供应商 AI 草稿仍需用户图形会话实测，详见 `docs/v1.4.2-验收报告.md`。
+
 # 123 MSHub v1.4.0 原生壳 MVP（native/v2）
 
 > 原生化迭代的第一切片：保留既有 `src/mshub` 业务核心，在 PySide6 主窗口中接回记忆库、设置和本地图谱 web 岛。该切片先在 `native/v2` 验证，v1.3.x 发布线不变。

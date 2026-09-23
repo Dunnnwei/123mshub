@@ -4,8 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>123 MSHub · 记忆图示</title>
-    <script type="module" crossorigin src="./assets/index-pQIdjFYu.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-BgC70UJd.css">
+    <script type="module" crossorigin src="./assets/index-D8bisk_L.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-C-8nx6C7.css">
   </head>
   <body data-theme="light">
     <main class="graph-shell">
@@ -22,7 +22,14 @@
         <button id="refresh">刷新</button>
         <button id="reset">复位</button>
         <label class="tag-toggle"><input id="include-tags" type="checkbox" /> 共同标签边</label>
+        <button id="settings-toggle" aria-expanded="false">设置</button>
       </div>
+      <aside id="graph-settings" class="graph-settings" hidden>
+        <h2>图谱设置</h2>
+        <section><h3>Filters</h3><label><input data-type="user" type="checkbox" checked /> 用户</label><label><input data-type="project" type="checkbox" checked /> 项目</label><label><input data-type="reference" type="checkbox" checked /> 参考</label><label><input data-type="feedback" type="checkbox" checked /> 反馈</label><label><input id="show-orphans" type="checkbox" checked /> 显示孤儿节点</label><label><input id="motion-toggle" type="checkbox" checked /> 闲置微动</label></section>
+        <section><h3>Display</h3><label><span>节点尺寸</span><input data-setting="nodeScale" type="range" min="0.6" max="1.8" step="0.1" value="1" /><output>1</output></label><label><span>标签阈值</span><input data-setting="labelThreshold" type="range" min="2" max="18" step="1" value="8" /><output>8</output></label></section>
+        <section><h3>Forces</h3><label><span>中心力</span><input data-setting="forces.center" type="range" min="0.1" max="4" step="0.1" value="1" /><output>1</output></label><label><span>斥力</span><input data-setting="forces.repel" type="range" min="20" max="220" step="10" value="100" /><output>100</output></label><label><span>弹簧</span><input data-setting="forces.link" type="range" min="0" max="2" step="0.1" value="1" /><output>1</output></label><label><span>连接距离</span><input data-setting="forces.distance" type="range" min="40" max="160" step="10" value="80" /><output>80</output></label></section>
+      </aside>
       <section id="surface" class="surface" aria-label="记忆关系图">
         <div id="sigma-container" class="sigma-container"></div>
         <div id="message" class="message">正在读取记忆关系…</div>

@@ -27,6 +27,8 @@ from .task_runner import TaskRunner
 from .job_controller import JobController
 from .theme import ThemeController
 from .i18n import LanguageController, localize
+from .branding import apply_brand_icon, show_about
+from .. import __version__
 if TYPE_CHECKING:
     from .views.graph_view import GraphView
 from .views.memory_view import MemoryPage
@@ -56,7 +58,7 @@ class _PlaceholderPage(QWidget):
 class MainWindow(QMainWindow):
     def __init__(self, facade: MemoryFacade | None = None, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("123 MSHub · 原生版")
+        self.setWindowTitle(f"123 MSHub v{__version__}")
         self.setMinimumSize(1040, 680)
         self.resize(1280, 820)
         self.facade = facade or MemoryFacade()
@@ -68,6 +70,7 @@ class MainWindow(QMainWindow):
         self._build_ui()
         self.theme.changed.connect(self._theme_changed)
         self.theme.apply()
+        self.language.apply(self.facade.config().language)
 
     def _build_ui(self) -> None:
         container = QWidget()
@@ -83,7 +86,13 @@ class MainWindow(QMainWindow):
         brand.setStyleSheet("font-size: 21px; font-weight: 700;")
         subtitle = QLabel("本地共享记忆与技能")
         subtitle.setObjectName("muted")
-        sidebar_layout.addWidget(brand)
+        self.brand_logo = QLabel(objectName="brandLogo")
+        self.brand_logo.setFixedSize(44, 44)
+        brand_row = QHBoxLayout()
+        brand_row.setSpacing(10)
+        brand_row.addWidget(self.brand_logo)
+        brand_row.addWidget(brand, 1)
+        sidebar_layout.addLayout(brand_row)
         sidebar_layout.addWidget(subtitle)
         sidebar_layout.addSpacing(22)
         self.nav = QListWidget()
@@ -98,6 +107,10 @@ class MainWindow(QMainWindow):
         hint.setObjectName("muted")
         hint.setWordWrap(True)
         sidebar_layout.addWidget(hint)
+        about = QToolButton()
+        about.setText("关于 123 MSHub")
+        about.clicked.connect(lambda: show_about(self))
+        sidebar_layout.addWidget(about)
         outer.addWidget(self.sidebar)
 
         self.pages = QStackedWidget()
@@ -120,7 +133,7 @@ class MainWindow(QMainWindow):
         self.settings_page.statusMessage.connect(self.statusBar().showMessage)
         self.settings_page.saved.connect(lambda _config: self.memory_page.refresh())
         self.settings_page.importRequested.connect(self.open_import)
-        self.language.changed.connect(lambda _mode: localize(self))
+        self.language.changed.connect(lambda _mode: (localize(self), self.memory_page.retranslate(), self.skills_page.retranslate(), self.security_page.retranslate()))
         self.jobs.repositoryChanged.connect(self._repository_changed)
         self._build_job_dock()
 
@@ -210,6 +223,9 @@ class MainWindow(QMainWindow):
 
     def _theme_changed(self, mode: str) -> None:
         self.state.update(theme=mode)
+        icon = apply_brand_icon(mode)
+        if hasattr(self, "brand_logo"):
+            self.brand_logo.setPixmap(icon.pixmap(self.brand_logo.size()))
         if self.graph_page is not None:
             self.graph_page.set_theme(mode)
 

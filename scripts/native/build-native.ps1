@@ -16,7 +16,7 @@ if (-not (Test-Path -LiteralPath $python)) {
 & $python -m pytest
 if ($LASTEXITCODE -ne 0) { throw "测试失败，停止打包。" }
 
-$release = Join-Path $projectRoot "release\native-v1.4.1"
+$release = Join-Path $projectRoot "release\native-v1.4.2"
 $work = Join-Path $projectRoot "build\native-pyinstaller"
 if (Test-Path -LiteralPath $release) {
     $resolvedReleaseToClean = (Resolve-Path -LiteralPath $release).Path
@@ -42,7 +42,9 @@ foreach ($required in @(
     (Join-Path $internal "PySide6\resources\qtwebengine_resources.pak"),
     (Join-Path $internal "PySide6\resources\v8_context_snapshot.bin"),
     (Join-Path $internal "PySide6\translations\qtwebengine_locales\zh-CN.pak"),
-    (Join-Path $internal "PySide6\translations\qtwebengine_locales\en-US.pak")
+    (Join-Path $internal "PySide6\translations\qtwebengine_locales\en-US.pak"),
+    (Join-Path $internal "mshub\native\icons\123mshublogo.ico"),
+    (Join-Path $internal "mshub\native\icons\123mshublogohei.ico")
 )) {
     if (-not (Test-Path -LiteralPath $required)) { throw "缺少 onedir 资源：$required" }
 }

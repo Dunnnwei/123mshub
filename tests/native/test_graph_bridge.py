@@ -28,3 +28,13 @@ def test_graph_bridge_accepts_worker_warm_cache(native_facade: MemoryFacade) -> 
     bridge = GraphBridge(native_facade)
     bridge.set_graph_cache("link", {"nodes": [], "edges": [], "memory_root": ""})
     assert json.loads(bridge.getGraph("link"))["nodes"] == []
+
+
+def test_graph_bridge_persists_settings_and_explicit_palette(native_facade: MemoryFacade) -> None:
+    bridge = GraphBridge(native_facade, "dark")
+    assert json.loads(bridge.getPalette()) == {"theme": "dark", "background": "#0C1730", "label": "#FFFFFF"}
+    assert bridge.writeGraphSettings('{"labelThreshold": 12, "forces": {"center": 2}}') is True
+    restored = GraphBridge(native_facade, "dark")
+    settings = json.loads(restored.readGraphSettings())
+    assert settings["labelThreshold"] == 12
+    assert settings["forces"]["center"] == 2

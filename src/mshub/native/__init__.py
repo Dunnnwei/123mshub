@@ -6,6 +6,8 @@ deliberately a leaf package: core services never import it back.
 
 from __future__ import annotations
 
-NATIVE_VERSION = "1.4.1"
+from .. import __version__
+
+NATIVE_VERSION = __version__
 
 __all__ = ["NATIVE_VERSION"]
