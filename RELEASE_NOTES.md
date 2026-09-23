@@ -1,3 +1,26 @@
+# 123 MSHub v1.4.0 原生壳 MVP（native/v2）
+
+> 原生化迭代的第一切片：保留既有 `src/mshub` 业务核心，在 PySide6 主窗口中接回记忆库、设置和本地图谱 web 岛。该切片先在 `native/v2` 验证，v1.3.x 发布线不变。
+
+## 原生壳
+
+- 新增 `python -m mshub.native` 入口、PySide6 侧栏导航、记忆列表/详情/编辑/新建/软删除、投递箱收编/丢弃、注入提示词复制和设置页。
+- 亮色/暗色主题沿用 `design-system/123mshub-v1.3/MASTER.md` 的 123UI v4.2 token，并把主题设置保存到当前配置目录。
+- 慢操作通过 `QThreadPool` 执行，搜索有 300ms 防抖和 request id，原有服务层文件格式、索引、`.meta` 和 SQLite 契约不改。
+- 技能库和安全中心保留导航位并明确标注 v1.5.0 对齐中，不用静态页面冒充已完成能力。
+
+## 本地图谱 web 岛
+
+- Sigma/Graphology/ForceAtlas2 构建为程序内静态资源，经 `QUrl.fromLocalFile()` 与 `QWebChannel` 桥接，无 FastAPI、localhost 服务或 TCP 监听。
+- QWebEngineView 延迟到首次打开图谱页才创建；`file://`/`qrc://` 环境下 worker 被 Chromium 拒绝时降级为有界同步 FA2，拖拽提供短批次 reheat。
+- 图谱 profile 持久化在 `%APPDATA%\\mshub\\web-profile`，只允许 `file`、`qrc`、`blob`、`data`、`about` 本地协议。
+
+## 打包与验证
+
+- 新增 `packaging/native/123mshub_native.spec` 和 `scripts/native/build-native.ps1`，使用 PyInstaller onedir；发布脚本会裁剪调试/开发者工具资源、保留中英文 WebEngine locale，并在干净目录真正加载图谱后退出。
+- 当前 PySide6 6.11.2 版本的实测包目录约 345.81 MB；`Qt6WebEngineCore.dll` 约 194 MB。该体积是 Chromium 随包分发的已接受成本。
+- v1.3.3 原有 174 项测试加 9 项原生测试共 183 项通过；冻结 onedir 图谱冒烟退出码 0，Windows `netstat -ano` 未发现该进程的 TCP 监听。
+
 # 123 MSHub v1.3.3 发布说明
 
 > 图谱完善与运行环境拆包版：保留主程序免安装体验，将系统级 WebView2/.NET/Git 依赖移到独立的一键环境包。

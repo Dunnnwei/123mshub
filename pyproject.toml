@@ -22,6 +22,7 @@ dependencies = [
 
 [project.optional-dependencies]
 gui = ["pywebview>=5.2,<7"]
+native = ["PySide6>=6.8,<7"]
 keyring = ["keyring>=25,<27"]
 release = ["pyinstaller>=6.16,<7"]
 dev = [
