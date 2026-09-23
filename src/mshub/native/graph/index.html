@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>123 MSHub · 记忆图示</title>
+    <script type="module" crossorigin src="./assets/index-Cr8OhVYv.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-BgC70UJd.css">
+  </head>
+  <body data-theme="light">
+    <main class="graph-shell">
+      <header class="heading">
+        <div>
+          <span class="eyebrow">OBSIDIAN GRAPH VIEW</span>
+          <h1>记忆图示</h1>
+          <p>双链关系在画布上自然展开；悬停节点查看一度关联，滚轮缩放，拖动节点整理空间。</p>
+        </div>
+        <div class="stats"><strong id="node-count">0</strong><span>节点</span><strong id="edge-count">0</strong><span>关系</span></div>
+      </header>
+      <div class="toolbar">
+        <label class="search"><span>⌕</span><input id="query" placeholder="搜索标题、条目名、标签" aria-label="搜索图谱" /><button id="clear" aria-label="清除搜索">×</button></label>
+        <button id="refresh">刷新</button>
+        <button id="reset">复位</button>
+        <label class="tag-toggle"><input id="include-tags" type="checkbox" /> 共同标签边</label>
+      </div>
+      <section id="surface" class="surface" aria-label="记忆关系图">
+        <div id="sigma-container" class="sigma-container"></div>
+        <div id="message" class="message">正在读取记忆关系…</div>
+        <div id="tooltip" class="tooltip" hidden></div>
+        <div class="zoom-controls"><button id="zoom-in" aria-label="放大">＋</button><button id="zoom-out" aria-label="缩小">－</button></div>
+        <div class="legend"><span><i class="user"></i>用户</span><span><i class="project"></i>项目</span><span><i class="reference"></i>参考</span><span><i class="feedback"></i>反馈</span></div>
+      </section>
+    </main>
+    <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+  </body>
+</html>
