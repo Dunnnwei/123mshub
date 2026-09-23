@@ -40,3 +40,6 @@ inbox-*.png
 
 # 前端构建产物（npm run build 拷贝而来，不入库）
 src/mshub/web/
+
+# 123UI 视觉参考包（本地资料，不入库）
+123ui-v4.2.zip
