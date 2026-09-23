@@ -275,11 +275,62 @@ class MemoryService:
         ]
         return {**entry.to_meta(), "body": entry.body, "links": links}
 
+    def graph(self, kinds: str = "link") -> dict[str, Any]:
+        """Return an explainable graph; common-tag edges are opt-in.
+
+        Double-link edges are sparse and safe for the default view.  Common-tag
+        edges are intentionally behind ``kinds=link,tag`` because their natural
+        construction is O(n²) for a large memory vault.
+        """
+        requested = {part.strip().lower() for part in str(kinds).split(",") if part.strip()}
+        include_links = not requested or "link" in requested
+        include_tags = "tag" in requested
+        result = self.list_entries(sort="name")
+        items = result["items"]
+        nodes = [{
+            "id": item["name"], "title": item["title"], "type": item["type"],
+            "source": item["source"], "tags": item.get("tags", []),
+        } for item in items]
+        known = {node["id"] for node in nodes}
+        edges: list[dict[str, str]] = []
+        seen: set[tuple[str, str, str]] = set()
+        if include_links:
+            for node in nodes:
+                try:
+                    entry = self.get_entry(node["id"])
+                except Exception:
+                    continue
+                for link in entry.get("links", []):
+                    if link.get("exists") and link["name"] in known:
+                        key = (node["id"], link["name"], "双链")
+                        if key not in seen:
+                            seen.add(key); edges.append({"source": key[0], "target": key[1], "kind": key[2]})
+        if include_tags:
+            for index, left in enumerate(nodes):
+                if len(edges) >= 5000:
+                    break
+                for right in nodes[index + 1:]:
+                    common_tags = set(left["tags"]) & set(right["tags"])
+                    if common_tags:
+                        key = (left["id"], right["id"], "共同标签")
+                        if key not in seen:
+                            seen.add(key); edges.append({"source": key[0], "target": key[1], "kind": key[2]})
+                            if len(edges) >= 5000:
+                                break
+        return {"nodes": nodes, "edges": edges, "memory_root": result.get("memory_root", "")}
+
     def create_entry(self, payload: dict[str, Any]) -> dict[str, Any]:
         root = self._ensure_layout()
         title = str(payload.get("title") or "").strip()
         if not title:
-            raise ValidationError("中文标题不能为空。")
+            body_hint = str(payload.get("body") or "").strip()
+            if body_hint:
+                try:
+                    title = self.ai_draft(body_hint)["title"] or body_hint.splitlines()[0][:32]
+                except Exception:
+                    title = body_hint.splitlines()[0][:32]
+            if not title:
+                raise ValidationError("中文标题不能为空。")
         raw_name = str(payload.get("name") or "").strip()
         # 纯中文标题没有可提取的 ASCII 词：走 slug_from_title 兜底（note-日期-哈希）
         name = sanitize_name(raw_name) if raw_name else slug_from_title(title)
@@ -363,6 +414,29 @@ class MemoryService:
         cache.delete(name)
         self.rebuild_index(root)
         return {"deleted": True, "name": name, "recovery_path": str(trash / path.name)}
+
+    def bulk_update(self, names: list[str], *, type_name: str | None = None, tags: list[str] | None = None) -> dict[str, Any]:
+        done: list[str] = []; failed: list[str] = []
+        for raw_name in dict.fromkeys(names):
+            try:
+                current = self.get_entry(validate_name(raw_name))
+                payload: dict[str, Any] = {"title": current["title"], "body": current["body"]}
+                if type_name: payload["type"] = normalize_type(type_name)
+                if tags is not None: payload["tags"] = tags
+                self.update_entry(current["name"], payload)
+                done.append(current["name"])
+            except Exception as exc:
+                failed.append(f"{raw_name}: {exc}")
+        return {"updated": done, "failed": failed}
+
+    def bulk_delete(self, names: list[str]) -> dict[str, Any]:
+        deleted: list[str] = []; failed: list[str] = []
+        for raw_name in dict.fromkeys(names):
+            try:
+                deleted.append(self.delete_entry(validate_name(raw_name))["name"])
+            except Exception as exc:
+                failed.append(f"{raw_name}: {exc}")
+        return {"deleted": deleted, "failed": failed}
 
     def _write_entry(self, root: Path, entry: MemoryEntry) -> None:
         _write_text_atomic(self._notes_dir(root) / f"{entry.name}.md", entry.full_text())

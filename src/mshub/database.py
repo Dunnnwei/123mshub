@@ -32,6 +32,8 @@ CREATE TABLE IF NOT EXISTS skills (
     install_mode TEXT NOT NULL DEFAULT 'standard',
     fetcher TEXT NOT NULL DEFAULT 'archive',
     license_name TEXT NOT NULL DEFAULT '',
+    imported_from TEXT NOT NULL DEFAULT '',
+    imported_at TEXT NOT NULL DEFAULT '',
     installed_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     PRIMARY KEY (name, library)
@@ -49,7 +51,7 @@ COLUMNS = [
     "name", "item_type", "author", "repo", "provider", "library", "source_url", "ref", "subdir",
     "local_dir", "version", "commit_hash", "commit_date", "description", "description_zh",
     "tags", "has_scripts", "security_status", "security_route", "security_findings",
-    "install_mode", "fetcher", "license_name", "installed_at", "updated_at",
+    "install_mode", "fetcher", "license_name", "imported_from", "imported_at", "installed_at", "updated_at",
 ]
 
 
@@ -63,8 +65,9 @@ class Database:
 
     @contextmanager
     def connect(self) -> Iterator[sqlite3.Connection]:
-        connection = sqlite3.connect(self.path)
+        connection = sqlite3.connect(self.path, timeout=10)
         connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA busy_timeout=10000")
         connection.execute("PRAGMA journal_mode=WAL")
         connection.execute("PRAGMA foreign_keys=ON")
         try:
@@ -96,6 +99,10 @@ class Database:
                 connection.execute(
                     "ALTER TABLE skills ADD COLUMN description_zh TEXT NOT NULL DEFAULT ''"
                 )
+            if "imported_from" not in columns:
+                connection.execute("ALTER TABLE skills ADD COLUMN imported_from TEXT NOT NULL DEFAULT ''")
+            if "imported_at" not in columns:
+                connection.execute("ALTER TABLE skills ADD COLUMN imported_at TEXT NOT NULL DEFAULT ''")
             self._migrate_composite_key(connection)
             # 表重建会连带丢索引，统一在末尾补建
             connection.execute("CREATE INDEX IF NOT EXISTS idx_skills_author ON skills(author)")
@@ -141,6 +148,8 @@ class Database:
                 install_mode TEXT NOT NULL DEFAULT 'standard',
                 fetcher TEXT NOT NULL DEFAULT 'archive',
                 license_name TEXT NOT NULL DEFAULT '',
+                imported_from TEXT NOT NULL DEFAULT '',
+                imported_at TEXT NOT NULL DEFAULT '',
                 installed_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
                 PRIMARY KEY (name, library)
@@ -216,6 +225,7 @@ class Database:
             "has_scripts", "security_status", "security_route", "security_findings",
             "install_mode", "fetcher", "license_name", "updated_at", "ref", "subdir", "tags",
             "item_type", "library", "author", "repo", "provider", "source_url", "local_dir",
+            "imported_from", "imported_at",
         }
         clean = {key: value for key, value in updates.items() if key in allowed}
         if not clean:
@@ -248,6 +258,19 @@ class Database:
 
     def rename_skill(self, old_name: str, new_name: str, library: str | None = None) -> None:
         self.update_fields(old_name, {"name": new_name}, library=library)
+
+    def rename_skill_by_dir(self, local_dir: str, new_name: str, library: str = "") -> None:
+        """Rename one record identified by its stable on-disk directory.
+
+        Historical records can have an empty name, so name is not a safe key for
+        repairing them.  The directory plus library pair is stable and is also
+        the pair used by manifests during cross-machine recovery.
+        """
+        with self.connect() as connection:
+            connection.execute(
+                "UPDATE skills SET name = ? WHERE local_dir = ? AND library = ?",
+                (new_name, local_dir, library),
+            )
 
     @staticmethod
     def _decode(row: sqlite3.Row) -> dict[str, Any]:

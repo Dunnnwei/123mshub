@@ -328,7 +328,21 @@ finally {
         if (-not $resolved.StartsWith($tempPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
             throw "拒绝清理非临时目录：$resolved"
         }
-        [System.IO.Directory]::Delete($resolved, $true)
+        # pywebview/embedded browser may release the journal handle a moment
+        # after the EXE is force-stopped. Retry cleanup so a successful
+        # functional verification does not fail only because of a transient
+        # Windows file lock.
+        $deleted = $false
+        for ($cleanupAttempt = 0; $cleanupAttempt -lt 8 -and -not $deleted; $cleanupAttempt++) {
+            try {
+                [System.IO.Directory]::Delete($resolved, $true)
+                $deleted = $true
+            }
+            catch [System.IO.IOException] {
+                if ($cleanupAttempt -eq 7) { throw }
+                Start-Sleep -Milliseconds 250
+            }
+        }
     }
     elseif ($KeepTestData) {
         Write-Host "验收数据保留在：$testRoot"

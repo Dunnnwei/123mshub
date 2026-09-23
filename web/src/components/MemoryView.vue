@@ -1,12 +1,13 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import {
-  Bot, Brain, ClipboardCopy, FileText, Inbox, Plus, RefreshCw, Search, Sparkles, X,
+  Bot, Brain, CheckSquare, ClipboardCopy, FileText, Inbox, Plus, RefreshCw, Search, Sparkles, X,
 } from '@lucide/vue'
 import { api } from '../api'
 import { renderMarkdown } from '../markdown'
 import MemoryDrawer from './MemoryDrawer.vue'
 import MemoryInbox from './MemoryInbox.vue'
+import TagInput from './TagInput.vue'
 
 const props = defineProps({
   enabled: { type: Boolean, default: true },
@@ -25,8 +26,16 @@ const searchTimer = ref(null)
 let requestSeq = 0 // 竞态保护：只接受最新一次列表请求的响应
 const inboxItems = ref([])
 const inboxLoading = ref(false)
+const selectionMode = ref(false)
+const selectedNames = ref([])
+const bulkType = ref('reference')
+const bulkTags = ref([])
+const selectionBox = ref(null)
+const suppressRowClick = ref(false)
+let selectionOrigin = null
 
 const drawerOpen = ref(false)
+const drawerLoading = ref(false)
 const drawerMode = ref('edit')
 const drawerEntry = ref(null)
 const indexOpen = ref(false)
@@ -43,10 +52,10 @@ const dutyOpen = ref(false)
 
 const typeTabs = computed(() => [
   { value: 'all', label: '全部', count: stats.value.total },
-  { value: 'user', label: 'user · 用户', count: stats.value.types.user || 0 },
-  { value: 'project', label: 'project · 项目', count: stats.value.types.project || 0 },
-  { value: 'reference', label: 'reference · 参考', count: stats.value.types.reference || 0 },
-  { value: 'feedback', label: 'feedback · 反馈', count: stats.value.types.feedback || 0 },
+  { value: 'user', label: '用户', count: stats.value.types.user || 0 },
+  { value: 'project', label: '项目', count: stats.value.types.project || 0 },
+  { value: 'reference', label: '参考', count: stats.value.types.reference || 0 },
+  { value: 'feedback', label: '反馈', count: stats.value.types.feedback || 0 },
 ])
 
 const tagSuggestions = computed(() => {
@@ -64,11 +73,17 @@ const existingNames = computed(() => allNames.value)
 
 onMounted(() => {
   refreshAll()
+  document.addEventListener('mshub:open-memory', openMemoryEvent)
 })
 
 onUnmounted(() => {
   if (searchTimer.value) window.clearTimeout(searchTimer.value)
+  document.removeEventListener('mshub:open-memory', openMemoryEvent)
 })
+
+function openMemoryEvent(event) {
+  if (event.detail) openEntryByName(String(event.detail))
+}
 
 watch(search, () => {
   if (searchTimer.value) window.clearTimeout(searchTimer.value)
@@ -167,10 +182,174 @@ function openCreate() {
 }
 
 async function openEntry(item) {
+  drawerEntry.value = item
+  drawerMode.value = 'edit'
+  drawerLoading.value = true
+  drawerOpen.value = true
   try {
-    drawerMode.value = 'edit'
     drawerEntry.value = await api.memoryEntry(item.name)
-    drawerOpen.value = true
+  } catch (error) {
+    emit('toast', { type: 'error', message: error.message })
+  } finally {
+    drawerLoading.value = false
+  }
+}
+
+function toggleSelectionMode() {
+  selectionMode.value = !selectionMode.value
+  if (!selectionMode.value) {
+    selectedNames.value = []
+    selectionBox.value = null
+  }
+}
+function toggleSelected(name) {
+  selectedNames.value = selectedNames.value.includes(name)
+    ? selectedNames.value.filter((item) => item !== name)
+    : [...selectedNames.value, name]
+}
+function selectAll() {
+  const names = entries.value.map((entry) => entry.name)
+  selectedNames.value = names.every((name) => selectedNames.value.includes(name)) ? [] : names
+}
+
+function selectionStart(event) {
+  if (!selectionMode.value || event.target.closest('button, input, select, textarea, label')) return
+  const bounds = event.currentTarget.getBoundingClientRect()
+  selectionOrigin = { x: event.clientX - bounds.left, y: event.clientY - bounds.top }
+  suppressRowClick.value = false
+  selectionBox.value = { left: selectionOrigin.x, top: selectionOrigin.y, width: 0, height: 0 }
+  event.currentTarget.setPointerCapture?.(event.pointerId)
+}
+
+function selectionMove(event) {
+  if (!selectionOrigin) return
+  const bounds = event.currentTarget.getBoundingClientRect()
+  const x = event.clientX - bounds.left
+  const y = event.clientY - bounds.top
+  const left = Math.min(selectionOrigin.x, x)
+  const top = Math.min(selectionOrigin.y, y)
+  const width = Math.abs(x - selectionOrigin.x)
+  const height = Math.abs(y - selectionOrigin.y)
+  suppressRowClick.value = width > 8 || height > 8
+  selectionBox.value = { left, top, width, height }
+}
+
+function selectionEnd(event) {
+  if (!selectionOrigin) return
+  const box = selectionBox.value
+  if (box && suppressRowClick.value) {
+    const bounds = event.currentTarget.getBoundingClientRect()
+    const hits = [...event.currentTarget.querySelectorAll('[data-memory-key]')]
+      .filter((row) => {
+        const rowBounds = row.getBoundingClientRect()
+        const left = rowBounds.left - bounds.left
+        const top = rowBounds.top - bounds.top
+        const right = left + rowBounds.width
+        const bottom = top + rowBounds.height
+        return right >= box.left && left <= box.left + box.width
+          && bottom >= box.top && top <= box.top + box.height
+      })
+      .map((row) => row.dataset.memoryKey)
+    selectedNames.value = [...new Set([...selectedNames.value, ...hits])]
+  }
+  selectionOrigin = null
+  selectionBox.value = null
+}
+
+function activateRow(entry) {
+  if (selectionMode.value) {
+    if (suppressRowClick.value) {
+      suppressRowClick.value = false
+      return
+    }
+    toggleSelected(entry.name)
+    return
+  }
+  openEntry(entry)
+}
+
+async function bulkClassify() {
+  if (!selectedNames.value.length) return
+  try {
+    const result = await api.bulkUpdateMemory(selectedNames.value, bulkType.value)
+    emit('toast', { type: 'success', message: `已更新 ${result.updated.length} 条记忆分类。` })
+    selectedNames.value = []
+    await refreshAll()
+  } catch (error) {
+    emit('toast', { type: 'error', message: error.message })
+  }
+}
+
+async function bulkTag() {
+  if (!selectedNames.value.length || !bulkTags.value.length) return
+  try {
+    const result = await api.bulkUpdateMemory(selectedNames.value, null, bulkTags.value)
+    emit('toast', { type: 'success', message: `已为 ${result.updated.length} 条记忆更新标签。` })
+    selectedNames.value = []
+    bulkTags.value = []
+    await refreshAll()
+  } catch (error) {
+    emit('toast', { type: 'error', message: error.message })
+  }
+}
+
+function requestBulkAiTopic() {
+  if (!selectedNames.value.length) return
+  emit('confirm', {
+    open: true,
+    title: `补全 ${selectedNames.value.length} 条记忆的智能主题？`,
+    message: '将逐条读取正文并调用设置里的 AI 接口生成标题与一句话描述；已有内容也会以本次草稿为准更新。',
+    confirmLabel: '开始补全',
+    tone: 'normal',
+    action: performBulkAiTopic,
+  })
+}
+
+async function performBulkAiTopic() {
+  const names = [...selectedNames.value]
+  let updated = 0
+  let failed = 0
+  emit('confirm', { open: false })
+  for (const name of names) {
+    try {
+      const current = await api.memoryEntry(name)
+      const draft = await api.memoryAiDraft(current.body)
+      await api.updateMemoryEntry(name, {
+        title: draft.title || current.title,
+        description: draft.description || current.description,
+      })
+      updated += 1
+    } catch {
+      failed += 1
+    }
+  }
+  selectedNames.value = []
+  emit('toast', {
+    type: failed ? 'warning' : 'success',
+    message: `智能主题补全完成：成功 ${updated} 条${failed ? `，失败 ${failed} 条` : ''}。`,
+  })
+  await refreshAll()
+}
+
+function requestBulkDelete() {
+  if (!selectedNames.value.length) return
+  emit('confirm', {
+    open: true,
+    title: `删除 ${selectedNames.value.length} 条记忆？`,
+    message: '选中的条目会移入 .meta\\memory-trash 留档（软删除，可找回）。',
+    confirmLabel: '批量删除',
+    tone: 'danger',
+    action: performBulkDelete,
+  })
+}
+
+async function performBulkDelete() {
+  try {
+    const result = await api.bulkDeleteMemory(selectedNames.value)
+    emit('toast', { type: 'success', message: `已软删除 ${result.deleted.length} 条记忆。` })
+    selectedNames.value = []
+    emit('confirm', { open: false })
+    await refreshAll()
   } catch (error) {
     emit('toast', { type: 'error', message: error.message })
   }
@@ -202,6 +381,7 @@ function requestDelete(entry) {
 async function performDelete(entry) {
   try {
     await api.deleteMemoryEntry(entry.name)
+    emit('confirm', { open: false })
     emit('toast', { type: 'success', message: `记忆「${entry.title}」已删除（软删除，可在 .meta/memory-trash 找回）。` })
     await refreshAll()
   } catch (error) {
@@ -222,6 +402,7 @@ function requestDiscardAll() {
 async function performDiscardAll() {
   try {
     const result = await api.discardAllMemoryInbox()
+    emit('confirm', { open: false })
     emit('toast', { type: 'success', message: `已丢弃 ${result.discarded} 条投递。` })
     await inboxRefreshed()
   } catch (error) {
@@ -428,20 +609,50 @@ const typeClass = (type) => `memory-type-${type}`
         <button class="primary-button" type="button" @click="openCreate">
           <Plus :size="16" /> 新建记忆
         </button>
+        <button class="secondary-button" type="button" :class="{ active: selectionMode }" @click="toggleSelectionMode"><CheckSquare :size="15" /> {{ selectionMode ? '退出多选' : '多选整理' }}</button>
+      </div>
+      <div v-if="selectionMode" class="batch-bar memory-batch-bar">
+        <button class="batch-select-all" type="button" @click="selectAll"><CheckSquare :size="15" /> 全选当前</button>
+        <span>已选 <b>{{ selectedNames.length }}</b></span>
+        <label class="batch-type-picker">
+          <span>分类</span>
+          <select v-model="bulkType" aria-label="批量分类">
+            <option value="user">用户</option>
+            <option value="project">项目</option>
+            <option value="reference">参考</option>
+            <option value="feedback">反馈</option>
+          </select>
+        </label>
+        <button class="secondary-button" type="button" :disabled="!selectedNames.length" @click="bulkClassify">批量改分类</button>
+        <div class="batch-tag-picker"><TagInput v-model="bulkTags" :suggestions="tagSuggestions" /></div>
+        <button class="secondary-button" type="button" :disabled="!selectedNames.length || !bulkTags.length" @click="bulkTag">批量改标签</button>
+        <button class="secondary-button" type="button" :disabled="!selectedNames.length" @click="requestBulkAiTopic"><Sparkles :size="15" /> 补全智能主题</button>
+        <button class="danger-button" type="button" :disabled="!selectedNames.length" @click="requestBulkDelete">批量删除</button>
       </div>
 
       <div v-if="loading && !entries.length" class="memory-loading">正在读取记忆库…</div>
 
-      <div v-else-if="entries.length" class="memory-list">
+      <div
+        v-else-if="entries.length"
+        class="memory-list"
+        @pointerdown="selectionStart"
+        @pointermove="selectionMove"
+        @pointerup="selectionEnd"
+        @pointercancel="selectionEnd"
+      >
+        <div v-if="selectionBox" class="memory-selection-rect" :style="{ left: `${selectionBox.left}px`, top: `${selectionBox.top}px`, width: `${selectionBox.width}px`, height: `${selectionBox.height}px` }" aria-hidden="true"></div>
         <article
           v-for="entry in entries"
           :key="entry.name"
           class="memory-row"
+          :data-memory-key="entry.name"
+          :class="{ selected: selectedNames.includes(entry.name) }"
           role="button"
           tabindex="0"
-          @click="openEntry(entry)"
-          @keydown.enter="openEntry(entry)"
+          @click="activateRow(entry)"
+          @keydown.enter="activateRow(entry)"
         >
+          <label v-if="selectionMode" class="memory-row-check" @click.stop><input type="checkbox" :checked="selectedNames.includes(entry.name)" @change="toggleSelected(entry.name)" /><span></span></label>
           <div class="memory-row-main">
             <strong class="memory-row-title">{{ entry.title }}</strong>
             <span class="memory-row-desc">{{ entry.description || '（没有描述）' }}</span>
@@ -476,6 +687,7 @@ const typeClass = (type) => `memory-type-${type}`
 
     <MemoryDrawer
       :open="drawerOpen"
+      :loading="drawerLoading"
       :mode="drawerMode"
       :entry="drawerEntry"
       :existing-names="existingNames"

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import shutil
 import tempfile
+import threading
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Callable
@@ -68,6 +69,11 @@ class SkillRepository:
         self.config_store = config_store or ConfigStore()
         # 记忆区与技能区共享同一份配置（仓库根 + memory_root_override）
         self.memory = MemoryService(self.config_store)
+        self._reconcile_gate = threading.Lock()
+        self._reconcile_state = threading.Lock()
+        self._reconcile_pending = False
+        self._reconcile_error = ""
+        self._reconcile_started = False
 
     def _memory_excludes(self) -> tuple[Path, ...]:
         """记忆库在仓库树内时，把该子树从技能侧冲突扫描中排除（记忆区自己隔离留档）。"""
@@ -86,7 +92,7 @@ class SkillRepository:
         except Exception as exc:
             return {"errors": [f"memory: {exc}"]}
 
-    def status(self) -> dict[str, Any]:
+    def status(self, *, fast: bool = False) -> dict[str, Any]:
         config = self.config_store.load()
         if not config.repo_root:
             return {
@@ -99,6 +105,34 @@ class SkillRepository:
             }
         root = self.config_store.require_repo_root()
         database = Database(root)
+        if fast:
+            # 只读首屏状态：磁盘对账由 start_background_reconcile() 完成。
+            self._repair_missing_names(root, database)
+            skills = database.list_skills()
+            with self._reconcile_state:
+                pending = self._reconcile_pending
+                error = self._reconcile_error
+            try:
+                memory_root = str(self.memory.memory_root())
+            except Exception:
+                memory_root = ""
+            return {
+                "configured": True,
+                "repo_root": str(root),
+                "skill_count": len(skills),
+                "unchecked_count": sum(item["security_status"] == "unchecked" for item in skills),
+                "warning_count": sum(item["security_status"] == "warning" for item in skills),
+                "reconcile_pending": pending,
+                "reconcile_error": error,
+                "memory_heal": {"pending": pending},
+                "memory_root": memory_root,
+                "memory": {"memory_root": memory_root, "inbox_pending": 0},
+                "multi_library": repo_uses_libraries(root),
+                "libraries": [
+                    {"id": name, "label": LIBRARY_LABELS[name]}
+                    for name in ("skills", "github")
+                ],
+            }
         recovered_count = recover_synced_records(root, database)
         # 其他机器的编辑/更新落在随目录同步的 manifest 里：启动时回填进本机 SQLite，
         # 再把历史「库名/目录名」迁移为身份名，合并历史分区，顺手把旧点开头清单
@@ -111,6 +145,7 @@ class SkillRepository:
         # 记忆对账并入自愈总编排：冲突隔离 + 懒对账 + MEMORY.md 重建（同容错语义）
         memory_healed = self._memory_heal()
         rebuild_index(root, database)
+        self._repair_missing_names(root, database)
         skills = database.list_skills()
         return {
             "configured": True,
@@ -135,10 +170,15 @@ class SkillRepository:
         }
 
     def list(self) -> list[dict[str, Any]]:
-        root, database = self._storage()
+        root, database = self._storage(recover=False)
+        # A brand-new process can have a synced directory but no local SQLite
+        # rows yet.  Recover that one-time bootstrap case synchronously; normal
+        # populated lists stay read-only while startup reconciliation runs.
+        if not database.list_skills() and recover_synced_records(root, database):
+            rebuild_index(root, database)
         # 列表保持轻量：不做逐文件哈希与 manifest 装饰（那是详情接口的事），
         # 否则条目增多后开屏要全量扫描磁盘，列表迟迟出不来。
-        del root
+        self._repair_missing_names(root, database)
         return [dict(item) for item in database.list_skills()]
 
     def get(self, name: str, library: str = "") -> dict[str, Any]:
@@ -149,7 +189,7 @@ class SkillRepository:
         return self._decorate(item, root)
 
     def list_tags(self) -> dict[str, Any]:
-        _, database = self._storage()
+        _, database = self._storage(recover=False)
         catalog: dict[str, dict[str, Any]] = {}
         untagged_count = 0
         for skill in database.list_skills():
@@ -610,6 +650,8 @@ class SkillRepository:
                     managed_files=managed_files,
                     scan=report_scan.to_dict(),
                     library=target_library,
+                    imported_from=(existing or {}).get("imported_from", ""),
+                    imported_at=(existing or {}).get("imported_at", ""),
                 )
                 self._replace_directory(staging, target)
                 # 落位后立刻物化本机点文件；有 .git 的条目顺手刷新随库同步的 bundle
@@ -644,6 +686,8 @@ class SkillRepository:
                 "install_mode": install_mode.value,
                 "fetcher": result.fetcher,
                 "license_name": parsed.license_name,
+                "imported_from": existing.get("imported_from", "") if existing else "",
+                "imported_at": existing.get("imported_at", "") if existing else "",
                 "installed_at": existing["installed_at"] if existing else now,
                 "updated_at": now,
             }
@@ -694,7 +738,7 @@ class SkillRepository:
         item = self.get(name, library)
         if item.get("provider") == "local":
             raise ValidationError("本地自研技能由总机或你手动维护，不支持在线更新。")
-        version = self.check_version(name)
+        version = self.check_version(name, library)
         if not version["has_update"] and not force:
             return {"updated": False, "version": version, "skill": item}
         # 溯源改过来的条目可能残留无效 fetcher（如 local），回退到配置默认
@@ -874,37 +918,126 @@ class SkillRepository:
         root, database = self._storage()
         return rebuild_index(root, database)
 
+    def start_background_reconcile(self) -> bool:
+        """Schedule one low-priority startup reconciliation for an existing repo."""
+        try:
+            if not self.config_store.load().repo_root:
+                return False
+        except Exception:
+            return False
+        with self._reconcile_state:
+            if self._reconcile_started:
+                return self._reconcile_pending
+            self._reconcile_started = True
+            self._reconcile_pending = True
+            self._reconcile_error = ""
+        threading.Thread(
+            target=self._background_reconcile,
+            name="mshub-reconcile",
+            daemon=True,
+        ).start()
+        return True
+
+    def _background_reconcile(self) -> None:
+        try:
+            self.reconcile()
+        except Exception as exc:  # startup self-heal is best effort; API stays usable
+            with self._reconcile_state:
+                self._reconcile_error = str(exc) or exc.__class__.__name__
+        finally:
+            with self._reconcile_state:
+                self._reconcile_pending = False
+
     def reconcile(self) -> dict[str, Any]:
-        root = self.config_store.require_repo_root()
-        database = Database(root)
-        recovered_count = recover_synced_records(root, database)
-        backfilled_count = backfill_from_manifests(root, database)
-        canonicalized_count = canonicalize_library_names(root, database)
-        consolidated = consolidate_libraries(root, database)
-        migrated = migrate_manifest_names(root)
-        healed = self_heal_library(root, exclude_roots=self._memory_excludes())
-        memory_healed = self._memory_heal()
-        rebuild_index(root, database)
-        return {
-            "recovered_count": recovered_count,
-            "backfilled_count": backfilled_count,
-            "canonicalized_count": canonicalized_count,
-            "migrated_manifests": migrated,
-            "consolidated": consolidated,
-            "self_heal": healed,
-            "memory_heal": memory_healed,
-            "total_count": len(database.list_skills()),
-        }
+        with self._reconcile_gate:
+            root = self.config_store.require_repo_root()
+            database = Database(root)
+            recovered_count = recover_synced_records(root, database)
+            backfilled_count = backfill_from_manifests(root, database)
+            canonicalized_count = canonicalize_library_names(root, database)
+            consolidated = consolidate_libraries(root, database)
+            migrated = migrate_manifest_names(root)
+            healed = self_heal_library(root, exclude_roots=self._memory_excludes())
+            memory_healed = self._memory_heal()
+            self._repair_missing_names(root, database)
+            rebuild_index(root, database)
+            return {
+                "recovered_count": recovered_count,
+                "backfilled_count": backfilled_count,
+                "canonicalized_count": canonicalized_count,
+                "migrated_manifests": migrated,
+                "consolidated": consolidated,
+                "self_heal": healed,
+                "memory_heal": memory_healed,
+                "total_count": len(database.list_skills()),
+            }
 
     def migrate_manifests(self) -> dict[str, Any]:
         """一次性迁移：把库内旧名 .manifest.json 批量改名为 _manifest.json（内容不变）。"""
         root = self.config_store.require_repo_root()
         return migrate_manifest_names(root)
 
-    def _storage(self) -> tuple[Path, Database]:
+    def _repair_missing_names(self, root: Path, database: Database) -> int:
+        """Give legacy blank-name rows a stable identity without scanning every file.
+
+        A blank name can only come from an older/imported database.  Prefer the
+        canonical GitHub identity (including a configured subdirectory), then
+        fall back to the author/repository pair or a safe local directory name.
+        The directory key avoids renaming every blank row in one library at once.
+        """
+        rows = [item for item in database.list_skills() if not str(item.get("name") or "").strip()]
+        if not rows:
+            return 0
+        used = {(str(item.get("name") or ""), str(item.get("library") or "")) for item in database.list_skills()}
+        repaired = 0
+        for item in rows:
+            library = str(item.get("library") or "")
+            source_url = str(item.get("source_url") or "").strip()
+            candidate = ""
+            if source_url:
+                try:
+                    candidate = parse_source(source_url).name
+                except Exception:
+                    candidate = ""
+            if not candidate:
+                author = str(item.get("author") or "").strip()
+                repo = str(item.get("repo") or "").strip()
+                if author and repo:
+                    candidate = f"{author}/{repo}"
+            if not candidate:
+                local_name = Path(str(item.get("local_dir") or "")).name.strip()
+                candidate = f"local/{local_name or 'skill'}"
+            candidate = candidate.strip(" /") or "local/skill"
+
+            if (candidate, library) in used:
+                suffix = safe_dir_name(
+                    str(item.get("author") or "local"),
+                    str(item.get("repo") or Path(str(item.get("local_dir") or "skill")).name),
+                )
+                candidate = f"{candidate}--{suffix}"
+                index = 2
+                while (candidate, library) in used:
+                    candidate = f"{candidate}-{index}"
+                    index += 1
+            database.rename_skill_by_dir(str(item.get("local_dir") or ""), candidate, library)
+            used.add((candidate, library))
+            skill_dir = root / str(item.get("local_dir") or "")
+            if skill_dir.is_dir():
+                try:
+                    patch_manifest(skill_dir, {"name": candidate})
+                except OSError:
+                    # A read-only synced copy should still get the DB repair;
+                    # the next successful reconciliation can patch its manifest.
+                    pass
+            repaired += 1
+        if repaired:
+            rebuild_index(root, database)
+        return repaired
+
+    def _storage(self, *, recover: bool = True) -> tuple[Path, Database]:
         root = self.config_store.require_repo_root()
         database = Database(root)
-        if recover_synced_records(root, database):
+        if recover and recover_synced_records(root, database):
             rebuild_index(root, database)
         return root, database
 
@@ -1027,4 +1160,7 @@ class SkillRepository:
             "modified": [], "missing": [], "untracked": []
         }
         item["manifest"] = read_manifest(skill_dir) if skill_dir.exists() else {}
+        manifest = item["manifest"]
+        item["imported_from"] = item.get("imported_from") or manifest.get("imported_from", "")
+        item["imported_at"] = item.get("imported_at") or manifest.get("imported_at", "")
         return item

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import urllib.parse
 import sys
 from pathlib import Path
 from typing import Any, Literal
@@ -91,10 +92,11 @@ class ConfigUpdate(BaseModel):
     ai_key: str | None = None
     ai_model: str | None = None
     memory_root_override: str | None = None
+    language: Literal["system", "zh-CN", "en"] | None = None
 
 
 class MemoryEntryCreate(BaseModel):
-    title: str
+    title: str = ""
     name: str = ""
     description: str = ""
     type: Literal["user", "project", "reference", "feedback"] = "reference"
@@ -109,6 +111,16 @@ class MemoryEntryUpdate(BaseModel):
     type: Literal["user", "project", "reference", "feedback"] | None = None
     tags: list[str] | None = Field(default=None, max_length=12)
     body: str | None = None
+
+
+class MemoryBulkUpdate(BaseModel):
+    names: list[str] = Field(min_length=1, max_length=500)
+    type: Literal["user", "project", "reference", "feedback"] | None = None
+    tags: list[str] | None = Field(default=None, max_length=12)
+
+
+class MemoryBulkDelete(BaseModel):
+    names: list[str] = Field(min_length=1, max_length=500)
 
 
 class MemoryAdmit(BaseModel):
@@ -161,7 +173,15 @@ def create_app(config_store: ConfigStore | None = None) -> FastAPI:
 
     @app.get("/api/health")
     def health() -> dict[str, Any]:
-        return {"ok": True, "version": __version__, **repository.status()}
+        result = repository.status(fast=True)
+        # Start after the fast snapshot has opened its SQLite connection.  The
+        # returned pending flag lets the frontend refresh its first list when
+        # the worker finishes, while direct reconcile calls stay deterministic.
+        started = repository.start_background_reconcile()
+        if started:
+            result["reconcile_pending"] = True
+            result["memory_heal"] = {"pending": True}
+        return {"ok": True, "version": __version__, **result}
 
     @app.get("/api/config")
     def get_config() -> dict[str, Any]:
@@ -188,18 +208,27 @@ def create_app(config_store: ConfigStore | None = None) -> FastAPI:
     def select_import_directory() -> dict[str, str]:
         """导入专用：标题点明场景，避免与仓库根选择混淆。"""
         return _choose_directory("选择要导入的 Agent 工作目录")
-        try:
-            import tkinter as tk
-            from tkinter import filedialog
 
-            root = tk.Tk()
-            root.withdraw()
-            root.attributes("-topmost", True)
-            selected = filedialog.askdirectory(title="选择技能仓库根目录")
-            root.destroy()
-            return {"path": selected or ""}
-        except Exception as exc:
-            raise ValidationError(f"无法打开目录选择器：{exc}") from exc
+    @app.get("/api/system/proxy-detect")
+    def detect_proxy() -> dict[str, Any]:
+        """Read-only proxy probe; never writes settings or starts a helper process."""
+        candidates = []
+        for key in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"):
+            value = os.environ.get(key, "").strip()
+            if value and value not in candidates:
+                candidates.append(value)
+        configured = store.load().proxy.strip()
+        if configured and configured not in candidates:
+            candidates.insert(0, configured)
+        valid = []
+        for value in candidates:
+            try:
+                parsed = urllib.parse.urlparse(value)
+                if parsed.scheme in {"http", "https", "socks5", "socks5h"} and parsed.hostname:
+                    valid.append(value)
+            except ValueError:
+                continue
+        return {"detected": valid[0] if valid else "", "candidates": valid, "source": "environment/config" if valid else "none"}
 
     @app.post("/api/system/open-directory")
     def open_directory(request: NamedRequest) -> dict[str, bool]:
@@ -428,6 +457,14 @@ def create_app(config_store: ConfigStore | None = None) -> FastAPI:
     def memory_entry_detail(name: str) -> dict[str, Any]:
         return repository.memory.get_entry(name)
 
+    @app.get("/api/memory/graph")
+    def memory_graph(kinds: str = "link") -> dict[str, Any]:
+        requested = {part.strip().lower() for part in kinds.split(",") if part.strip()}
+        requested &= {"link", "tag"}
+        if not requested:
+            requested = {"link"}
+        return repository.memory.graph(kinds=",".join(sorted(requested)))
+
     @app.post("/api/memory/entries", status_code=201)
     def memory_entry_create(request: MemoryEntryCreate) -> dict[str, Any]:
         return repository.memory.create_entry(request.model_dump())
@@ -440,6 +477,14 @@ def create_app(config_store: ConfigStore | None = None) -> FastAPI:
     @app.delete("/api/memory/entries/{name}")
     def memory_entry_delete(name: str) -> dict[str, Any]:
         return repository.memory.delete_entry(name)
+
+    @app.post("/api/memory/bulk-update")
+    def memory_bulk_update(request: MemoryBulkUpdate) -> dict[str, Any]:
+        return repository.memory.bulk_update(request.names, type_name=request.type, tags=request.tags)
+
+    @app.post("/api/memory/bulk-delete")
+    def memory_bulk_delete(request: MemoryBulkDelete) -> dict[str, Any]:
+        return repository.memory.bulk_delete(request.names)
 
     @app.get("/api/memory/inbox")
     def memory_inbox() -> dict[str, Any]:

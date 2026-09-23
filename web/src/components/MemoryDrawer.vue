@@ -9,6 +9,7 @@ const props = defineProps({
   open: { type: Boolean, default: false },
   mode: { type: String, default: 'edit' }, // 'create' | 'edit'
   entry: { type: Object, default: null },
+  loading: { type: Boolean, default: false },
   existingNames: { type: Array, default: () => [] },
   tagSuggestions: { type: Array, default: () => [] },
 })
@@ -31,10 +32,10 @@ const conflictName = ref('')
 const error = ref('')
 
 const typeOptions = [
-  { value: 'user', label: 'user · 用户' },
-  { value: 'project', label: 'project · 项目' },
-  { value: 'reference', label: 'reference · 参考' },
-  { value: 'feedback', label: 'feedback · 反馈' },
+  { value: 'user', label: '用户' },
+  { value: 'project', label: '项目' },
+  { value: 'reference', label: '参考' },
+  { value: 'feedback', label: '反馈' },
 ]
 
 watch(
@@ -189,6 +190,8 @@ function requestRemove() {
       </header>
 
       <div class="drawer-content memory-drawer-content">
+        <div v-if="loading" class="drawer-loading" role="status"><span class="loading-spinner"></span><strong>正在读取记忆详情</strong><p>先打开编辑区，正文和关联会自动补全。</p></div>
+        <template v-else>
         <div class="field-block">
           <label for="memory-title">标题 <b class="required-mark">*</b></label>
           <input id="memory-title" v-model="title" type="text" placeholder="中文标题（必填）" maxlength="60" />
@@ -295,6 +298,7 @@ function requestRemove() {
         </div>
 
         <small v-if="error" class="field-error" role="alert">{{ error }}</small>
+        </template>
       </div>
 
       <footer class="drawer-actions">

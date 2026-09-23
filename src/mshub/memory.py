@@ -28,7 +28,7 @@ INBOX_DIR = "inbox"
 TRASH_DIRNAME = "memory-trash"
 
 MEMORY_TYPES = ("user", "project", "reference", "feedback")
-MEMORY_SOURCES = ("manual", "agent")
+MEMORY_SOURCES = ("manual", "agent", "imported")
 
 TYPE_LABELS = {
     "user": "用户",
@@ -39,6 +39,7 @@ TYPE_LABELS = {
 SOURCE_LABELS = {
     "manual": "手动创建",
     "agent": "agent 投递",
+    "imported": "导入仓库",
 }
 DEFAULT_TYPE = "reference"
 DEFAULT_SOURCE = "manual"

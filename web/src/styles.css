@@ -4832,3 +4832,248 @@ code {
 .provider-chip {
   box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 28%, transparent);
 }
+
+/* v1.3 workspace and graph refinements */
+.sidebar-share {
+  background: transparent;
+  border-color: var(--line);
+  color: var(--ink);
+  box-shadow: none;
+}
+.sidebar-share p { color: var(--ink-3); }
+.sidebar-share .share-prompt-button {
+  background: var(--blue);
+  border-color: var(--blue);
+  color: #fff;
+  box-shadow: var(--shadow-blue);
+}
+.sidebar-share .share-prompt-button:hover,
+.sidebar-share .share-prompt-button:focus-visible {
+  background: var(--blue-400);
+  border-color: var(--blue-400);
+  color: #fff;
+}
+.heading-actions .share-prompt-button,
+.library-heading .secondary-button:first-child { background: var(--blue); color: #fff; border-color: var(--blue); }
+.heading-actions .add-skill-button { order: -1; background: transparent; color: var(--ink); border-color: var(--line-strong); }
+.detail-drawer { width: min(720px, calc(100vw - var(--sidebar))); }
+.drawer-loading { min-height: 260px; display: grid; place-items: center; align-content: center; gap: 10px; text-align: center; color: var(--ink-2); }
+.drawer-loading strong { color: var(--ink); font-size: 16px; }
+.drawer-loading p { max-width: 34em; margin: 0; }
+.loading-spinner { width: 24px; height: 24px; border: 2px solid var(--blue-100); border-top-color: var(--blue); border-radius: 50%; animation: spin .8s linear infinite; }
+.tag-filter-bar.expanded .tag-filter-scroll { flex-wrap: wrap; overflow-x: visible; }
+.tag-expand-button { color: var(--accent-text); border: 1px dashed var(--line-strong) !important; }
+.updated-label, .import-source-label { color: var(--ink-3); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.row-trust-button { border: 1px solid var(--danger-line); background: var(--danger-soft); color: var(--danger-ink); border-radius: 999px; padding: 3px 7px; font-size: 11px; cursor: pointer; white-space: nowrap; }
+.memory-batch-bar { margin: 0 0 12px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.batch-type-picker { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-3); font-size: 12px; }
+.batch-type-picker select { min-height: 32px; padding: 5px 28px 5px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); font-size: 12px; }
+.batch-tag-picker { min-width: 190px; max-width: 270px; }
+.batch-tag-picker .tag-input-block { margin: 0; }
+.batch-tag-picker .tag-input-help, .batch-tag-picker .tag-suggestions { display: none; }
+.memory-list { position: relative; }
+.memory-selection-rect { position: absolute; z-index: 3; pointer-events: none; background: var(--selection); border: 1px solid var(--blue); border-radius: 6px; }
+.memory-list:has(.memory-selection-rect) { cursor: crosshair; }
+.memory-row { position: relative; }
+.memory-row.selected { background: var(--blue-tint); box-shadow: inset 0 0 0 1px var(--blue-100); }
+.memory-row-check { align-self: center; padding: 4px 2px 4px 0; cursor: pointer; }
+.memory-row-check input { accent-color: var(--blue); width: 16px; height: 16px; }
+.skill-list { position: relative; user-select: none; }
+.skill-list:has(.selection-rect) { cursor: crosshair; }
+.selection-rect { position: absolute; z-index: 3; pointer-events: none; background: var(--selection); border: 1px solid var(--blue); border-radius: 6px; }
+.batch-scan-dialog { width: min(680px, calc(100vw - 32px)); }
+.modal-footer { display: flex; justify-content: flex-end; gap: 10px; padding: 14px 20px; border-top: 1px solid var(--line); }
+.memory-graph-view { min-height: calc(100dvh - 48px); }
+.graph-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; }
+.graph-toolbar { display: flex; align-items: center; gap: 14px; padding: 12px 16px; margin-bottom: 14px; }
+.graph-search { display: flex; align-items: center; gap: 8px; flex: 1; color: var(--ink-3); }
+.graph-search input { width: 100%; border: 0; outline: 0; background: transparent; color: var(--ink); }
+.graph-zoom { display: flex; align-items: center; gap: 8px; color: var(--ink-2); white-space: nowrap; }
+.graph-canvas { min-height: 580px; position: relative; overflow: hidden; background-image: radial-gradient(color-mix(in srgb, var(--blue) 16%, transparent) 1px, transparent 1px); background-size: 24px 24px; }
+.graph-canvas svg { width: 100%; height: 580px; transform-origin: center; transition: transform var(--dur-3) var(--ease-standard); }
+.graph-edges line { stroke-width: 1.5; opacity: .75; }
+.edge-link { stroke: var(--blue); stroke-dasharray: none; }
+.edge-tag { stroke: var(--accent-text); stroke-dasharray: 5 5; opacity: .48 !important; }
+.graph-node circle { fill: var(--blue); stroke: color-mix(in srgb, var(--blue) 35%, white); stroke-width: 2; cursor: pointer; }
+.graph-node:hover circle, .graph-node:focus circle { filter: url(#memory-glow); fill: var(--blue-400); outline: none; }
+.graph-node text { fill: var(--ink); font-size: 13px; pointer-events: none; }
+.graph-legend { position: absolute; left: 18px; bottom: 16px; display: flex; gap: 14px; flex-wrap: wrap; padding: 8px 10px; border: 1px solid var(--glass-line); border-radius: 10px; background: var(--glass-bg); color: var(--ink-2); font-size: 12px; }
+.mirror-presets { display: flex; gap: 7px; flex-wrap: wrap; margin-top: 8px; }
+.chip-button { border: 1px solid var(--line); border-radius: 999px; padding: 5px 9px; background: var(--surface-muted); color: var(--ink-2); cursor: pointer; font-size: 11px; }
+.chip-button:hover { color: var(--accent-text); border-color: var(--accent-text); }
+.graph-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.legend-dot { width: 14px; border-top: 2px solid var(--blue); }
+.legend-dot.tag { border-top-style: dashed; border-color: var(--accent-text); }
+@media (max-width: 860px) {
+  .detail-drawer { width: 100vw; }
+  .graph-header, .graph-toolbar { flex-wrap: wrap; }
+  .graph-toolbar .segment-toggle { order: 3; width: 100%; overflow-x: auto; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .loading-spinner { animation: none; }
+  .graph-canvas svg { transition: none; }
+}
+
+/* v1.3.1 interaction polish */
+:root[data-theme="dark"] select {
+  color-scheme: dark;
+  color: #f5f8ff;
+}
+:root[data-theme="dark"] select option,
+:root[data-theme="dark"] select optgroup {
+  background-color: #0c1730;
+  color: #f5f8ff;
+}
+:root[data-theme="light"] select {
+  color-scheme: light;
+  color: #142033;
+}
+:root[data-theme="light"] select option,
+:root[data-theme="light"] select optgroup {
+  background-color: #fff;
+  color: #142033;
+}
+.library-view .toolbar .filter-select,
+.library-view .toolbar .filter-select select,
+.library-view .toolbar > .secondary-button,
+.memory-view .toolbar .filter-select,
+.memory-view .toolbar .filter-select select,
+.memory-view .toolbar > .secondary-button,
+.memory-view .toolbar > .primary-button,
+.memory-batch-bar .secondary-button,
+.memory-batch-bar .batch-select-all {
+  font-size: 12px;
+}
+/* The rounded shell owns the filter control's surface. A transparent native
+   select keeps its rectangular UA background from covering the shell radius. */
+.filter-select select,
+.filter-select select:focus {
+  background: transparent;
+  border-radius: 999px;
+}
+.library-view .toolbar .filter-select > span,
+.memory-view .toolbar .filter-select > span { font-size: 12px; }
+.memory-view .toolbar .filter-select select,
+.library-view .toolbar .filter-select select { font: inherit; }
+
+/* Sigma canvas uses its own WebGL layers; keep the Obsidian reference flat.
+   The variables also let the renderer derive opaque fade colors for light
+   mode instead of baking the dark canvas into JavaScript. */
+.memory-graph-surface {
+  --graph-bg: #171717;
+  --graph-label: #d8d8d8;
+  --graph-muted: #bcbcbc;
+  --graph-panel: rgba(31,31,31,.92);
+  --graph-border: rgba(255,255,255,.13);
+  position: relative;
+  min-height: 620px;
+  overflow: hidden;
+  background: var(--graph-bg);
+  border: 1px solid var(--graph-border);
+  border-radius: 16px;
+}
+:root[data-theme="light"] .memory-graph-surface {
+  --graph-bg: #f2f4f8;
+  --graph-label: #1f2937;
+  --graph-muted: #556070;
+  --graph-panel: rgba(255,255,255,.94);
+  --graph-border: rgba(20,31,51,.16);
+}
+.memory-graph-surface .sigma-container {
+  position: absolute;
+  inset: 0;
+  min-height: 620px;
+}
+.memory-graph-surface .sigma-container canvas { outline: none; }
+.memory-graph-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.memory-graph-toolbar {
+  position: absolute;
+  z-index: 4;
+  top: 14px;
+  right: 14px;
+  display: flex;
+  gap: 6px;
+  pointer-events: auto;
+}
+.memory-graph-toolbar .icon-button {
+  width: 32px;
+  height: 32px;
+  border-color: var(--graph-border);
+  background: var(--graph-panel);
+  color: var(--graph-label);
+}
+.memory-graph-toolbar .icon-button:hover { filter: brightness(1.12); color: var(--graph-label); }
+.memory-graph-tooltip {
+  position: absolute;
+  z-index: 5;
+  max-width: min(260px, calc(100% - 44px));
+  max-height: calc(100% - 44px);
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  padding: 10px 12px;
+  border: 1px solid var(--graph-border);
+  border-radius: 10px;
+  background: var(--graph-panel);
+  color: var(--graph-label);
+  box-shadow: 0 12px 30px rgba(0,0,0,.32);
+  font-size: 12px;
+  line-height: 1.55;
+  pointer-events: none;
+  transform: translate(10px, 10px);
+}
+.memory-graph-tooltip strong { display: block; margin-bottom: 4px; color: var(--graph-label); font-size: 13px; }
+.memory-graph-tooltip span { display: block; color: var(--graph-muted); }
+.memory-graph-legend {
+  position: absolute;
+  z-index: 3;
+  left: 16px;
+  bottom: 14px;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 7px 10px;
+  border-radius: 9px;
+  background: var(--graph-panel);
+  color: var(--graph-muted);
+  font-size: 11px;
+  pointer-events: none;
+}
+.memory-graph-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.memory-graph-legend i { width: 8px; height: 8px; border-radius: 50%; background: #a6a6a6; }
+.memory-graph-legend i.user { background: #a78bfa; }
+.memory-graph-legend i.project { background: #6ea8fe; }
+.memory-graph-legend i.reference { background: #77c5d5; }
+.memory-graph-legend i.feedback { background: #e3a85b; }
+.memory-graph-settings {
+  position: absolute;
+  z-index: 6;
+  top: 56px;
+  right: 14px;
+  width: min(280px, calc(100% - 28px));
+  max-height: calc(100% - 76px);
+  overflow: auto;
+  padding: 14px;
+  border: 1px solid var(--graph-border);
+  border-radius: 12px;
+  background: var(--graph-panel);
+  color: var(--graph-label);
+  box-shadow: 0 18px 40px rgba(0,0,0,.38);
+  font-size: 12px;
+}
+.memory-graph-settings h3 { margin: 0 0 12px; color: var(--graph-label); font-size: 13px; }
+.memory-graph-settings h4 { margin: 13px 0 7px; color: var(--graph-muted); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
+.memory-graph-settings label { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 7px 0; }
+.memory-graph-settings label span { color: var(--graph-label); }
+.memory-graph-settings input[type="range"] { width: 112px; accent-color: #8c8c8c; }
+.memory-graph-settings .type-checks { display: grid; grid-template-columns: 1fr 1fr; gap: 5px 8px; }
+.memory-graph-settings .type-checks label { justify-content: flex-start; margin: 0; }
+.memory-graph-settings input[type="checkbox"] { accent-color: #9c9c9c; }
+.memory-graph-empty { display: grid; place-items: center; min-height: 620px; color: var(--graph-muted); font-size: 13px; }
+@media (max-width: 720px) {
+  .memory-graph-surface, .memory-graph-surface .sigma-container, .memory-graph-empty { min-height: 520px; }
+  .memory-graph-settings { top: 54px; }
+}

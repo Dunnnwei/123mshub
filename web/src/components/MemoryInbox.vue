@@ -18,10 +18,10 @@ const forms = ref({})
 const errors = ref({})
 
 const typeOptions = [
-  { value: 'user', label: 'user · 用户' },
-  { value: 'project', label: 'project · 项目' },
-  { value: 'reference', label: 'reference · 参考' },
-  { value: 'feedback', label: 'feedback · 反馈' },
+  { value: 'user', label: '用户' },
+  { value: 'project', label: '项目' },
+  { value: 'reference', label: '参考' },
+  { value: 'feedback', label: '反馈' },
 ]
 
 function formOf(item) {

@@ -39,6 +39,7 @@ export const api = {
   saveConfig: (body) => request('/api/config', { method: 'PUT', body: JSON.stringify(body) }),
   selectDirectory: () => request('/api/system/select-directory', { method: 'POST' }),
   selectImportDirectory: () => request('/api/system/select-import-directory', { method: 'POST' }),
+  detectProxy: () => request('/api/system/proxy-detect'),
   openDirectory: (name) => request('/api/system/open-directory', { method: 'POST', body: JSON.stringify({ name }) }),
   listSkills: () => request('/api/skills'),
   listTags: () => request('/api/tags'),
@@ -49,8 +50,8 @@ export const api = {
   }),
   updateMetadata: (name, body, library = '') => request('/api/skills/metadata', {
     method: 'PUT',
-    // name 放在展开之后：body 里可能带 name: undefined，顺序反了会把有效值覆盖掉
-    body: JSON.stringify({ ...body, name, library }),
+    // 后端用 name 定位、new_name 修改身份；显式映射避免“改名后列表仍是旧名”。
+    body: JSON.stringify({ ...body, new_name: body?.name ?? body?.new_name, name, library }),
   }),
   translateOne: (name, library = '') => request('/api/skills/translate', { method: 'POST', body: JSON.stringify({ name, library }) }),
   startTranslate: (names) => request('/api/jobs/translate', { method: 'POST', body: JSON.stringify({ names: names ?? null }) }),
@@ -85,12 +86,15 @@ export const api = {
     return request(`/api/memory/entries${suffix ? `?${suffix}` : ''}`)
   },
   memoryEntry: (name) => request(`/api/memory/entries/${encodeURIComponent(name)}`),
+  memoryGraph: (kinds = 'link') => request(`/api/memory/graph?kinds=${encodeURIComponent(kinds)}`),
   createMemoryEntry: (body) => request('/api/memory/entries', { method: 'POST', body: JSON.stringify(body) }),
   updateMemoryEntry: (name, body) => request(`/api/memory/entries/${encodeURIComponent(name)}`, {
     method: 'PUT',
     body: JSON.stringify(body),
   }),
   deleteMemoryEntry: (name) => request(`/api/memory/entries/${encodeURIComponent(name)}`, { method: 'DELETE' }),
+  bulkUpdateMemory: (names, type, tags) => request('/api/memory/bulk-update', { method: 'POST', body: JSON.stringify({ names, type, tags }) }),
+  bulkDeleteMemory: (names) => request('/api/memory/bulk-delete', { method: 'POST', body: JSON.stringify({ names }) }),
   memoryInbox: () => request('/api/memory/inbox'),
   admitMemoryInbox: (file, body) => request(`/api/memory/inbox/${encodeURIComponent(file)}/admit`, {
     method: 'POST',

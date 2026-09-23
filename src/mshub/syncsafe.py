@@ -1,6 +1,6 @@
 """同步盘运输安全层（v0.9.0）。
 
-共享技能库经同步盘（飞牛 fn-sync）跨机器复制，同步侧有两条硬规则：
+共享技能库经同步盘跨机器复制，同步侧有两条硬规则：
 1. 内建不可关的「点开头隐藏文件」规则：任何点开头的文件/目录都不进同步盘；
 2. 用户可配的扩展名排除名单（har/lnk/meta/pst/swp）。
 
@@ -37,6 +37,7 @@ from .fsretry import (  # noqa: F401  （重导出：repository 从 syncsafe 统
 )
 from .libraries import candidate_skill_dirs
 from .manifest import MANIFEST_NAMES, read_manifest, write_manifest
+from .process import hidden_windows_kwargs
 
 # 技能目录内的点文件容器目录名（普通名字，随同步走）。
 DOT_CONTAINER = "_dot_"
@@ -48,7 +49,7 @@ BUNDLE_NAME = "git.bundle"
 # 库根给 agent 的说明文件名。
 GUIDE_NAME = "_共享技能库使用说明.md"
 GUIDE_VERSION = "v2"
-# 同步客户端的冲突副本命名标记（飞牛：「xxx (机器名 的冲突副本 …)」）。
+# 同步客户端的冲突副本命名标记（例如「xxx (机器名 的冲突副本 …)」）。
 CONFLICT_MARK = "冲突副本"
 
 
@@ -202,6 +203,7 @@ def refresh_git_bundle(directory: Path) -> bool:
     result = subprocess.run(
         ["git", "-C", str(directory), "bundle", "create", str(temp), "--all"],
         capture_output=True, text=True, encoding="utf-8", errors="replace", check=False,
+        **hidden_windows_kwargs(),
     )
     if result.returncode != 0 or not temp.is_file():
         robust_unlink(temp)
@@ -221,6 +223,7 @@ def restore_git_from_bundle(directory: Path) -> bool:
         result = subprocess.run(
             ["git", "clone", "--quiet", str(bundle), str(clone)],
             capture_output=True, text=True, encoding="utf-8", errors="replace", check=False,
+            **hidden_windows_kwargs(),
         )
         if result.returncode != 0 or not (clone / ".git").is_dir():
             return False
@@ -233,6 +236,7 @@ def restore_git_from_bundle(directory: Path) -> bool:
         subprocess.run(
             ["git", "-C", str(directory), "remote", "set-url", "origin", source_url],
             capture_output=True, text=True, encoding="utf-8", errors="replace", check=False,
+            **hidden_windows_kwargs(),
         )
     return True
 

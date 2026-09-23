@@ -15,6 +15,7 @@ const form = reactive({
   repo_root: '',
   mirrorsText: '',
   proxy: '',
+  language: 'system',
   fetcher: 'archive',
   github_token: null,
   ai_base_url: '',
@@ -33,6 +34,7 @@ const reconciling = ref(false)
 const migrating = ref(false)
 const advancedOpen = ref(false)
 const importOpen = ref(false)
+const proxyDetecting = ref(false)
 const aiPresets = computed(() => props.config.ai_presets || [])
 
 onMounted(sync)
@@ -41,6 +43,7 @@ function sync() {
   form.repo_root = props.config.repo_root || ''
   form.mirrorsText = (props.config.mirrors || []).join('\n')
   form.proxy = props.config.proxy || ''
+  form.language = props.config.language || 'system'
   form.fetcher = props.config.fetcher || 'archive'
   form.github_token = null
   form.ai_base_url = props.config.ai_base_url || 'https://api.openai.com/v1'
@@ -71,6 +74,21 @@ async function chooseDirectory() {
   }
 }
 
+async function detectProxy() {
+  proxyDetecting.value = true
+  try {
+    const result = await api.detectProxy()
+    if (result.detected) form.proxy = result.detected
+    emit('toast', result.detected
+      ? { type: 'success', message: `已检测到代理：${result.detected}。请点击“保存设置”后才会生效。` }
+      : { type: 'warning', message: '没有检测到可用的 HTTP/HTTPS 代理，当前草稿未改变。' })
+  } catch (requestError) {
+    emit('toast', { type: 'error', message: `代理检测失败：${requestError.message}` })
+  } finally {
+    proxyDetecting.value = false
+  }
+}
+
 async function save() {
   if (!form.repo_root.trim()) {
     error.value = '请先选择技能仓库根目录。'
@@ -83,6 +101,7 @@ async function save() {
       repo_root: form.repo_root.trim(),
       mirrors: form.mirrorsText.split('\n').map((item) => item.trim()).filter(Boolean),
       proxy: form.proxy.trim(),
+      language: form.language,
       fetcher: form.fetcher,
       ai_base_url: form.ai_base_url.trim(),
       ai_model: form.ai_model.trim(),
@@ -178,6 +197,10 @@ async function clearCredential(field) {
 
     <form class="settings-form" @submit.prevent="save">
       <section class="settings-section">
+        <div class="settings-copy"><h2>界面语言</h2><p>默认跟随系统；显式选择会保存在本机设置中。AI、Agent、GitHub、API 等专用名词保持原样。</p></div>
+        <div class="settings-controls"><label class="field-block"><span>语言 / Language</span><select v-model="form.language"><option value="system">跟随系统 / System</option><option value="zh-CN">中文</option><option value="en">English</option></select></label></div>
+      </section>
+      <section class="settings-section">
         <div class="settings-copy">
           <h2>仓库位置</h2>
           <p>SQLite、技能目录和给 agent 读取的 index.json 都保存在这里。</p>
@@ -227,7 +250,7 @@ async function clearCredential(field) {
               <FileClock v-else :size="16" />
               {{ migrating ? '迁移中…' : '迁移旧版清单文件' }}
             </button>
-            <p>把旧版点开头的 .manifest.json 批量改名为 _manifest.json（内容不变）。点开头文件会被飞牛同步排除，改名后 NAS 才能收到。</p>
+            <p>把点开头的 .manifest.json 批量改名为 _manifest.json（内容不变）。点开头文件可能会被文件同步程序排除，改名后同步程序才能收到。</p>
           </div>
           <fieldset class="inline-radio">
             <legend>默认下载方式</legend>
@@ -254,11 +277,13 @@ async function clearCredential(field) {
           <label class="field-block">
             <span>镜像前缀列表</span>
             <textarea v-model="form.mirrorsText" rows="3" placeholder="每行一个，例如 https://ghproxy.example/"></textarea>
+            <div class="mirror-presets"><button v-for="mirror in ['https://ghproxy.link/','https://ghfast.top/']" :key="mirror" type="button" class="chip-button" @click="form.mirrorsText = form.mirrorsText ? `${form.mirrorsText}\n${mirror}` : mirror">{{ mirror }}</button></div>
             <small>支持包含 `{url}` 的模板；否则将原始地址直接拼接在前缀后。</small>
           </label>
           <label class="field-block">
             <span>HTTP / HTTPS 代理</span>
-            <input v-model="form.proxy" placeholder="http://127.0.0.1:7890（可选）" />
+            <div class="edit-field-inline"><input v-model="form.proxy" placeholder="http://127.0.0.1:7890（可选）" /><button class="secondary-button" type="button" :disabled="proxyDetecting" @click="detectProxy">{{ proxyDetecting ? '检测中…' : '检测' }}</button></div>
+            <small>检测只读取当前环境和已保存草稿，不会自动修改配置；请确认后点击保存。</small>
           </label>
         </div>
       </section>

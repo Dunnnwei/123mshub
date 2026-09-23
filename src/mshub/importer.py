@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 import re
 import shutil
+from datetime import UTC, datetime
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
@@ -27,7 +28,7 @@ from .config import ConfigStore
 from .errors import ValidationError
 from .fsretry import robust_copy2
 from .libraries import LIBRARY_DSH, LIBRARY_GITHUB
-from .manifest import MANIFEST_NAMES, read_manifest, write_manifest
+from .manifest import MANIFEST_NAMES, patch_manifest, read_manifest, write_manifest
 from .memory import (
     INBOX_DIR,
     INDEX_NAME,
@@ -61,6 +62,20 @@ MEMORY_SKIP_FILENAMES = {"SKILL.md", "README.md", "CHANGELOG.md", "LICENSE", "AG
 DSH_INDEX_NAME = "memory.md"
 DSH_BRAIN_DIR = "brain"
 
+
+def _source_label(source: Path) -> str:
+    """Derive a human-readable import platform only when the path names it."""
+    text = source.as_posix().casefold()
+    for token, label in (
+        ("workbuddy", "WorkBuddy"),
+        ("zcode", "ZCode"),
+        ("claude", "Claude Desktop"),
+        ("cursor", "Cursor"),
+    ):
+        if token in text:
+            return label
+    return "外部仓库"
+
 _INDEX_LINE_RE = re.compile(r"^[-*]\s+\[([^\]]+)\]\(([^)]+\.md)\)", re.I)
 _TITLE_NORM_RE = re.compile(r"[\s，。：:；;！!？?\-_/\\]+")
 
@@ -92,6 +107,7 @@ class SkillCandidate:
     library: str  # skills / github
     dir_name: str
     name_hint: str = ""
+    imported_from: str = ""
 
     def preview(self) -> dict[str, Any]:
         return {
@@ -99,6 +115,7 @@ class SkillCandidate:
             "kind": self.kind,
             "library": self.library,
             "name": self.name_hint or self.dir_name,
+            "imported_from": self.imported_from,
         }
 
 
@@ -217,6 +234,7 @@ class ImportService:
         if not source.is_dir():
             raise ValidationError(f"目录不存在或不可读：{source}")
         report = ScanReport(source=source.resolve())
+        imported_from = _source_label(source)
 
         report_progress(5, "正在识别目录结构")
         md_files = _iter_md_files(source)
@@ -325,7 +343,7 @@ class ImportService:
             skill_dirs[path] = SkillCandidate(
                 path=path, kind=kind,
                 library=resolved_library,
-                dir_name=dir_name, name_hint=name_hint,
+                dir_name=dir_name, name_hint=name_hint, imported_from=imported_from,
             )
 
         # skillrepo 库：index.json（skills[].dir）
@@ -462,12 +480,9 @@ class ImportService:
                         candidate.path, target, copy_function=robust_copy2,
                         ignore=lambda _src, names: [n for n in names if Path(_src, n).is_symlink()],
                     )
-                    if candidate.kind == "skill-local" and not any(
-                        (target / name).is_file() for name in MANIFEST_NAMES
-                    ):
-                        # 导入即检查：本地技能落库时立即跑离线安全扫描并写入清单
-                        #（skillrepo 格式条目自带 manifest 与历史扫描结论，不覆盖）
-                        report_scan = scan_offline(target)
+                    if not any((target / name).is_file() for name in MANIFEST_NAMES):
+                        # 没有清单的旧仓也要留下来源/标签/导入时间，供迁移后筛选。
+                        report_scan = scan_offline(target) if candidate.kind == "skill-local" else None
                         write_manifest(
                             target,
                             source_url="",
@@ -487,10 +502,18 @@ class ImportService:
                                 for path in target.rglob("*")
                                 if path.is_file() and path.name not in MANIFEST_NAMES
                             ),
-                            scan=report_scan.to_dict(),
-                            source_type="local",
+                            scan=report_scan.to_dict() if report_scan else None,
+                            source_type="local" if candidate.kind == "skill-local" else "github",
                             library=candidate.library,
+                            imported_from=candidate.imported_from,
+                            imported_at=datetime.now(UTC).isoformat(),
                         )
+                    elif any((target / name).is_file() for name in MANIFEST_NAMES):
+                        # 保留旧清单全部字段，只补导入追踪，避免导入平台信息丢失。
+                        patch_manifest(target, {
+                            "imported_from": candidate.imported_from,
+                            "imported_at": datetime.now(UTC).isoformat(),
+                        })
                     result["skills_imported"].append(f"{candidate.dir_name}（{candidate.library}）")
                 except OSError as exc:
                     # 复制中途失败必须清掉半成品目录：否则残留目录会让后续导入永远走「已存在跳过」
@@ -536,16 +559,23 @@ class ImportService:
         raw_name = str(candidate.fields.get("name") or "").strip() or candidate.path.stem
         name = sanitize_name(raw_name)
         tags_field = candidate.fields.get("tags")
+        title = (
+            str(candidate.fields.get("title") or "").strip()
+            or candidate.title_hint
+            or raw_name
+        )
+        if not str(candidate.fields.get("title") or "").strip() and candidate.body.strip():
+            try:
+                title = self.memory.ai_draft(candidate.body)["title"] or title
+            except Exception:
+                pass
         entry = MemoryEntry(
             name=name,
-            title=(
-                str(candidate.fields.get("title") or "").strip()
-                or candidate.title_hint
-                or raw_name
-            ),
+            title=title,
             description=str(candidate.fields.get("description") or "").strip(),
             type=normalize_type(candidate.fields.get("type")),
-            source=normalize_source(candidate.fields.get("source")),
+            # 外部迁移保留显式 source；缺失时标记为导入仓库，避免用户误以为是手动创建。
+            source=normalize_source(candidate.fields.get("source") or "imported"),
             created=normalize_date(candidate.fields.get("created")),
             updated=normalize_date(candidate.fields.get("updated") or candidate.fields.get("created")),
             tags=[str(tag).strip() for tag in tags_field if str(tag).strip()][:12]
@@ -590,6 +620,7 @@ class ImportService:
             existing.title == entry.title
             and existing.description == entry.description
             and existing.type == entry.type
+            and existing.tags == entry.tags
             and existing.created == entry.created
             and existing.body.rstrip() == entry.body.rstrip()
         )

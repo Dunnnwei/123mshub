@@ -152,7 +152,7 @@ def prompt(name: str) -> None:
 def migrate_manifests() -> None:
     """一次性迁移：库内旧名 .manifest.json 批量改名为 _manifest.json（内容不变）。
 
-    点开头清单会被飞牛同步按隐藏文件排除，NAS 侧收不到；改名后即可随目录同步。
+    点开头清单可能会被文件同步程序按隐藏文件排除；改名后即可随目录同步。
     """
     _print(_repo().migrate_manifests())
 

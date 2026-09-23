@@ -162,6 +162,15 @@ $readmeLite = Join-Path $releaseDir "README.md"
 - 复制「注入提示词」发给你的 agent，它就能读共享记忆、用共享技能库、往 inbox 投递新知识；
 - 连通暗号：向 agent 发 ``天王盖地虎``，应只回「AI镇河妖！暗号对齐，123mshub已接入，当前仓库拥有X条记忆，X项技能。」。
 
+## Windows 运行环境
+
+主 EXE 已内置 Python、FastAPI、前端静态资源和 Sigma 图谱，不需要另装 Python、Node.js、npm 或 pip。
+完整桌面窗口仍需要 Microsoft Edge WebView2 Runtime 和 .NET Framework 4.8；Git for Windows 只在选择
+Git 拉取、项目更新或 Git bundle 自愈时需要，默认 archive 模式不强制依赖 Git。Windows 10/11 通常已具备
+前两项，但全新系统不保证预装。发布目录另有 ``123mshub-environment-v$version-win-x64.zip``，解压后
+运行 ``一键安装环境依赖.cmd``，安装器会先显示已有环境和待补充项，再由你确认安装；缺少 WebView2 时主
+程序会尝试以默认浏览器打开本地页，但不保证桌面嵌入体验。
+
 ## 校验与安全
 
 SHA256 见同目录 ``SHA256SUMS.txt``（PowerShell：``Get-FileHash .\123mshub.exe``）。

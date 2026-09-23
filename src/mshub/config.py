@@ -29,6 +29,7 @@ class AppConfig:
     ai_model: str = "gpt-4.1-mini"
     ai_key_configured: bool = False
     memory_root_override: str = ""
+    language: str = "system"
 
     def public_dict(self) -> dict[str, Any]:
         return asdict(self)

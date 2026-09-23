@@ -18,11 +18,11 @@ defineProps({
   selected: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['select', 'copy', 'check', 'update', 'scan', 'menu', 'toggle-select'])
+const emit = defineEmits(['select', 'copy', 'check', 'update', 'scan', 'menu', 'toggle-select', 'trust'])
 </script>
 
 <template>
-  <article class="skill-row" :class="{ selectable, selected }" @click="emit('select', skill)">
+  <article class="skill-row" :data-skill-key="`${skill.name}|${skill.library || ''}`" :class="{ selectable, selected }" @click="emit('select', skill)">
     <div class="skill-identity">
       <label
         v-if="selectable"
@@ -70,7 +70,10 @@ const emit = defineEmits(['select', 'copy', 'check', 'update', 'scan', 'menu', '
         {{ skill.item_type === 'project' ? '项目' : (skill.install_mode === 'full' ? '全仓' : '标准') }}
       </span>
       <span class="version-label">{{ skill.version }}</span>
-      <StatusBadge :status="skill.security_status" compact />
+      <time v-if="skill.updated_at" class="updated-label" :datetime="skill.updated_at">{{ String(skill.updated_at).slice(0, 10) }}</time>
+      <span v-if="skill.imported_from" class="import-source-label">来自 {{ skill.imported_from }}</span>
+      <button v-if="skill.security_status === 'warning'" class="trust-inline-button row-trust-button" type="button" @click.stop="emit('trust', skill)">需要确认</button>
+      <StatusBadge v-else :status="skill.security_status" compact />
     </div>
 
     <div class="row-actions" @click.stop>

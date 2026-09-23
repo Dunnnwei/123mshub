@@ -16,6 +16,7 @@ import httpx
 
 from .errors import FetchError, ValidationError
 from .models import FetchResult, SourceSpec
+from .process import hidden_windows_kwargs
 from .urltool import mirror_url
 
 MAX_ARCHIVE_BYTES = 750 * 1024 * 1024
@@ -336,6 +337,7 @@ def _run(command: list[str], *, env: dict | None = None, timeout: int = 180) -> 
             env=env,
             timeout=timeout,
             check=False,
+            **hidden_windows_kwargs(),
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise FetchError(f"命令执行失败：{exc}") from exc

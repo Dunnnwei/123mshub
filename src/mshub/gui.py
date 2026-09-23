@@ -10,6 +10,7 @@ import webbrowser
 import uvicorn
 
 from .api import create_app
+from .config import default_config_dir
 
 
 PRODUCT_NAME = "123 MSHub"
@@ -100,7 +101,8 @@ def launch(host: str = "127.0.0.1", port: int = 8766) -> None:
             height=880,
             min_size=(960, 640),
         )
-        webview.start()
+        # A stable profile keeps graph preferences across desktop restarts.
+        webview.start(private_mode=False, storage_path=str(default_config_dir() / "webview"))
     except Exception as exc:
         _browser_fallback(url, str(exc) or exc.__class__.__name__)
     finally:

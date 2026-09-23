@@ -1,7 +1,7 @@
 <script setup>
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import {
-  Archive, BookOpenText, Brain, CheckSquare, ChevronDown, CircleHelp, ClipboardCopy, FolderOpen, Languages, ListCheck, Menu,
+  Archive, ArrowDownCircle, BookOpenText, Brain, CheckSquare, ChevronDown, CircleHelp, ClipboardCopy, FolderOpen, Languages, ListCheck, Menu,
   Moon, PackagePlus, RefreshCw, Search, Settings, ShieldCheck, Sun, Tags, X,
 } from '@lucide/vue'
 import { api } from './api'
@@ -13,6 +13,7 @@ import ConfirmModal from './components/ConfirmModal.vue'
 import DetailDrawer from './components/DetailDrawer.vue'
 import EmptyState from './components/EmptyState.vue'
 import MemoryView from './components/MemoryView.vue'
+import MemoryGraph from './components/MemoryGraph.vue'
 import ScanModal from './components/ScanModal.vue'
 import SecurityView from './components/SecurityView.vue'
 import SettingsView from './components/SettingsView.vue'
@@ -31,6 +32,7 @@ const statusFilter = ref('all')
 const selectedTag = ref('__all__')
 const selectedSkill = ref(null)
 const detailOpen = ref(false)
+const detailLoading = ref(false)
 const addOpen = ref(false)
 const scanOpen = ref(false)
 const scanSkill = ref(null)
@@ -39,10 +41,27 @@ const busyAction = ref('')
 const busySkillName = ref('')
 const toast = ref(null)
 const toastTimer = ref(null)
+let reconcileTimer = null
 const scanInitialReport = ref(null)
 const selectionMode = ref(false)
 const selectedNames = ref([])
+const batchScanOpen = ref(false)
+const batchScanRoute = ref('offline')
+const sourceFilter = ref('all')
+const assetFilter = ref('all')
+const tagsExpanded = ref(localStorage.getItem('mshub-tags-expanded') === '1')
+const selectionBox = ref(null)
+let selectionOrigin = null
 const theme = ref(document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light')
+const effectiveLocale = computed(() => {
+  if (config.value.language === 'en' || config.value.language === 'zh-CN') return config.value.language
+  return navigator.language?.toLocaleLowerCase().startsWith('en') ? 'en' : 'zh-CN'
+})
+
+watch(effectiveLocale, (locale) => {
+  document.documentElement.lang = locale
+  document.documentElement.dataset.locale = locale
+}, { immediate: true })
 
 function syncThemeMeta() {
   document.querySelector('meta[name="theme-color"]')
@@ -81,6 +100,13 @@ const filteredSkills = computed(() => {
     const matchesTerm = !term || [skill.name, skill.description, skill.description_zh, skill.author, ...(skill.tags || [])]
       .some((value) => String(value || '').toLowerCase().includes(term))
     const matchesStatus = statusFilter.value === 'all' || skill.security_status === statusFilter.value
+    const matchesSource = sourceFilter.value === 'all'
+      || (sourceFilter.value === 'local' && skill.provider === 'local')
+      || (sourceFilter.value === 'github' && skill.provider !== 'local')
+      || (sourceFilter.value.startsWith('from:') && (skill.imported_from || '') === sourceFilter.value.slice(5))
+    const matchesAsset = assetFilter.value === 'all'
+      || (assetFilter.value === 'project' && skill.item_type === 'project')
+      || (assetFilter.value === 'skill' && skill.item_type !== 'project')
     const matchesTag = selectedTag.value === '__all__'
       || (selectedTag.value === '__untagged__' && !(skill.tags || []).length)
       || (
@@ -89,7 +115,7 @@ const filteredSkills = computed(() => {
           (tag) => tag.toLocaleLowerCase() === selectedTag.value.slice(4),
         )
       )
-    return matchesTerm && matchesStatus && matchesTag
+    return matchesTerm && matchesStatus && matchesTag && matchesSource && matchesAsset
   })
 })
 
@@ -111,7 +137,7 @@ const tagOptions = computed(() => {
 const tagSuggestions = computed(() => tagOptions.value.map((item) => item.name))
 const untaggedCount = computed(() => skills.value.filter((item) => !(item.tags || []).length).length)
 const filterActive = computed(() => (
-  search.value.trim() || statusFilter.value !== 'all' || selectedTag.value !== '__all__'
+  search.value.trim() || statusFilter.value !== 'all' || selectedTag.value !== '__all__' || sourceFilter.value !== 'all' || assetFilter.value !== 'all'
 ))
 const safeCount = computed(() => skills.value.filter((item) => item.security_status === 'safe').length)
 const warningCount = computed(() => skills.value.filter((item) => item.security_status === 'warning').length)
@@ -122,7 +148,10 @@ onMounted(() => {
   startJobPolling(jobFinished)
 })
 
-onUnmounted(stopJobPolling)
+onUnmounted(() => {
+  stopJobPolling()
+  if (reconcileTimer) window.clearTimeout(reconcileTimer)
+})
 
 async function loadApp() {
   loading.value = true
@@ -149,11 +178,31 @@ async function loadApp() {
     } else {
       view.value = 'settings'
     }
+    if (healthData.reconcile_pending) scheduleReconcileRefresh()
   } catch (error) {
     fatalError.value = error.message
   } finally {
     loading.value = false
   }
+}
+
+function scheduleReconcileRefresh(attempt = 0) {
+  if (reconcileTimer) window.clearTimeout(reconcileTimer)
+  if (attempt >= 20) return
+  reconcileTimer = window.setTimeout(async () => {
+    try {
+      const next = await api.health()
+      health.value = { ...health.value, ...next }
+      if (!next.reconcile_pending) {
+        await refreshSkills()
+        try { memoryStats.value = await api.memoryStats() } catch { /* optional badge refresh */ }
+        return
+      }
+    } catch {
+      // A transient background check failure should not interrupt the usable UI.
+    }
+    scheduleReconcileRefresh(attempt + 1)
+  }, attempt === 0 ? 420 : 650)
 }
 
 async function refreshSkills(selectName = '') {
@@ -178,6 +227,8 @@ function clearFilters() {
   search.value = ''
   statusFilter.value = 'all'
   selectedTag.value = '__all__'
+  sourceFilter.value = 'all'
+  assetFilter.value = 'all'
 }
 
 function showToast(payload) {
@@ -187,11 +238,16 @@ function showToast(payload) {
 }
 
 async function selectSkill(skill) {
+  // 先打开抽屉再取详情：慢磁盘或同步盘不会让用户误以为点击失效。
+  selectedSkill.value = skill
+  detailLoading.value = true
+  detailOpen.value = true
   try {
     selectedSkill.value = await api.skill(skill.name, skill.library)
-    detailOpen.value = true
   } catch (error) {
     showToast({ type: 'error', message: error.message })
+  } finally {
+    detailLoading.value = false
   }
 }
 
@@ -294,11 +350,17 @@ function selectAllFiltered() {
 async function batchScan() {
   const targets = [...selectedSkills.value]
   if (!targets.length) return
+  batchScanOpen.value = true
+}
+
+async function runBatchScan() {
+  const targets = [...selectedSkills.value]
+  batchScanOpen.value = false
   const failed = []
   let queued = 0
   for (const item of targets) {
     try {
-      await api.startScan({ name: item.name, library: item.library, route: 'offline' })
+      await api.startScan({ name: item.name, library: item.library, route: batchScanRoute.value })
       queued += 1
     } catch (error) {
       failed.push(`${item.name}：${error.message}`)
@@ -311,6 +373,33 @@ async function batchScan() {
     showToast({ type: 'success', message: `${queued} 个条目已排队安全检查，进度见任务面板。` })
   }
 }
+
+function toggleTagsExpanded() {
+  tagsExpanded.value = !tagsExpanded.value
+  localStorage.setItem('mshub-tags-expanded', tagsExpanded.value ? '1' : '0')
+}
+
+function selectionStart(event) {
+  if (!selectionMode.value || event.button !== 0 || event.target.closest('button,input')) return
+  const list = event.currentTarget.getBoundingClientRect()
+  selectionOrigin = { x: event.clientX, y: event.clientY, left: list.left, top: list.top }
+  selectionBox.value = { left: event.clientX - list.left, top: event.clientY - list.top, width: 0, height: 0 }
+  event.currentTarget.setPointerCapture?.(event.pointerId)
+}
+function selectionMove(event) {
+  if (!selectionOrigin) return
+  const list = event.currentTarget.getBoundingClientRect()
+  const left = Math.min(selectionOrigin.x, event.clientX) - list.left
+  const top = Math.min(selectionOrigin.y, event.clientY) - list.top
+  selectionBox.value = { left, top, width: Math.abs(event.clientX - selectionOrigin.x), height: Math.abs(event.clientY - selectionOrigin.y) }
+  const box = { left: Math.min(selectionOrigin.x, event.clientX), right: Math.max(selectionOrigin.x, event.clientX), top: Math.min(selectionOrigin.y, event.clientY), bottom: Math.max(selectionOrigin.y, event.clientY) }
+  const hits = [...event.currentTarget.querySelectorAll('.skill-row[data-skill-key]')].filter((row) => {
+    const rect = row.getBoundingClientRect()
+    return rect.right >= box.left && rect.left <= box.right && rect.bottom >= box.top && rect.top <= box.bottom
+  }).map((row) => row.dataset.skillKey)
+  if (selectionBox.value.width > 8 || selectionBox.value.height > 8) selectedNames.value = [...new Set([...selectedNames.value, ...hits])]
+}
+function selectionEnd() { selectionOrigin = null; selectionBox.value = null }
 
 async function batchUpdate() {
   if (!selectedNames.value.length) return
@@ -335,6 +424,26 @@ async function batchUpdate() {
   } else {
     showToast({ type: 'success', message: `${queued} 个条目已排队更新，进度见任务面板。` })
   }
+}
+
+async function batchCheckVersion() {
+  const targets = selectedSkills.value.filter((item) => item.provider !== 'local')
+  let updates = 0; let skipped = selectedSkills.value.length - targets.length
+  for (const item of targets) {
+    try { const result = await api.checkVersion(item.name, item.library); if (result.has_update) updates += 1 } catch { skipped += 1 }
+  }
+  showToast({ type: updates ? 'warning' : 'success', message: `已完成 ${targets.length} 项版本检查：${updates} 项有更新${skipped ? `，跳过/失败 ${skipped} 项` : ''}。` })
+}
+
+async function batchDowngrade() {
+  const targets = selectedSkills.value.filter((item) => item.item_type !== 'project' && item.provider !== 'local' && item.install_mode === 'full')
+  if (!targets.length) { showToast({ type: 'warning', message: '所选条目中没有可降级为标准安装的项目。' }); return }
+  let queued = 0; const failed = []
+  for (const item of targets) {
+    try { await api.changeMode(item.name, 'standard', item.library); queued += 1 } catch (error) { failed.push(`${item.name}：${error.message}`) }
+  }
+  await refreshSkills();
+  showToast({ type: failed.length ? 'warning' : 'success', message: `已处理 ${queued} 项降级${failed.length ? `，失败 ${failed.length} 项` : ''}。` })
 }
 
 function requestBatchTrust() {
@@ -621,13 +730,16 @@ function currentBusy(skill) {
       </div>
 
       <nav class="main-nav" aria-label="主导航">
-        <button :class="{ active: view === 'library' }" type="button" @click="navigate('library')">
-          <Archive :size="18" /><span>技能库</span><b>{{ skills.length }}</b>
-        </button>
         <button :class="{ active: view === 'memory' }" type="button" @click="navigate('memory')">
           <Brain :size="18" /><span>记忆库</span>
           <b v-if="memoryStats.inbox_pending" class="nav-pending-badge">{{ memoryStats.inbox_pending }}</b>
           <b v-else>{{ memoryStats.total }}</b>
+        </button>
+        <button :class="{ active: view === 'graph' }" type="button" @click="navigate('graph')">
+          <Tags :size="18" /><span>记忆图示</span><b>{{ memoryStats.total }}</b>
+        </button>
+        <button :class="{ active: view === 'library' }" type="button" @click="navigate('library')">
+          <Archive :size="18" /><span>技能库</span><b>{{ skills.length }}</b>
         </button>
         <button :class="{ active: view === 'security' }" type="button" @click="navigate('security')">
           <ShieldCheck :size="18" /><span>安全中心</span><b v-if="warningCount">{{ warningCount }}</b>
@@ -711,6 +823,8 @@ function currentBusy(skill) {
             </select>
             <ChevronDown :size="15" />
           </label>
+          <label class="filter-select"><span>来源</span><select v-model="sourceFilter"><option value="all">全部来源</option><option value="local">本地自研</option><option value="github">GitHub 源</option><option v-for="item in [...new Set(skills.map((skill) => skill.imported_from).filter(Boolean))]" :key="item" :value="`from:${item}`">来自 {{ item }}</option></select><ChevronDown :size="15" /></label>
+          <label class="filter-select"><span>类别</span><select v-model="assetFilter"><option value="all">程序与技能</option><option value="skill">技能</option><option value="project">程序</option></select><ChevronDown :size="15" /></label>
           <button
             class="secondary-button batch-toggle"
             :class="{ active: selectionMode }"
@@ -728,7 +842,7 @@ function currentBusy(skill) {
             <Languages :size="16" /> 翻译备注
           </button>
         </div>
-        <div v-if="skills.length" class="tag-filter-bar" aria-label="按标签筛选">
+        <div v-if="skills.length" class="tag-filter-bar" :class="{ expanded: tagsExpanded }" aria-label="按标签筛选">
           <span class="tag-filter-label"><Tags :size="15" /> 分类</span>
           <div class="tag-filter-scroll">
             <button
@@ -755,6 +869,7 @@ function currentBusy(skill) {
             >
               未标记 <b>{{ untaggedCount }}</b>
             </button>
+            <button class="tag-expand-button" type="button" @click="toggleTagsExpanded">{{ tagsExpanded ? '收起标签' : '展开全部标签' }}</button>
           </div>
         </div>
 
@@ -765,12 +880,14 @@ function currentBusy(skill) {
           </label>
           <span class="batch-count">已选 <b>{{ selectedNames.length }}</b></span>
           <div class="batch-actions">
+            <button class="secondary-button" type="button" :disabled="!selectedNames.length" title="跳过本地自研项目" @click="batchCheckVersion"><Search :size="15" /> 查版本</button>
             <button class="secondary-button" type="button" :disabled="!selectedNames.length" @click="batchScan">
               <ShieldCheck :size="15" /> 批量安全检查
             </button>
             <button class="secondary-button" type="button" :disabled="!selectedNames.length" @click="batchUpdate">
               <RefreshCw :size="15" /> 批量更新
             </button>
+            <button class="secondary-button" type="button" :disabled="!selectedNames.length" title="仅处理全仓技能，自动跳过本地自研和程序项目" @click="batchDowngrade"><ArrowDownCircle :size="15" /> 降级标准</button>
             <button
               class="trust-button"
               type="button"
@@ -787,7 +904,8 @@ function currentBusy(skill) {
           <span>技能、项目与说明</span><span>类型 / 版本 / 安全</span><span>操作</span>
         </div>
 
-        <div v-if="filteredSkills.length" class="skill-list">
+        <div v-if="filteredSkills.length" class="skill-list" @pointerdown="selectionStart" @pointermove="selectionMove" @pointerup="selectionEnd" @pointercancel="selectionEnd">
+          <div v-if="selectionBox" class="selection-rect" :style="{ left: `${selectionBox.left}px`, top: `${selectionBox.top}px`, width: `${selectionBox.width}px`, height: `${selectionBox.height}px` }" aria-hidden="true"></div>
           <SkillRow
             v-for="skill in filteredSkills"
             :key="skillKey(skill)"
@@ -802,6 +920,7 @@ function currentBusy(skill) {
             @scan="openScan"
             @menu="requestModeChange"
             @toggle-select="toggleSelected"
+            @trust="requestTrust"
           />
         </div>
         <EmptyState
@@ -819,6 +938,12 @@ function currentBusy(skill) {
         @copy-prompt="copyInjectionPrompt"
         @stats="memoryStats = $event"
         @confirm="(state) => confirmState = state"
+      />
+
+      <MemoryGraph
+        v-else-if="view === 'graph'"
+        @open="(name) => { view = 'memory'; $nextTick(() => document.dispatchEvent(new CustomEvent('mshub:open-memory', { detail: name }))) }"
+        @toast="showToast"
       />
 
       <SecurityView
@@ -862,6 +987,7 @@ function currentBusy(skill) {
       :open="detailOpen"
       :skill="selectedSkill"
       :busy-action="selectedSkill ? currentBusy(selectedSkill) : ''"
+      :loading="detailLoading"
       :tag-suggestions="tagSuggestions"
       @close="detailOpen = false"
       @copy="copyPrompt"
@@ -876,6 +1002,15 @@ function currentBusy(skill) {
       @translate="translateSkill"
       @trust="requestTrust"
     />
+    <Transition name="modal">
+      <div v-if="batchScanOpen" class="modal-backdrop" @mousedown.self="batchScanOpen = false">
+        <section class="modal-panel batch-scan-dialog" role="dialog" aria-modal="true" aria-labelledby="batch-scan-title">
+          <header class="modal-header"><div><span class="step-label">批量安全检查</span><h2 id="batch-scan-title">选择检查线路</h2></div><button class="icon-button" type="button" aria-label="关闭" @click="batchScanOpen = false"><X :size="20" /></button></header>
+          <div class="modal-body"><p>已选择 {{ selectedSkills.length }} 项。每个条目都会独立排队，失败项目不会阻断其他项目。</p><div class="scan-route-grid"><button type="button" class="scan-route" :class="{ selected: batchScanRoute === 'offline' }" @click="batchScanRoute = 'offline'"><strong>路线 A · 普通检查</strong><p>离线、免费，检查危险脚本和提示词注入。</p></button><button type="button" class="scan-route" :class="{ selected: batchScanRoute === 'ai' }" @click="batchScanRoute = 'ai'"><strong>路线 B · AI 深度审查</strong><p>使用设置里的 API，按量计费并可能需要联网。</p></button></div></div>
+          <footer class="modal-footer"><button class="secondary-button" type="button" @click="batchScanOpen = false">取消</button><button class="primary-button" type="button" @click="runBatchScan">开始检查</button></footer>
+        </section>
+      </div>
+    </Transition>
     <ConfirmModal
       :open="confirmState.open"
       :title="confirmState.title"

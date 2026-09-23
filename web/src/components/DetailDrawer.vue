@@ -11,6 +11,7 @@ const props = defineProps({
   skill: { type: Object, default: null },
   open: { type: Boolean, default: false },
   busyAction: { type: String, default: '' },
+  loading: { type: Boolean, default: false },
   tagSuggestions: { type: Array, default: () => [] },
 })
 const emit = defineEmits([
@@ -163,7 +164,12 @@ function shortHash(value) {
           </header>
 
           <div class="drawer-content">
-            <template v-if="editing">
+            <div v-if="loading" class="drawer-loading" role="status" aria-live="polite">
+              <span class="loading-spinner" aria-hidden="true"></span>
+              <strong>正在读取详细信息</strong>
+              <p>先打开工作区，仓库变化和安全信息加载完成后会自动补全。</p>
+            </div>
+            <template v-else-if="editing">
               <section class="detail-section edit-form-section">
                 <div class="detail-section-heading">
                   <div>
@@ -361,6 +367,10 @@ function shortHash(value) {
                 <div>
                   <dt>下载方式</dt>
                   <dd>{{ skill.fetcher === 'archive' ? 'Archive 压缩包' : 'Git 浅克隆' }}</dd>
+                </div>
+                <div v-if="skill.imported_from">
+                  <dt>导入来源</dt>
+                  <dd>{{ skill.imported_from }}<small v-if="skill.imported_at"> · {{ String(skill.imported_at).slice(0, 10) }}</small></dd>
                 </div>
               </dl>
             </section>

@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 
 from mshub.api import create_app
 from mshub.config import ConfigStore
+from mshub.database import Database
 
 
 def _client(tmp_path: Path) -> TestClient:
@@ -103,6 +104,53 @@ class TestMemoryApi:
         result = client.post("/api/memory/rebuild")
         assert result.status_code == 200
         assert result.json()["total_count"] == 1
+
+    def test_graph_and_bulk_memory_operations(self, tmp_path: Path) -> None:
+        client = _client(tmp_path)
+        client.post("/api/memory/entries", json={"title": "一", "name": "one", "tags": ["same"]})
+        client.post("/api/memory/entries", json={"title": "二", "name": "two", "tags": ["same"], "body": "[[one]]"})
+        graph = client.get("/api/memory/graph")
+        assert graph.status_code == 200
+        assert len(graph.json()["nodes"]) == 2
+        assert any(edge["kind"] in {"双链", "共同标签"} for edge in graph.json()["edges"])
+        updated = client.post("/api/memory/bulk-update", json={"names": ["one", "two"], "type": "project"})
+        assert updated.status_code == 200 and len(updated.json()["updated"]) == 2
+        retagged = client.post("/api/memory/bulk-update", json={"names": ["one", "two"], "tags": ["batch", "review"]})
+        assert retagged.status_code == 200 and len(retagged.json()["updated"]) == 2
+        assert client.get("/api/memory/entries/one").json()["tags"] == ["batch", "review"]
+        deleted = client.post("/api/memory/bulk-delete", json={"names": ["one", "two"]})
+        assert deleted.status_code == 200 and len(deleted.json()["deleted"]) == 2
+
+    def test_graph_tag_edges_are_opt_in(self, tmp_path: Path) -> None:
+        client = _client(tmp_path)
+        client.post("/api/memory/entries", json={"title": "一", "name": "one", "tags": ["same"]})
+        client.post("/api/memory/entries", json={"title": "二", "name": "two", "tags": ["same"]})
+        default = client.get("/api/memory/graph").json()
+        assert all(edge["kind"] == "双链" for edge in default["edges"])
+        tagged = client.get("/api/memory/graph?kinds=link,tag").json()
+        assert any(edge["kind"] == "共同标签" for edge in tagged["edges"])
+
+    def test_blank_skill_name_uses_github_repository_identity(self, tmp_path: Path) -> None:
+        root = tmp_path / "repo"
+        store = ConfigStore(tmp_path / "config")
+        store.save({"repo_root": str(root)})
+        Database(root).upsert_skill({
+            "name": "",
+            "item_type": "skill",
+            "author": "owner",
+            "repo": "blank",
+            "provider": "github",
+            "library": "skills",
+            "source_url": "https://github.com/owner/blank",
+            "local_dir": "skills/owner__blank",
+            "version": "",
+            "commit_hash": "",
+            "installed_at": "",
+            "updated_at": "",
+        })
+        client = TestClient(create_app(store))
+        items = client.get("/api/skills").json()["items"]
+        assert items[0]["name"] == "owner/blank"
 
 
 class TestInjectionPromptApi:

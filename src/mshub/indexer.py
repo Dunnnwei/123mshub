@@ -27,6 +27,8 @@ def rebuild_index(repo_root: Path, database: Database) -> dict:
             "install_mode": item["install_mode"],
             "source_url": item["source_url"],
             "subdir": item["subdir"],
+            "imported_from": item.get("imported_from", ""),
+            "imported_at": item.get("imported_at", ""),
         })
     projection = {
         "schema_version": 1,

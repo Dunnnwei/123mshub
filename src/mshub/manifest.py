@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 # 清单文件名用下划线开头（与库内 _skillhub_meta.json 命名风格一致）：
-# 点开头会被飞牛同步按隐藏文件排除，导致 NAS 侧一份 manifest 都收不到
+# 点开头可能被文件同步程序按隐藏文件排除，导致同步端收不到 manifest
 # （v0.8.1 改名；旧点开头名仅作读取回退，不再新写）。
 MANIFEST_NAME = "_manifest.json"
 LEGACY_MANIFEST_NAME = ".manifest.json"
@@ -48,6 +48,8 @@ def write_manifest(
     scan: dict[str, Any] | None = None,
     source_type: str = "github",
     library: str = "",
+    imported_from: str = "",
+    imported_at: str = "",
 ) -> dict[str, Any]:
     from .syncsafe import is_derived_local, is_transport_artifact, to_transport
 
@@ -71,6 +73,8 @@ def write_manifest(
         "name": name,
         "source_type": source_type,
         "library": library,
+        "imported_from": imported_from,
+        "imported_at": imported_at,
         "source_url": source_url,
         "commit_hash": commit_hash,
         "commit_date": commit_date,
@@ -113,6 +117,7 @@ PATCHABLE_FIELDS = (
     "name", "source_type", "source_url", "author", "repo", "subdir", "ref", "fetcher",
     "description", "description_zh", "version", "commit_hash", "commit_date",
     "item_type", "install_mode", "library", "tags",
+    "imported_from", "imported_at",
 )
 
 

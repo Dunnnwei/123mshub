@@ -160,6 +160,8 @@ def recover_synced_records(repo_root: Path, database: Database) -> int:
             "install_mode": install_mode,
             "fetcher": fetcher,
             "license_name": parsed.license_name,
+            "imported_from": str(manifest.get("imported_from") or projected.get("imported_from") or ""),
+            "imported_at": str(manifest.get("imported_at") or projected.get("imported_at") or ""),
             "installed_at": timestamp,
             "updated_at": timestamp,
         }
@@ -187,6 +189,8 @@ def recover_synced_records(repo_root: Path, database: Database) -> int:
                 managed_files=managed_files,
                 source_type=source_type,
                 library=library,
+                imported_from=record["imported_from"],
+                imported_at=record["imported_at"],
             )
         existing_dirs.add(local_dir)
         recovered += 1
@@ -332,7 +336,7 @@ def canonicalize_library_names(repo_root: Path, database: Database) -> int:
 def migrate_manifest_names(repo_root: Path) -> dict[str, Any]:
     """一次性迁移：库内所有旧名 .manifest.json 原子改名为 _manifest.json。
 
-    背景：飞牛同步按「排除前缀带 . 的隐藏文件」过滤，点开头清单在 NAS 侧
+    背景：部分文件同步程序按「排除前缀带 . 的隐藏文件」过滤，点开头清单在同步端
     一份都收不到；该排除规则本身不能关（.meta 的 SQLite 严禁进同步盘）。
     改名走 os.replace 原子替换，内容（含 sha256 与安全扫描结论）字节不变，
     SQLite 与 index.json 均不受影响。幂等：重复执行时旧名不存在即空操作。
