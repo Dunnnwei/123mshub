@@ -8,6 +8,19 @@ import sys
 from pathlib import Path
 
 
+def show_duplicate_message(timeout_ms: int = 4000) -> None:
+    from PySide6.QtCore import QTimer
+    from PySide6.QtWidgets import QMessageBox
+
+    dialog = QMessageBox(QMessageBox.Icon.Information, "123 MSHub 已在运行",
+                         "原生程序已在运行，请使用现有窗口。此提示将在 4 秒后关闭。")
+    timer = QTimer(dialog)
+    timer.setSingleShot(True)
+    timer.timeout.connect(dialog.accept)
+    timer.start(timeout_ms)
+    dialog.exec()
+
+
 def main(argv: list[str] | None = None) -> int:
     smoke_log = Path(os.environ.get("TEMP", ".")) / "123mshub-native-smoke.log"
 
@@ -27,7 +40,10 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     parser = argparse.ArgumentParser(prog="123mshub-native", description="123 MSHub PySide6 原生壳")
-    parser.add_argument("--repo", help="启动时使用的仓库根目录")
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("--repo", help="仅本次会话使用的仓库根目录，不修改已存配置")
+    group.add_argument("--repo-and-save", help="使用此仓库并明确保存为默认仓库")
+    parser.add_argument("--config-dir", type=Path, help="独立配置目录（不读写系统钥匙串，供测试/便携会话）")
     parser.add_argument("--smoke-graph", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
     append_smoke("args-parsed")
@@ -35,14 +51,14 @@ def main(argv: list[str] | None = None) -> int:
     from PySide6.QtCore import QLockFile, QTimer
     from PySide6.QtWidgets import QMessageBox
 
-    from ..config import ConfigStore
+    from .session_config import SessionConfigStore
     from .memory_facade import MemoryFacade
 
     app = QApplication.instance() or QApplication(sys.argv)
     append_smoke("qapplication-created")
     app.setApplicationName("123 MSHub")
     app.setOrganizationName("123mshub")
-    store = ConfigStore()
+    store = SessionConfigStore(args.config_dir, repo=args.repo or "", isolated=args.config_dir is not None)
     append_smoke("config-created")
     store.config_dir.mkdir(parents=True, exist_ok=True)
     # File-based single-instance lock: no TCP endpoint and no desktop popup
@@ -51,11 +67,10 @@ def main(argv: list[str] | None = None) -> int:
     lock.setStaleLockTime(0)
     if not lock.tryLock(0):
         append_smoke("lock-failed")
-        QMessageBox.information(None, "123 MSHub 已在运行", "原生程序已在运行，请使用现有窗口。")
+        show_duplicate_message()
         return 0
-    if args.repo:
-        store.save({"repo_root": args.repo})
-        append_smoke("repo-saved")
+    if args.repo_and_save:
+        store.save({"repo_root": args.repo_and_save})
     facade = MemoryFacade(store)
     if args.smoke_graph:
         # Packaging QA path: instantiate the real local WebEngine island and
