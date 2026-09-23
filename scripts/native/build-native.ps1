@@ -1,4 +1,4 @@
-param(
+﻿param(
     [switch]$SkipSmoke
 )
 
@@ -16,7 +16,7 @@ if (-not (Test-Path -LiteralPath $python)) {
 & $python -m pytest
 if ($LASTEXITCODE -ne 0) { throw "测试失败，停止打包。" }
 
-$release = Join-Path $projectRoot "release\native-v1.4.0"
+$release = Join-Path $projectRoot "release\native-v1.4.1"
 $work = Join-Path $projectRoot "build\native-pyinstaller"
 if (Test-Path -LiteralPath $release) {
     $resolvedReleaseToClean = (Resolve-Path -LiteralPath $release).Path
@@ -52,7 +52,16 @@ if (-not $SkipSmoke) {
     # QWebEngineView, loads file:// + qrc WebChannel, then exits by timer.
     $env:QT_QPA_PLATFORM = "windows"
     $env:QTWEBENGINE_DISABLE_GPU = "1"
-    $process = Start-Process -FilePath (Join-Path $root "123mshub.exe") -ArgumentList "--smoke-graph", "--repo", (Join-Path $projectRoot ".tmp-native-smoke-repo") -PassThru
+    $smokeConfig = Join-Path $projectRoot ".tmp-native-smoke-config"
+    $smokeRepo = Join-Path $projectRoot ".tmp-native-smoke-repo"
+    New-Item -ItemType Directory -Path $smokeConfig, $smokeRepo -Force | Out-Null
+    $process = Start-Process -FilePath (Join-Path $root "123mshub.exe") -ArgumentList "--smoke-graph", "--repo", $smokeRepo, "--config-dir", $smokeConfig -WindowStyle Hidden -PassThru
+    Start-Sleep -Milliseconds 700
+    $listeners = @(Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | Where-Object { $_.OwningProcess -eq $process.Id })
+    if ($listeners.Count -gt 0) {
+        Stop-Process -Id $process.Id -Force
+        throw "原生 smoke 创建了 TCP 监听，违反零监听红线。"
+    }
     if (-not $process.WaitForExit(15000)) {
         Stop-Process -Id $process.Id -Force
         throw "原生 onedir 图谱冒烟超时。"

@@ -15,16 +15,24 @@ from PySide6.QtWidgets import (
     QStackedWidget,
     QVBoxLayout,
     QWidget,
+    QToolButton,
+    QDockWidget,
+    QTableWidget,
+    QTableWidgetItem,
 )
 
 from .memory_facade import MemoryFacade
 from .state import AppState
 from .task_runner import TaskRunner
+from .job_controller import JobController
 from .theme import ThemeController
+from .i18n import LanguageController, localize
 if TYPE_CHECKING:
     from .views.graph_view import GraphView
 from .views.memory_view import MemoryPage
 from .views.settings_view import SettingsPage
+from .views.skill_view import SkillsPage, SecurityPage
+from .views.import_view import ImportDialog
 
 
 class _PlaceholderPage(QWidget):
@@ -53,6 +61,8 @@ class MainWindow(QMainWindow):
         self.resize(1280, 820)
         self.facade = facade or MemoryFacade()
         self.runner = TaskRunner(self)
+        self.jobs = JobController(self)
+        self.language = LanguageController(self)
         self.state = AppState(self)
         self.theme = ThemeController(QSettings(str(self.facade.config_store.config_dir / "native-ui.ini"), QSettings.Format.IniFormat), parent=self)
         self._build_ui()
@@ -91,15 +101,15 @@ class MainWindow(QMainWindow):
         outer.addWidget(self.sidebar)
 
         self.pages = QStackedWidget()
-        self.memory_page = MemoryPage(self.facade, self.runner)
+        self.memory_page = MemoryPage(self.facade, self.runner, self.jobs)
         # QWebEngine spins up a Chromium renderer and can cost 1–2 seconds at
         # cold start.  Keep only a lightweight placeholder until the user
         # first opens the graph page.
         self.graph_page = None
         self.graph_placeholder = _PlaceholderPage("记忆图示", "首次打开时加载本地 Sigma 图谱岛。")
-        self.skills_page = _PlaceholderPage("技能库", "v1.4.0 先稳定原生记忆壳。技能库的 Git、本地入库、安全检查、跨机对账和批量操作将在 v1.5.0 按功能清单接回。")
-        self.security_page = _PlaceholderPage("安全中心", "v1.5.0 接入技能安全检查路线 A/B、信任放行和任务面板；当前版本不伪造扫描结果。")
-        self.settings_page = SettingsPage(self.facade, self.theme)
+        self.skills_page = SkillsPage(self.facade, self.runner, self.jobs)
+        self.security_page = SecurityPage(self.facade, self.runner, self.jobs)
+        self.settings_page = SettingsPage(self.facade, self.theme, self.runner, self.jobs, self.language)
         for page in (self.memory_page, self.graph_placeholder, self.skills_page, self.security_page, self.settings_page):
             self.pages.addWidget(page)
         outer.addWidget(self.pages, 1)
@@ -109,6 +119,51 @@ class MainWindow(QMainWindow):
         self.memory_page.statusMessage.connect(self.statusBar().showMessage)
         self.settings_page.statusMessage.connect(self.statusBar().showMessage)
         self.settings_page.saved.connect(lambda _config: self.memory_page.refresh())
+        self.settings_page.importRequested.connect(self.open_import)
+        self.language.changed.connect(lambda _mode: localize(self))
+        self.jobs.repositoryChanged.connect(self._repository_changed)
+        self._build_job_dock()
+
+    def _build_job_dock(self) -> None:
+        dock = QDockWidget("后台任务", self)
+        dock.setObjectName("jobsDock")
+        dock.setAllowedAreas(Qt.DockWidgetArea.BottomDockWidgetArea)
+        self.job_table = QTableWidget(0, 5)
+        self.job_table.setHorizontalHeaderLabels(["任务", "时间", "状态", "进度", "操作"])
+        self.job_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.job_table.horizontalHeader().setStretchLastSection(True)
+        dock.setWidget(self.job_table)
+        self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, dock)
+        self.jobs.changed.connect(self._refresh_jobs)
+        self._refresh_jobs()
+
+    def _refresh_jobs(self) -> None:
+        if not hasattr(self, "job_table"):
+            return
+        rows = self.jobs.list()
+        self.job_table.setRowCount(len(rows))
+        for row, job in enumerate(rows):
+            self.job_table.setItem(row, 0, QTableWidgetItem(str(job["label"])))
+            self.job_table.setItem(row, 1, QTableWidgetItem(str(job["created_at"])[5:19].replace("T", " ")))
+            state = {"running": "运行中", "done": "完成", "error": "失败"}.get(job["status"], job["status"])
+            self.job_table.setItem(row, 2, QTableWidgetItem(state))
+            progress = "未知" if job["progress"] is None else f'{job["progress"]}%'
+            self.job_table.setItem(row, 3, QTableWidgetItem(f'{progress} · {job["phase"]}'))
+            if job["status"] != "running":
+                button = QToolButton()
+                button.setText("移除")
+                button.clicked.connect(lambda _checked=False, identifier=job["id"]: self.jobs.dismiss(identifier))
+                self.job_table.setCellWidget(row, 4, button)
+
+    def _repository_changed(self) -> None:
+        self.memory_page.refresh()
+        self.skills_page.refresh()
+        self.security_page.refresh()
+        if self.graph_page is not None:
+            self.graph_page.refresh_graph()
+
+    def open_import(self, source: str) -> None:
+        ImportDialog(self.facade, self.runner, self.jobs, source, self).exec()
 
     def _ensure_graph_page(self) -> GraphView:
         if self.graph_page is not None:
@@ -166,5 +221,6 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(f"条目打开失败：{exc}")
 
     def closeEvent(self, event) -> None:  # noqa: N802 - Qt virtual method name
+        self.jobs.shutdown()
         self.runner.pool.waitForDone(1500)
         event.accept()

@@ -93,7 +93,7 @@ def main(argv: list[str] | None = None) -> int:
 
         def record_status(message: str) -> None:
             append_smoke(f"status={message}")
-            if "失败" in message or "缺失" in message:
+            if "失败" in message or "缺失" in message or "脚本错误" in message:
                 failure["message"] = message
 
         graph.statusMessage.connect(record_status)
@@ -101,7 +101,27 @@ def main(argv: list[str] | None = None) -> int:
             append_smoke("timer")
             app.quit()
 
+        def check_graph_ready() -> None:
+            if graph.web_view is None:
+                return
+            graph.web_view.page().runJavaScript(
+                "JSON.stringify({ready:Boolean(window.mshubGraphReady),nodes:window.mshubGraphNodeCount||0,edges:window.mshubGraphEdgeCount||0})",
+                lambda value: _finish_graph_check(value),
+            )
+
+        def _finish_graph_check(value: object) -> None:
+            try:
+                import json
+                result = json.loads(str(value))
+            except (TypeError, ValueError):
+                result = {"ready": False}
+            append_smoke(f"graph-ready={result.get('ready')} nodes={result.get('nodes', 0)} edges={result.get('edges', 0)}")
+            if not result.get("ready"):
+                failure["message"] = "图谱脚本未完成 WebChannel/Sigma 渲染"
+            app.quit()
+
         QTimer.singleShot(5000, stop_smoke)
+        QTimer.singleShot(2500, check_graph_ready)
         append_smoke("before-exec")
         result = int(app.exec())
         append_smoke(f"after-exec={result}")

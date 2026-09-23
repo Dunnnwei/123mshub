@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QObject, QSettings, Qt, Signal
+from PySide6.QtCore import QObject, QSettings, Signal
 from PySide6.QtGui import QPalette
 from PySide6.QtWidgets import QApplication
 
@@ -66,6 +66,15 @@ class ThemeController(QObject):
 
     @staticmethod
     def system_mode() -> str:
+        app = QApplication.instance()
+        hints = app.styleHints() if app is not None else None
+        scheme = getattr(hints, "colorScheme", None)
+        if callable(scheme):
+            value = scheme()
+            if str(value).lower().endswith("dark"):
+                return "dark"
+            if str(value).lower().endswith("light"):
+                return "light"
         palette = QApplication.palette()
         return "dark" if palette.color(QPalette.ColorRole.Window).lightness() < 128 else "light"
 
@@ -83,4 +92,3 @@ class ThemeController(QObject):
             app.setStyleSheet(DARK_QSS if effective == "dark" else LIGHT_QSS)
         self.changed.emit(effective)
         return effective
-

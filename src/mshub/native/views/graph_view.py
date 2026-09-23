@@ -21,6 +21,15 @@ except ImportError:  # pragma: no cover - exercised on machines without native e
 
 
 if _WEB_ENGINE_AVAILABLE:
+    class _GraphPage(QWebEnginePage):
+        consoleError = Signal(str)
+
+        def javaScriptConsoleMessage(self, level, message, lineNumber, sourceID):  # noqa: N802
+            # A worker fallback may log a warning; only script errors make the
+            # smoke path fail.  Never surface source text or repository data.
+            if int(level) >= 2:
+                self.consoleError.emit(f"{message}（{sourceID}:{lineNumber}）")
+
     class _LocalOnlyInterceptor(QWebEngineUrlRequestInterceptor):
         def interceptRequest(self, info) -> None:  # noqa: N802 - Qt virtual method name
             url = info.requestUrl()
@@ -53,6 +62,19 @@ class GraphView(QWidget):
 
         handle.signals.finished.connect(ready)
 
+    def refresh_graph(self) -> None:
+        """Invalidate the read cache and ask the local page to reload data."""
+        self.bridge.invalidate()
+        handle = self.runner.submit(self.facade.graph, "link")
+
+        def ready(_identifier, payload):
+            if isinstance(payload, dict):
+                self.bridge.set_graph_cache("link", payload)
+                if self.web_view is not None:
+                    self.web_view.page().runJavaScript("window.mshubReloadGraph && window.mshubReloadGraph()")
+
+        handle.signals.finished.connect(ready)
+
     @staticmethod
     def graph_asset_path() -> Path:
         return Path(__file__).resolve().parent.parent / "graph" / "index.html"
@@ -75,11 +97,14 @@ class GraphView(QWidget):
         self.web_view = QWebEngineView(self)
         config_dir = self.facade.config_store.config_dir / "web-profile"
         config_dir.mkdir(parents=True, exist_ok=True)
+        (config_dir / "cache").mkdir(parents=True, exist_ok=True)
         self._profile = QWebEngineProfile("123mshub-native", self)
         self._profile.setPersistentStoragePath(str(config_dir))
+        self._profile.setCachePath(str(config_dir / "cache"))
         self._profile.setPersistentCookiesPolicy(QWebEngineProfile.PersistentCookiesPolicy.ForcePersistentCookies)
         self._profile.setUrlRequestInterceptor(_LocalOnlyInterceptor(self._profile))
-        page = QWebEnginePage(self._profile, self.web_view)
+        page = _GraphPage(self._profile, self.web_view)
+        page.consoleError.connect(lambda message: self.statusMessage.emit(f"图谱脚本错误：{message}"))
         channel = QWebChannel(page)
         channel.registerObject("mshub", self.bridge)
         page.setWebChannel(channel)

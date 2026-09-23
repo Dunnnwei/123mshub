@@ -36,6 +36,9 @@ class GraphBridge(QObject):
 
         self._graph_cache[kinds or "link"] = json.dumps(payload, ensure_ascii=False)
 
+    def invalidate(self) -> None:
+        self._graph_cache.clear()
+
     @Slot(str)
     def openMemory(self, name: str) -> None:
         self.openMemoryRequested.emit(str(name))
