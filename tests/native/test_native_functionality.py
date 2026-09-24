@@ -66,5 +66,5 @@ def test_language_controller_changes_native_chrome(qapp, native_facade: MemoryFa
     window.language.apply("en")
     assert window.nav.item(0).text() == "Memory"
     window.language.apply("zh-CN")
-    assert window.nav.item(0).text() == "记忆库"
+    assert window.nav.item(0).text() == "记忆仓库"
     window.close()

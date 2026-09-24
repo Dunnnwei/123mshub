@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import Qt, QSettings
+from PySide6.QtCore import Qt, QSettings, QTimer
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QMainWindow,
     QStackedWidget,
+    QStyle,
     QVBoxLayout,
     QWidget,
     QToolButton,
@@ -97,20 +98,39 @@ class MainWindow(QMainWindow):
         sidebar_layout.addSpacing(22)
         self.nav = QListWidget()
         self.nav.setObjectName("nav")
-        for label, key in (("记忆库", "memory"), ("记忆图示", "graph"), ("技能库", "skills"), ("安全中心", "security"), ("设置", "settings")):
+        # v1.6.0：导航项改为四字 + 图标（统一用 Qt 标准图标，与文字同色）
+        for label, key, icon_name in (
+            ("记忆仓库", "memory", "SP_DirHomeIcon"),
+            ("记忆图示", "graph", "SP_DriveNetIcon"),
+            ("技能仓库", "skills", "SP_DirLinkIcon"),
+            ("安全中心", "security", "SP_DialogApplyButton"),
+            ("设置选项", "settings", "SP_FileDialogDetailedView"),
+        ):
             row = QListWidgetItem(label)
             row.setData(Qt.ItemDataRole.UserRole, key)
+            icon = self.style().standardIcon(getattr(QStyle.StandardPixmap, icon_name, QStyle.StandardPixmap.SP_FileIcon))
+            row.setIcon(icon)
             self.nav.addItem(row)
         self.nav.currentRowChanged.connect(self._navigate)
         sidebar_layout.addWidget(self.nav, 1)
-        hint = QLabel("数据只保存在本机仓库\n原生线不监听 TCP 端口")
-        hint.setObjectName("muted")
-        hint.setWordWrap(True)
-        sidebar_layout.addWidget(hint)
-        about = QToolButton()
-        about.setText("关于 123 MSHub")
-        about.clicked.connect(lambda: show_about(self))
-        sidebar_layout.addWidget(about)
+        # v1.6.0：后台任务移到导航栏下半部分（原来在底部 dock 太矮看不清）
+        self.job_panel = QFrame()
+        self.job_panel.setObjectName("jobPanel")
+        job_layout = QVBoxLayout(self.job_panel)
+        job_layout.setContentsMargins(0, 12, 0, 0)
+        job_layout.setSpacing(6)
+        job_title = QLabel("后台任务")
+        job_title.setObjectName("eyebrow")
+        job_layout.addWidget(job_title)
+        self.job_table = QTableWidget(0, 3)  # v1.6.0：精简为 3 列（任务/状态/进度），去掉时间和操作列
+        self.job_table.setHorizontalHeaderLabels(["任务", "状态", "进度"])
+        self.job_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.job_table.horizontalHeader().setStretchLastSection(True)
+        self.job_table.verticalHeader().setVisible(False)
+        self.job_table.setMaximumHeight(180)
+        job_layout.addWidget(self.job_table)
+        sidebar_layout.addWidget(self.job_panel)
+        # v1.6.0：删除"数据只保存在本机仓库..."提示，"关于"移到设置页
         outer.addWidget(self.sidebar)
 
         self.pages = QStackedWidget()
@@ -135,18 +155,7 @@ class MainWindow(QMainWindow):
         self.settings_page.importRequested.connect(self.open_import)
         self.language.changed.connect(lambda _mode: (localize(self), self.memory_page.retranslate(), self.skills_page.retranslate(), self.security_page.retranslate()))
         self.jobs.repositoryChanged.connect(self._repository_changed)
-        self._build_job_dock()
-
-    def _build_job_dock(self) -> None:
-        dock = QDockWidget("后台任务", self)
-        dock.setObjectName("jobsDock")
-        dock.setAllowedAreas(Qt.DockWidgetArea.BottomDockWidgetArea)
-        self.job_table = QTableWidget(0, 5)
-        self.job_table.setHorizontalHeaderLabels(["任务", "时间", "状态", "进度", "操作"])
-        self.job_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self.job_table.horizontalHeader().setStretchLastSection(True)
-        dock.setWidget(self.job_table)
-        self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, dock)
+        # v1.6.0：后台任务已移到导航栏下半部分，不再用底部 dock
         self.jobs.changed.connect(self._refresh_jobs)
         self._refresh_jobs()
 
@@ -157,16 +166,10 @@ class MainWindow(QMainWindow):
         self.job_table.setRowCount(len(rows))
         for row, job in enumerate(rows):
             self.job_table.setItem(row, 0, QTableWidgetItem(str(job["label"])))
-            self.job_table.setItem(row, 1, QTableWidgetItem(str(job["created_at"])[5:19].replace("T", " ")))
-            state = {"running": "运行中", "done": "完成", "error": "失败"}.get(job["status"], job["status"])
-            self.job_table.setItem(row, 2, QTableWidgetItem(state))
+            state = {"running": "运行中", "done": "完成", "error": "失败"}.get(job["status"], str(job["status"]))
+            self.job_table.setItem(row, 1, QTableWidgetItem(str(state)))
             progress = "未知" if job["progress"] is None else f'{job["progress"]}%'
-            self.job_table.setItem(row, 3, QTableWidgetItem(f'{progress} · {job["phase"]}'))
-            if job["status"] != "running":
-                button = QToolButton()
-                button.setText("移除")
-                button.clicked.connect(lambda _checked=False, identifier=job["id"]: self.jobs.dismiss(identifier))
-                self.job_table.setCellWidget(row, 4, button)
+            self.job_table.setItem(row, 2, QTableWidgetItem(str(f'{progress} · {job["phase"]}')))
 
     def _repository_changed(self) -> None:
         self.memory_page.refresh()
@@ -208,6 +211,13 @@ class MainWindow(QMainWindow):
         handle = self.runner.submit(self.facade.heal)
         handle.signals.finished.connect(healed)
         handle.signals.failed.connect(failed)
+        # v1.6.0：预热 GraphView，消除首次点击"记忆图示"时的 QWebEngine 冷启动闪屏。
+        # 500ms 后后台静默创建（此时主窗口已显示，用户无感知），点击时立即切换。
+        QTimer.singleShot(500, self._prewarm_graph_page)
+
+    def _prewarm_graph_page(self) -> None:
+        if self.graph_page is None:
+            self._ensure_graph_page()
 
     def _navigate(self, row: int) -> None:
         if row < 0:

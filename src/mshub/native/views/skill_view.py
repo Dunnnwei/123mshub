@@ -46,7 +46,7 @@ class SkillsPage(QWidget):
         root = QVBoxLayout(self); root.setContentsMargins(30, 26, 30, 24); root.setSpacing(12)
         head = QHBoxLayout(); labels = QVBoxLayout()
         eyebrow = QLabel("SKILL LIBRARY"); eyebrow.setObjectName("eyebrow")
-        title = QLabel("技能库"); title.setObjectName("title")
+        title = QLabel("技能仓库"); title.setObjectName("title")
         sub = QLabel("复用已有仓库能力；业务安装、更新、安全与对账沿用现有服务层。"); sub.setObjectName("muted")
         labels.addWidget(eyebrow); labels.addWidget(title); labels.addWidget(sub); head.addLayout(labels); head.addStretch()
         inject = QPushButton("复制注入提示词"); inject.setObjectName("primary"); inject.clicked.connect(self.copy_prompt); head.addWidget(inject)
@@ -60,7 +60,11 @@ class SkillsPage(QWidget):
         refresh = QPushButton("刷新"); refresh.clicked.connect(self.refresh); filters.addWidget(refresh)
         root.addLayout(filters)
         splitter = QSplitter(Qt.Orientation.Horizontal)
-        self.table = _SkillTable(0, 7); self.table.setHorizontalHeaderLabels(["选", "名称", "来源", "中文备注", "安全", "标签", "更新时间"]); self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch); self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows); self.table.itemSelectionChanged.connect(self._selection_changed); splitter.addWidget(self.table)
+        self.table = _SkillTable(0, 7); self.table.setHorizontalHeaderLabels(["选", "名称", "来源", "中文备注", "安全", "标签", "更新时间"]); self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch); self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows); self.table.itemSelectionChanged.connect(self._selection_changed)
+        # v1.6.0：双击行弹出详情窗口（和记忆库的双击编辑逻辑一致）
+        self.table.itemDoubleClicked.connect(lambda _item: self.show_detail_dialog())
+        splitter.addWidget(self.table)
+        # v1.6.0：详情面板默认不显示（改为弹窗），保留 splitter 结构便于回退
         detail = QGroupBox("技能详情"); detail_layout = QVBoxLayout(detail)
         self.detail_title = QLabel("选择一项"); self.detail_title.setStyleSheet("font-size:18px;font-weight:650")
         self.detail_text = QTextBrowser(); self.detail_text.setOpenExternalLinks(False); self.detail_text.setFont(QFont("Cascadia Mono", 9))
@@ -74,7 +78,8 @@ class SkillsPage(QWidget):
         self.edit_button = QPushButton("编辑信息"); self.edit_button.clicked.connect(self.edit_metadata); action.addWidget(self.edit_button)
         detail_layout.addLayout(action)
         prompt = QHBoxLayout(); self.prompt_button = QPushButton("复制指定技能提示词"); self.prompt_button.clicked.connect(self.copy_skill_prompt); prompt.addWidget(self.prompt_button); self.install_prompt_button = QPushButton("复制安装提示词"); self.install_prompt_button.clicked.connect(self.copy_install_prompt); prompt.addWidget(self.install_prompt_button); detail_layout.addLayout(prompt)
-        splitter.addWidget(detail); splitter.setSizes([720, 420]); self.content_splitter = splitter; empty = QFrame(objectName="emptyCard"); empty_layout = QVBoxLayout(empty); empty_layout.addWidget(QLabel("还没有技能或程序", objectName="title"), alignment=Qt.AlignmentFlag.AlignHCenter); empty_layout.addWidget(QLabel("从 GitHub URL、owner/repo 或本地目录添加第一项资产。", objectName="muted"), alignment=Qt.AlignmentFlag.AlignHCenter); empty_add = QPushButton("添加技能 / 程序"); empty_add.setObjectName("primary"); empty_add.clicked.connect(self.open_add); empty_layout.addWidget(empty_add, alignment=Qt.AlignmentFlag.AlignHCenter); self.empty_card = empty; root.addWidget(empty); root.addWidget(splitter, 1); empty.hide()
+        splitter.addWidget(detail); splitter.setSizes([720, 0]); self.content_splitter = splitter  # v1.6.0：详情面板默认宽度 0（隐藏）
+        empty = QFrame(objectName="emptyCard"); empty_layout = QVBoxLayout(empty); empty_layout.addWidget(QLabel("还没有技能或程序", objectName="title"), alignment=Qt.AlignmentFlag.AlignHCenter); empty_layout.addWidget(QLabel("从 GitHub URL、owner/repo 或本地目录添加第一项资产。", objectName="muted"), alignment=Qt.AlignmentFlag.AlignHCenter); empty_add = QPushButton("添加技能 / 程序"); empty_add.setObjectName("primary"); empty_add.clicked.connect(self.open_add); empty_layout.addWidget(empty_add, alignment=Qt.AlignmentFlag.AlignHCenter); self.empty_card = empty; root.addWidget(empty); root.addWidget(splitter, 1); empty.hide()
         batch = QHBoxLayout(); batch.addWidget(QLabel("已勾选条目：")); self.batch_check = QPushButton("批量离线检查"); self.batch_check.clicked.connect(lambda: self.batch_scan("offline")); batch.addWidget(self.batch_check); self.batch_ai_check = QPushButton("批量 AI 检查"); self.batch_ai_check.clicked.connect(lambda: self.batch_scan("ai")); batch.addWidget(self.batch_ai_check); self.batch_update = QPushButton("批量更新 GitHub"); self.batch_update.clicked.connect(self.batch_update_github); batch.addWidget(self.batch_update); self.batch_trust = QPushButton("批量信任"); self.batch_trust.clicked.connect(self.batch_trust_items); batch.addWidget(self.batch_trust); self.batch_translate = QPushButton("批量中文翻译"); self.batch_translate.clicked.connect(self.batch_translate_items); batch.addWidget(self.batch_translate); batch.addStretch(); root.addLayout(batch)
         self.status = QLabel(""); self.status.setObjectName("status"); root.addWidget(self.status)
         self._timer = QTimer(self); self._timer.setSingleShot(True); self._timer.setInterval(300); self._timer.timeout.connect(self._refresh_now); self.metadata_dialog = None
@@ -131,6 +136,37 @@ class SkillsPage(QWidget):
 
     def _selected(self):
         return self.current or {}
+
+    def show_detail_dialog(self):
+        """v1.6.0：双击行弹出详情窗口（和记忆库的双击编辑逻辑一致）"""
+        item = self._selected()
+        if not item:
+            return
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f"技能详情 - {item.get('name')}")
+        dialog.setModal(False)
+        dialog.resize(640, 480)
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(20, 18, 20, 18)
+        title = QLabel(str(item.get("name") or ""))
+        title.setStyleSheet("font-size:18px;font-weight:650")
+        layout.addWidget(title)
+        text = QTextBrowser()
+        text.setOpenExternalLinks(False)
+        text.setFont(QFont("Cascadia Mono", 9))
+        text.setPlainText(self._format_detail(item))
+        layout.addWidget(text, 1)
+        # 操作按钮（复用现有逻辑）
+        actions = QHBoxLayout()
+        check_btn = QPushButton("离线检查"); check_btn.clicked.connect(lambda: (self.scan("offline"), dialog.close())); actions.addWidget(check_btn)
+        ai_check_btn = QPushButton("AI 检查"); ai_check_btn.clicked.connect(lambda: (self.scan("ai"), dialog.close())); actions.addWidget(ai_check_btn)
+        trust_btn = QPushButton("信任放行"); trust_btn.clicked.connect(lambda: (self.trust(), dialog.close())); actions.addWidget(trust_btn)
+        update_btn = QPushButton("更新"); update_btn.clicked.connect(lambda: (self.update(), dialog.close())); update_btn.setEnabled(item.get("provider") != "local"); actions.addWidget(update_btn)
+        delete_btn = QPushButton("软删除"); delete_btn.setObjectName("danger"); delete_btn.clicked.connect(lambda: (self.delete(), dialog.close())); actions.addWidget(delete_btn)
+        edit_btn = QPushButton("编辑信息"); edit_btn.clicked.connect(lambda: (self.edit_metadata(), dialog.close())); actions.addWidget(edit_btn)
+        layout.addLayout(actions)
+        close_btn = QPushButton("关闭"); close_btn.clicked.connect(dialog.close); layout.addWidget(close_btn)
+        dialog.show()
 
     def scan(self, route):
         item = self._selected();
@@ -296,7 +332,12 @@ class SecurityPage(QWidget):
         root = QVBoxLayout(self); root.setContentsMargins(30, 26, 30, 24); root.setSpacing(14)
         eyebrow = QLabel("SAFETY CENTER"); eyebrow.setObjectName("eyebrow"); title = QLabel("安全中心"); title.setObjectName("title"); note = QLabel("待确认条目可路线 A 离线检查、路线 B AI 检查，人工信任会保留记录。"); note.setObjectName("muted"); root.addWidget(eyebrow); root.addWidget(title); root.addWidget(note)
         bar = QHBoxLayout(); self.route = QComboBox(); self.route.addItem("路线 A · 离线", "offline"); self.route.addItem("路线 B · AI", "ai"); bar.addWidget(self.route); self.batch = QPushButton("批量检查待确认"); self.batch.clicked.connect(self.batch_scan); bar.addWidget(self.batch); refresh = QPushButton("刷新"); refresh.clicked.connect(self.refresh); bar.addWidget(refresh); bar.addStretch(); root.addLayout(bar)
-        self.table = QTableWidget(0, 5); self.table.setHorizontalHeaderLabels(["名称", "来源", "状态", "最近检查", "摘要"]); self.table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch); self.table.itemSelectionChanged.connect(self._show_report); root.addWidget(self.table, 1); self.report = QPlainTextEdit(); self.report.setReadOnly(True); self.report.setPlaceholderText("选择条目查看检查报告"); root.addWidget(self.report, 1); self.status = QLabel(""); self.status.setObjectName("status"); root.addWidget(self.status)
+        self.table = QTableWidget(0, 5); self.table.setHorizontalHeaderLabels(["名称", "来源", "状态", "最近检查", "摘要"]); self.table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
+        # v1.6.0：双击行弹出检查报告窗口（不再用底部"选择条目查看检查报告"面板）
+        self.table.itemDoubleClicked.connect(lambda _item: self.show_report_dialog())
+        root.addWidget(self.table, 1)
+        # v1.6.0：报告面板默认隐藏（改为双击弹窗），保留 widget 便于回退
+        self.report = QPlainTextEdit(); self.report.setReadOnly(True); self.report.setPlaceholderText("选择条目查看检查报告"); self.report.setVisible(False); root.addWidget(self.report, 0); self.status = QLabel(""); self.status.setObjectName("status"); root.addWidget(self.status)
         self.refresh()
 
     def refresh(self):
@@ -316,6 +357,33 @@ class SecurityPage(QWidget):
         findings = self.items[selected[0].row()].get("security_findings") or []
         import json
         self.report.setPlainText(json.dumps(findings, ensure_ascii=False, indent=2, default=str) if findings else "暂无命中项；状态由最近一次路线检查或人工放行记录提供。")
+
+    def show_report_dialog(self):
+        """v1.6.0：双击行弹出检查报告窗口"""
+        selected = self.table.selectionModel().selectedRows()
+        if not selected:
+            return
+        item = self.items[selected[0].row()]
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f"检查报告 - {item.get('name')}")
+        dialog.setModal(False)
+        dialog.resize(680, 520)
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(20, 18, 20, 18)
+        title = QLabel(str(item.get("name") or ""))
+        title.setStyleSheet("font-size:18px;font-weight:650")
+        layout.addWidget(title)
+        meta = QLabel(f"来源：{item.get('provider', 'unknown')} · 状态：{item.get('security_status', 'unchecked')} · 最近检查：{str(item.get('updated_at', ''))[:19]}")
+        meta.setObjectName("muted")
+        layout.addWidget(meta)
+        report_text = QPlainTextEdit()
+        report_text.setReadOnly(True)
+        findings = item.get("security_findings") or []
+        import json
+        report_text.setPlainText(json.dumps(findings, ensure_ascii=False, indent=2, default=str) if findings else "暂无命中项；状态由最近一次路线检查或人工放行记录提供。")
+        layout.addWidget(report_text, 1)
+        close_btn = QPushButton("关闭"); close_btn.clicked.connect(dialog.close); layout.addWidget(close_btn)
+        dialog.show()
 
     def batch_scan(self):
         route = self.route.currentData(); pending = [i for i in self.items if i.get("security_status") in {"unchecked", "warning", "error"}]

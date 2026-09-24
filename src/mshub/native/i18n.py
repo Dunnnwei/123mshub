@@ -4,8 +4,8 @@ from PySide6.QtWidgets import (QApplication, QAbstractButton, QComboBox, QDockWi
     QGroupBox, QLabel, QLineEdit, QListWidget, QPlainTextEdit, QPushButton, QTabWidget, QTableWidget, QWidget)
 
 EN = {
-    "记忆库": "Memory", "记忆图示": "Memory graph", "技能库": "Skills",
-    "安全中心": "Safety", "设置": "Settings", "本地共享记忆与技能": "Shared memory & skills",
+    "记忆仓库": "Memory", "记忆图示": "Memory graph", "技能仓库": "Skills",
+    "安全中心": "Safety", "设置选项": "Settings", "本地共享记忆与技能": "Shared memory & skills",
     "复制注入提示词": "Copy connection prompt", "准备就绪": "Ready", "后台任务": "Background tasks", "编辑选中": "Edit selected", "关于 123 MSHub": "About 123 MSHub", "记忆编辑": "Memory editor",
     "选择一条记忆": "Select a memory", "新建": "New", "新建记忆": "New memory",
     "标题": "Title", "条目名": "Entry name", "一句话描述": "Description", "描述": "Description",

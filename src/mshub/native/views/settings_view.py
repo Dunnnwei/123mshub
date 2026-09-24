@@ -32,8 +32,15 @@ class SettingsPage(QWidget):
         root = QVBoxLayout(self)
         root.setContentsMargins(30, 26, 30, 24)
         root.addWidget(QLabel("LOCAL CONFIGURATION", objectName="eyebrow"))
-        root.addWidget(QLabel("设置", objectName="title"))
+        root.addWidget(QLabel("设置选项", objectName="title"))
         root.addWidget(QLabel("配置目录固定为 %APPDATA%\\mshub；修改草稿不会立即生效。", objectName="muted"))
+        # v1.6.0："关于 123 MSHub"从导航栏移到设置页
+        about_row = QHBoxLayout()
+        about_row.addStretch()
+        about_btn = QPushButton("关于 123 MSHub")
+        about_btn.clicked.connect(lambda: self._show_about())
+        about_row.addWidget(about_btn)
+        root.addLayout(about_row)
         self.tabs = QTabWidget()
         root.addWidget(self.tabs, 1)
         general = QWidget()
@@ -131,6 +138,11 @@ class SettingsPage(QWidget):
         actions.addWidget(self.save_button)
         root.addLayout(actions)
         root.addWidget(QLabel(f"123 MSHub Native {NATIVE_VERSION}", objectName="muted"))
+
+    def _show_about(self):
+        """v1.6.0：显示"关于"对话框（从导航栏移到设置页）"""
+        from ..branding import show_about
+        show_about(self)
 
     def load_config(self):
         self.original = self.facade.config()

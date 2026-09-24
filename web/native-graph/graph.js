@@ -72,7 +72,20 @@ function nodeMatch(data) { const q = query.trim().toLocaleLowerCase(); if (!q) r
 // 漂移未接管时（大图/关开关）兜底用静态公式，否则尊重已写入的呼吸 size。
 function nodeReducer(node, data) { const focused = !hovered || node === hovered || hoveredNeighbors.has(node); const match = nodeMatch(data); const dimmed = !focused || !match; const degree = graph?.degree(node) || 0; const staticSize = (4 + Math.sqrt(degree) * 2) * Number(graphSettings.nodeScale || 1); const size = floatBase.has(node) && Number.isFinite(data.size) ? data.size : staticSize; return { ...data, size, color: dimmed ? theme.dimNode : data.color, label: dimmed ? null : data.label, forceLabel: node === hovered } }
 function edgeReducer(edge, data) { const [source, target] = graph.extremities(edge); const linked = hovered && (source === hovered || target === hovered); const color = linked ? mix(graph.getNodeAttributes(hovered)?.color || '#A6A6A6', .6, theme.background) : (hovered ? theme.dimEdge : (data.kind === '共同标签' ? mix('#B4B4B4', .3, theme.background) : theme.focusEdge)); return { ...data, color, size: linked ? 1.6 : 1 } }
-function drawLabel(context, data, settings) { if (!data.label) return; context.save(); context.font = `${settings.labelWeight} ${settings.labelSize}px ${settings.labelFont}`; context.lineJoin = 'round'; context.lineWidth = 4; context.strokeStyle = theme.background; context.strokeText(data.label, data.x + data.size + 3, data.y + settings.labelSize / 3); drawDiscNodeLabel(context, data, settings); context.restore() }
+// v1.6.0：悬停标签去掉背景描边（暗色模式下浅色描边导致看不清），改为放大加粗
+// 注意：sigma 的 drawLabel data 没有 node 字段，用 data.forceLabel 判断（nodeReducer 里已设置）
+function drawLabel(context, data, settings) {
+  if (!data.label) return
+  context.save()
+  const isHovered = data.forceLabel === true
+  const size = isHovered ? settings.labelSize * 1.3 : settings.labelSize
+  const weight = isHovered ? '700' : settings.labelWeight
+  context.font = `${weight} ${size}px ${settings.labelFont}`
+  // 去掉 strokeText 描边（那个"背景条"在暗色模式下是浅色导致标签同色看不见）
+  context.fillStyle = isHovered ? theme.label : (data.color || settings.labelColor.color)
+  context.fillText(data.label, data.x + data.size + 3, data.y + size / 3)
+  context.restore()
+}
 function edgeKey(source, target, kind) { const pair = [source, target].sort(); return `${kind}:${pair[0]}::${pair[1]}` }
 function syncGraph(data) { graph = new Graph({ type: 'undirected', multi: true }); const selected = graphSettings.selectedTypes || {}; data.nodes.filter((node) => selected[node.type] !== false).forEach((node, index) => { const item = normalize(node, index); graph.addNode(item.id, item) }); const distance = Number(graphSettings.forces?.distance || 80); const distanceMultiplier = 2 - (distance / 160) * 1.5; data.edges.forEach((edge) => { const source = String(edge.source); const target = String(edge.target); if (!graph.hasNode(source) || !graph.hasNode(target) || source === target) return; const kind = edge.kind || '双链'; const key = edgeKey(source, target, kind); if (!graph.hasEdge(key)) { const baseWeight = kind === '共同标签' ? .5 : 2; graph.addEdgeWithKey(key, source, target, { kind, baseWeight, weight: baseWeight * distanceMultiplier, size: 1 }) } }); if (graphSettings.showOrphans === false) graph.forEachNode((id) => { if (graph.degree(id) === 0) graph.dropNode(id) }) }
 function applyForceSettings() { if (!graph) return; const distance = Number(graphSettings.forces?.distance || 80); const distanceMultiplier = 2 - (distance / 160) * 1.5; graph.forEachEdge((edge) => { const data = graph.getEdgeAttributes(edge); graph.setEdgeAttribute(edge, 'weight', Number(data.baseWeight || data.weight || 1) * distanceMultiplier) }) }
@@ -213,11 +226,25 @@ function syncFloat() {
   if (!enabled && floatFrame) stopFloat()
 }
 function stopFloat() { if (floatFrame) { cancelAnimationFrame(floatFrame); floatFrame = 0 }; floatLastTick = 0 }
-function pauseFloat() { interactionDepth += 1; lastInteraction = performance.now(); if (floatResumeTimer) clearTimeout(floatResumeTimer); floatResumeTimer = setTimeout(() => { interactionDepth = Math.max(0, interactionDepth - 1); }, 140) }
+function pauseFloat() { interactionDepth += 1; lastInteraction = performance.now() }
 function resumeFloat() { interactionDepth = Math.max(0, interactionDepth - 1); lastInteraction = performance.now(); updateFloatScale() }
 window.mshubReloadGraph = () => load()
-// v1.5.0 诊断接口：smoke-float 用它分辨"数据没到页面"与"渲染为 0"。
+// v1.5.1 诊断接口：smoke-float 用它分辨"数据没到页面"与"渲染为 0"。
 window.mshubDiagCount = () => JSON.stringify({ rawNodes: raw.nodes.length, rawEdges: raw.edges.length, graphOrder: graph?.order ?? -1, graphSize: graph?.size ?? -1, driftTime: Math.round(floatTime), floatBaseSize: floatBase.size })
+// v1.6.0 呼吸诊断：确认 rAF 循环是否活着、为什么没推进 floatTime
+window.mshubDiagFloat = () => JSON.stringify({
+  rafActive: !!floatFrame,
+  floatTime: Math.round(floatTime),
+  floatLastTick: Math.round(floatLastTick),
+  interactionDepth,
+  lastInteraction: Math.round(lastInteraction),
+  now: Math.round(performance.now()),
+  sinceInteraction: Math.round(performance.now() - lastInteraction),
+  floatBaseSize: floatBase.size,
+  graphOrder: graph?.order ?? -1,
+  reduceMotion,
+  motionEnabled: readMotionSetting(),
+})
 window.mshubDiagBridge = (cb) => { try { bridge?.getGraph('link', (p) => { try { const d = JSON.parse(p); cb(JSON.stringify({ payloadNodes: d.nodes?.length ?? -1, payloadLen: p.length })) } catch (e) { cb('parse-err:' + e) } }) } catch (e) { cb('call-err:' + e) } }
 $('#query').addEventListener('input', (event) => { query = event.target.value; renderer?.refresh() })
 $('#clear').addEventListener('click', () => { $('#query').value = ''; query = ''; renderer?.refresh() })

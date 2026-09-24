@@ -28,7 +28,7 @@ def graph_palette(mode):
 def stylesheet(mode):
     p = PALETTES[mode]
     return f"""
-QWidget {{ background: {p['bg']}; color: {p['ink']}; font-family: 'Segoe UI', 'Microsoft YaHei'; font-size: 14px; widget-animation-duration: {DURATIONS['hover']}; }}
+QWidget {{ background: {p['bg']}; color: {p['ink']}; font-family: 'DreamHanSansCN-W15', 'Segoe UI', 'Microsoft YaHei'; font-size: 14px; widget-animation-duration: {DURATIONS['hover']}; }}
 QMainWindow, QDialog {{ background: {p['bg']}; }}
 QLabel, QCheckBox, QRadioButton {{ background: transparent; }}
 QFrame#sidebar {{ background: {p['sidebar']}; border-right: 1px solid {p['line']}; }}
@@ -61,15 +61,22 @@ QListWidget {{ background: transparent; border: none; outline: none; padding: 4p
 QListWidget::item {{ padding: 10px; border-radius: 10px; margin: 3px 0; }}
 QListWidget::item:hover {{ background: {p['surface']}; }}
 QListWidget::item:selected {{ background: {p['selection']}; color: {p['ink']}; }}
-QListWidget#memoryList::item {{ background: {p['surface']}; border: 1px solid {p['line']}; border-radius: 16px; }}
+/* v1.6.0：导航栏加大加粗 + 图标对齐 + W20 字重 */
+QListWidget#nav::item {{ padding: 12px 14px; font-family: 'DreamHanSansCN-W20', 'Segoe UI', 'Microsoft YaHei'; font-size: 15px; font-weight: 600; }}
+QListWidget#nav::item:selected {{ background: {p['accent']}; color: #FFFFFF; }}
+QListWidget#memoryList::item {{ background: {p['surface']}; border: 1px solid {p['line']}; border-radius: 10px; padding: 6px 10px; margin: 2px 0; }}
 QListWidget#memoryList::item:selected {{ background: {p['inset']}; border-color: {p['accent']}; }}
+/* v1.6.0：侧栏后台任务面板 */
+QFrame#jobPanel {{ background: transparent; border-top: 1px solid {p['line']}; }}
+QFrame#jobPanel QLabel#eyebrow {{ color: {p['muted']}; font-size: 11px; font-weight: 700; }}
 QTableView {{ background: {p['surface']}; alternate-background-color: {p['inset']}; gridline-color: {p['line']}; border: 1px solid {p['line']}; border-radius: 10px; selection-background-color: {p['selection']}; selection-color: {p['ink']}; }}
-QTableView::item {{ padding: 7px; }}
-QHeaderView::section {{ background: {p['raised']}; color: {p['muted']}; padding: 8px; border: none; border-bottom: 1px solid {p['line']}; }}
+/* v1.6.0：技能库/安全中心加行高（原来压得太紧难以操作） */
+QTableView::item {{ padding: 12px 10px; }}
+QHeaderView::section {{ background: {p['raised']}; color: {p['muted']}; padding: 10px; border: none; border-bottom: 1px solid {p['line']}; }}
 QLabel#eyebrow {{ color: {p['accent']}; font-size: 11px; font-weight: 700; }}
 QLabel#muted, QLabel#status {{ color: {p['muted']}; }}
 QLabel#faint {{ color: {p['faint']}; }}
-QLabel#title {{ color: #0156FC; font-family: 'Noto Serif SC', 'Source Han Serif SC', 'SimSun'; font-size: 28px; font-weight: 700; }}
+QLabel#title {{ color: #0156FC; font-family: 'DreamHanSansCN-W27', 'Noto Serif SC', 'Source Han Serif SC', 'SimSun'; font-size: 28px; font-weight: 700; }}
 QTabWidget::pane {{ border: 1px solid {p['line']}; border-radius: 16px; padding: 16px; background: {p['surface']}; }}
 QTabBar::tab {{ padding: 10px 18px; border-radius: 10px; color: {p['muted']}; background: {p['sidebar']}; }}
 QTabBar::tab:selected {{ color: {p['accent']}; background: {p['surface']}; }}
