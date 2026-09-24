@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>记忆点呼吸效果预览</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #0a0f1d; overflow: hidden; font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif; }
+  #info { position: fixed; top: 16px; left: 20px; color: #d8dce8; font-size: 14px; z-index: 2; }
+  #info small { color: #9aa3b8; display: block; margin-top: 4px; }
+</style>
+</head>
+<body>
+<div id="info">记忆点呼吸预览 — 每个点大小收放 + 位置起伏，节奏错开<small>这是独立验证页，确认效果后再集成进 123mshub</small></div>
+<canvas id="c"></canvas>
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+function resize() { canvas.width = innerWidth; canvas.height = innerHeight; }
+resize(); addEventListener('resize', resize);
+
+// 与 123mshub graph.js 完全一致的呼吸曲线与播种逻辑
+function stableHash(v) { let h = 2166136261; for (const c of String(v)) { h ^= c.codePointAt(0); h = Math.imul(h, 16777619); } return h >>> 0; }
+function breathWave(t) { const p = t - Math.floor(t); const u = p < 0.4 ? p / 0.4 : 1 - (p - 0.4) / 0.6; return u * u * (3 - 2 * u); }
+function seedFor(id) {
+  const h1 = stableHash(id + ':x'), h2 = stableHash(id + ':y'), h3 = stableHash(id + ':a'), h4 = stableHash(id + ':s');
+  return {
+    phaseX: (h1 % 6283) / 1000, phaseY: (h2 % 6283) / 1000, phaseB: ((h4 >>> 4) % 6283) / 1000,
+    periodX: 3600 + (h1 % 3000), periodY: 4100 + ((h2 >>> 8) % 2900), periodB: 4200 + (h3 % 2600),
+    amplitudePx: 8 + (h3 % 100) / 100 * 6, sizeAmp: 0.22 + (h4 % 100) / 100 * 0.16,
+  };
+}
+
+// 模拟 58 个记忆点，撒成几个群落（贴近真实图谱分布）
+const colors = { user: '#A78BFA', project: '#6EA8FE', reference: '#77C5D5', feedback: '#E3A85B' };
+const typeKeys = Object.keys(colors);
+const nodes = [];
+const clusters = [[0.28, 0.35], [0.62, 0.3], [0.5, 0.62], [0.78, 0.6], [0.3, 0.72]];
+for (let i = 0; i < 58; i++) {
+  const [cx, cy] = clusters[i % clusters.length];
+  const id = 'memory-' + i;
+  nodes.push({
+    id,
+    baseX: (cx + (stableHash(id + 'cx') / 0xffffffff - 0.5) * 0.22) * innerWidth,
+    baseY: (cy + (stableHash(id + 'cy') / 0xffffffff - 0.5) * 0.22) * innerHeight,
+    baseSize: 6 + (stableHash(id + 'sz') % 100) / 100 * 8,
+    color: colors[typeKeys[stableHash(id + 't') % typeKeys.length]],
+    seed: seedFor(id),
+  });
+}
+// 随机连一些边（同一群落的点优先）
+const edges = [];
+for (let i = 0; i < 70; i++) {
+  const a = nodes[Math.floor(Math.random() * nodes.length)];
+  const b = nodes[Math.floor(Math.random() * nodes.length)];
+  if (a !== b) edges.push([a, b]);
+}
+
+let time = 0, last = 0;
+function frame(now) {
+  requestAnimationFrame(frame);
+  if (!last) last = now;
+  time += Math.min(64, now - last); last = now;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  // 先算所有节点当前帧位置（供边引用）
+  for (const n of nodes) {
+    const s = n.seed;
+    n.x = n.baseX + Math.sin(time / s.periodX + s.phaseX) * s.amplitudePx;
+    n.y = n.baseY + Math.cos(time / s.periodY + s.phaseY) * s.amplitudePx;
+    const breath = breathWave(time / s.periodB + s.phaseB);
+    n.size = n.baseSize * (1 - s.sizeAmp + s.sizeAmp * 2 * breath);
+  }
+  // 边
+  ctx.strokeStyle = 'rgba(140,150,180,0.25)'; ctx.lineWidth = 1;
+  for (const [a, b] of edges) { ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); }
+  // 节点（带呼吸光晕）
+  for (const n of nodes) {
+    ctx.beginPath(); ctx.arc(n.x, n.y, n.size, 0, Math.PI * 2);
+    ctx.fillStyle = n.color; ctx.fill();
+    // 呼吸时光晕随大小微亮
+    const glow = 0.12 + (n.size / n.baseSize - 1 + n.seed.sizeAmp) * 0.3;
+    ctx.beginPath(); ctx.arc(n.x, n.y, n.size * 1.9, 0, Math.PI * 2);
+    ctx.fillStyle = n.color + Math.round(Math.min(0.35, glow) * 255).toString(16).padStart(2, '0'); ctx.fill();
+  }
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

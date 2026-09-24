@@ -68,7 +68,9 @@ function normalize(node, index) { const id = String(node.id || node.name || `mem
 function nodeMatch(data) { const q = query.trim().toLocaleLowerCase(); if (!q) return true; return [data.id, data.title, data.source, ...(data.tags || [])].some((value) => String(value || '').toLocaleLowerCase().includes(q)) }
 // v1.5.0：reducer 不再掺漂浮偏移（sigma v3 的 reducer 输出不进 WebGL 缓冲），
 // 漂浮由 floatTick 直接写 graphology 坐标实现，reducer 只管渲染态。
-function nodeReducer(node, data) { const focused = !hovered || node === hovered || hoveredNeighbors.has(node); const match = nodeMatch(data); const dimmed = !focused || !match; const degree = graph?.degree(node) || 0; return { ...data, size: (4 + Math.sqrt(degree) * 2) * Number(graphSettings.nodeScale || 1), color: dimmed ? theme.dimNode : data.color, label: dimmed ? null : data.label, forceLabel: node === hovered } }
+// size 同理：呼吸引擎已把收放值写进 graphology 的 size 属性，reducer 只在
+// 漂移未接管时（大图/关开关）兜底用静态公式，否则尊重已写入的呼吸 size。
+function nodeReducer(node, data) { const focused = !hovered || node === hovered || hoveredNeighbors.has(node); const match = nodeMatch(data); const dimmed = !focused || !match; const degree = graph?.degree(node) || 0; const staticSize = (4 + Math.sqrt(degree) * 2) * Number(graphSettings.nodeScale || 1); const size = floatBase.has(node) && Number.isFinite(data.size) ? data.size : staticSize; return { ...data, size, color: dimmed ? theme.dimNode : data.color, label: dimmed ? null : data.label, forceLabel: node === hovered } }
 function edgeReducer(edge, data) { const [source, target] = graph.extremities(edge); const linked = hovered && (source === hovered || target === hovered); const color = linked ? mix(graph.getNodeAttributes(hovered)?.color || '#A6A6A6', .6, theme.background) : (hovered ? theme.dimEdge : (data.kind === '共同标签' ? mix('#B4B4B4', .3, theme.background) : theme.focusEdge)); return { ...data, color, size: linked ? 1.6 : 1 } }
 function drawLabel(context, data, settings) { if (!data.label) return; context.save(); context.font = `${settings.labelWeight} ${settings.labelSize}px ${settings.labelFont}`; context.lineJoin = 'round'; context.lineWidth = 4; context.strokeStyle = theme.background; context.strokeText(data.label, data.x + data.size + 3, data.y + settings.labelSize / 3); drawDiscNodeLabel(context, data, settings); context.restore() }
 function edgeKey(source, target, kind) { const pair = [source, target].sort(); return `${kind}:${pair[0]}::${pair[1]}` }
@@ -122,23 +124,38 @@ function load() { if (!bridge) return; message.textContent = '正在读取记忆
 window.mshubSetTheme = (mode) => { const value = mode === 'dark' ? 'dark' : 'light'; document.documentElement.dataset.theme = value; document.body.dataset.theme = value; refreshTheme() }
 window.mshubSetPalette = (payload) => { try { paletteFromBridge = typeof payload === 'string' ? JSON.parse(payload) : payload; window.mshubSetTheme(paletteFromBridge.theme); } catch {} }
 window.mshubSetGraphSettings = (payload) => { try { graphSettings = mergeSettings(typeof payload === 'string' ? JSON.parse(payload) : payload); saveSettings(); load() } catch {} }
-// ---- v1.5.0 漂浮引擎 ----------------------------------------------------
-// 每节点按 id 播种：相位错开、周期 3.6~7s、屏幕幅度 2.6~4.6px。
-// 基准位 = FA2 收敛/拖拽后的 graphology 坐标（floatBase 快照）；每帧写
-// base + sin/cos 偏移。只改显示层坐标，不回写 baseX/baseY（那是 FA2 的
-// 语义位，reheat 仍从真实位置出发）。
+// ---- v1.5.0 呼吸引擎 ----------------------------------------------------
+// 目标观感：每个记忆点像呼吸灯——大小一收一放 + 位置小幅起伏，节奏错开。
+// 双通道都走 rAF 直写 graphology 坐标 + size（v1.4.2 的 reducer 偏移不上屏，
+// 详见 RELEASE_NOTES）。基准位 = FA2 收敛/拖拽后的坐标（floatBase 快照）。
+// 呼吸曲线用非对称波形（吸快呼慢、末端微顿），比等速 sin 更像"呼吸"。
+function breathWave(t) {
+  // t ∈ [0,1) 一个呼吸周期。前 40% 吸气（快）、后 60% 呼气（慢+末端停顿）。
+  // 输出 [0,1] 平滑曲线，两端导数≈0（无顿挫）。
+  const p = t - Math.floor(t)
+  const u = p < 0.4 ? p / 0.4 : 1 - (p - 0.4) / 0.6
+  return u * u * (3 - 2 * u)  // smoothstep
+}
 function floatSeedFor(nodeId) {
   let seed = floatSeeds.get(nodeId)
   if (!seed) {
     const h1 = stableHash(`${nodeId}:x`)
     const h2 = stableHash(`${nodeId}:y`)
     const h3 = stableHash(`${nodeId}:a`)
+    const h4 = stableHash(`${nodeId}:s`)
     seed = {
       phaseX: (h1 % 6283) / 1000,
       phaseY: (h2 % 6283) / 1000,
+      // 呼吸相位（大小收放的起始点），按 id 错开
+      phaseB: ((h4 >>> 4) % 6283) / 1000,
       periodX: 3600 + (h1 % 3000),
       periodY: 4100 + ((h2 >>> 8) % 2900),
-      amplitudePx: 2.6 + (h3 % 100) / 100 * 2.0,
+      // 呼吸周期 4.2~6.8s——接近人类静息呼吸（12~14 次/分）的放缓版
+      periodB: 4200 + (h3 % 2600),
+      // 位置起伏幅度 8~14 屏幕像素——肉眼明确可感的漂浮感
+      amplitudePx: 8 + (h3 % 100) / 100 * 6,
+      // 大小呼吸幅度：半径收放 ±22%~38%——呼吸灯式的一收一放，主通道
+      sizeAmp: 0.22 + (h4 % 100) / 100 * 0.16,
     }
     floatSeeds.set(nodeId, seed)
   }
@@ -162,14 +179,23 @@ function updateFloatScale() {
 }
 function applyFloatFrame() {
   if (!graph) return
-  const amplitude = floatGraphPerPx
+  const perPx = floatGraphPerPx
+  const nodeScale = Number(graphSettings.nodeScale || 1)
   graph.forEachNode((id, attrs) => {
     const base = floatBase.get(id) || attrs
     const seed = floatSeedFor(id)
-    const x = base.x + Math.sin(floatTime / seed.periodX + seed.phaseX) * seed.amplitudePx * amplitude
-    const y = base.y + Math.cos(floatTime / seed.periodY + seed.phaseY) * seed.amplitudePx * amplitude
+    // 位置通道：x/y 各自独立的缓慢起伏
+    const x = base.x + Math.sin(floatTime / seed.periodX + seed.phaseX) * seed.amplitudePx * perPx
+    const y = base.y + Math.cos(floatTime / seed.periodY + seed.phaseY) * seed.amplitudePx * perPx
+    // 大小通道：呼吸波驱动半径收放。size 基数与 nodeReducer 一致
+    // （4 + sqrt(degree)*2），乘以 nodeScale 与 (1 ± sizeAmp·breath)。
+    const degree = graph.degree(id)
+    const baseSize = (4 + Math.sqrt(degree) * 2) * nodeScale
+    const breath = breathWave(floatTime / seed.periodB + seed.phaseB)
+    const size = baseSize * (1 - seed.sizeAmp + seed.sizeAmp * 2 * breath)
     graph.setNodeAttribute(id, 'x', x)
     graph.setNodeAttribute(id, 'y', y)
+    graph.setNodeAttribute(id, 'size', size)
   })
 }
 function floatTick(now) {
