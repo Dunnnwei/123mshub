@@ -16,7 +16,7 @@ if (-not (Test-Path -LiteralPath $python)) {
 & $python -m pytest
 if ($LASTEXITCODE -ne 0) { throw "测试失败，停止打包。" }
 
-$release = Join-Path $projectRoot "release\native-v1.4.2"
+$release = Join-Path $projectRoot "release\native-v1.5.0"
 $work = Join-Path $projectRoot "build\native-pyinstaller"
 if (Test-Path -LiteralPath $release) {
     $resolvedReleaseToClean = (Resolve-Path -LiteralPath $release).Path

@@ -25,7 +25,8 @@ def main(argv: list[str] | None = None) -> int:
     smoke_log = Path(os.environ.get("TEMP", ".")) / "123mshub-native-smoke.log"
 
     def append_smoke(message: str) -> None:
-        if "--smoke-graph" not in (argv if argv is not None else sys.argv[1:]):
+        args_list = argv if argv is not None else sys.argv[1:]
+        if "--smoke-graph" not in args_list and "--smoke-float" not in args_list:
             return
         with smoke_log.open("a", encoding="utf-8") as handle:
             handle.write(f"{message}\n")
@@ -45,6 +46,7 @@ def main(argv: list[str] | None = None) -> int:
     group.add_argument("--repo-and-save", help="使用此仓库并明确保存为默认仓库")
     parser.add_argument("--config-dir", type=Path, help="独立配置目录（不读写系统钥匙串，供测试/便携会话）")
     parser.add_argument("--smoke-graph", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--smoke-float", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
     append_smoke("args-parsed")
 
@@ -75,7 +77,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.repo_and_save:
         store.save({"repo_root": args.repo_and_save})
     facade = MemoryFacade(store)
-    if args.smoke_graph:
+    if args.smoke_graph or args.smoke_float:
         # Packaging QA path: instantiate the real local WebEngine island and
         # let it load its qrc WebChannel bootstrap and graph assets. This is
         # intentionally hidden from the normal product CLI.
@@ -112,6 +114,26 @@ def main(argv: list[str] | None = None) -> int:
                 lambda value: _finish_graph_check(value),
             )
 
+        float_hashes: list[str] = []
+
+        def grab_float_frame(tag: str) -> None:
+            """抓 QWebEngineView 当前帧像素，验证 v1.5.0 漂移动效在上屏。"""
+            if graph.web_view is None:
+                return
+            image = graph.web_view.grab().toImage()
+            import hashlib
+            ptr = image.bits()
+            data = ptr.tobytes() if hasattr(ptr, "tobytes") else bytes(ptr)
+            digest = hashlib.md5(data).hexdigest()
+            float_hashes.append(digest)
+            append_smoke(f"float-frame-{tag}={digest}")
+
+        def finish_float_check() -> None:
+            alive = len(float_hashes) == 2 and float_hashes[0] != float_hashes[1]
+            append_smoke(f"float-alive={alive}")
+            print("DRIFT_ALIVE" if alive else "DRIFT_DEAD")
+            app.exit(0 if alive else 4)
+
         def _finish_graph_check(value: object) -> None:
             try:
                 import json
@@ -121,10 +143,37 @@ def main(argv: list[str] | None = None) -> int:
             append_smoke(f"graph-ready={result.get('ready')} nodes={result.get('nodes', 0)} edges={result.get('edges', 0)}")
             if not result.get("ready"):
                 failure["message"] = "图谱脚本未完成 WebChannel/Sigma 渲染"
-            app.quit()
+                app.quit()
+                return
+            if args.smoke_float:
+                # 先做一次桥接数据诊断：直接调 getGraph 看页面侧拿到的真实节点数，
+                # 分辨"数据没到页面"与"到了但渲染为 0"。
+                graph.web_view.page().runJavaScript(
+                    "window.mshubDiagCount ? window.mshubDiagCount() : 'no-diag'",
+                    lambda value: append_smoke(f"diag-count={value}"),
+                )
+                graph.web_view.page().runJavaScript(
+                    "window.mshubDiagBridge ? window.mshubDiagBridge((r) => { window.__diagBridgeResult = r }) : 'no-diag'",
+                    lambda _v: None,
+                )
+                def read_diag_bridge() -> None:
+                    graph.web_view.page().runJavaScript(
+                        "window.__diagBridgeResult || 'pending'",
+                        lambda value: append_smoke(f"diag-bridge={value}"),
+                    )
+                QTimer.singleShot(1500, read_diag_bridge)
+                # 图谱已 ready。file:// 协议走同步 FA2，此刻已收敛，漂浮应已接管。
+                # 连抓两帧（间隔 2s），漂移上屏则像素必变。
+                QTimer.singleShot(800, lambda: grab_float_frame("t1"))
+                QTimer.singleShot(2800, lambda: grab_float_frame("t2"))
+                QTimer.singleShot(3200, finish_float_check)
+            else:
+                app.quit()
 
-        QTimer.singleShot(5000, stop_smoke)
-        QTimer.singleShot(2500, check_graph_ready)
+        QTimer.singleShot(5000 if args.smoke_graph else 12000, stop_smoke if args.smoke_graph else (lambda: None))
+        # smoke-float 需要等异步暖缓存 + WebChannel 握手 + 页面 render 完成，
+        # 2.5s 对真实库偏紧（曾实测 nodes=0 的假就绪），放宽到 4.5s。
+        QTimer.singleShot(2500 if args.smoke_graph else 4500, check_graph_ready)
         append_smoke("before-exec")
         result = int(app.exec())
         append_smoke(f"after-exec={result}")
