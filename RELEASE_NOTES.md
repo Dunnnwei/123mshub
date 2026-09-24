@@ -1,19 +1,20 @@
-# 123 MSHub v1.5.0 原生版前端迭代
+# 123 MSHub v1.5.1 原生版前端迭代
 
-> 工作分支：`native/v1.5.0`（基于 `native/v2` 的 v1.4.2）。按 123UI v4.2 设计体系重构原生壳前端，核心解决记忆图谱「静止死板」观感。不改变记忆/技能/安全服务层语义，零 TCP 监听红线不变。
+> 工作分支：`native/v1.5.0`（基于 `native/v2` 的 v1.4.2）。按 123UI v4.2 设计体系重构原生壳前端，核心解决记忆图谱「静止死板」观感。不改变记忆/技能/安全服务层语义，零 TCP 监听红线不变。v1.5.1 在 v1.5.0 基础上把呼吸感拉大到肉眼明确可见、并新增大小收放通道。
 
 ## 变化
 
-- **记忆图示漂浮动效（核心）**：每个记忆点在静止状态下有正弦漂浮起伏——幅度 2.6~4.6 屏幕像素、周期 3.6~7s、按节点 id 播种相位错开，不是整齐划一的机械摆动。**根因**：v1.4.2 的「闲置微动」在 sigma nodeReducer 里加 0.015 图谱单位偏移，但 sigma v3 的 reducer 输出变化不会推进 WebGL 渲染缓冲，画面实际静止。v1.5.0 改为 rAF 里直接 `setNodeAttribute` 写 graphology 坐标：FA2 收敛后快照基准位（floatBase），每帧写 `base + sin/cos 偏移`，graphology 事件驱动 sigma 增量渲染真正上屏。拖拽/平移/缩放期间自动挂起、结束约 1s 后恢复；`prefers-reduced-motion` 默认关闭；设置面板「闲置微动」开关持久化；大图（>3000 节点 / >8000 边）自动关闭。
+- **记忆图示呼吸动效（核心）**：每个记忆点像呼吸灯——**大小一收一放（半径 ±22~38%）+ 位置小幅起伏（8~14 屏幕像素）**，节奏按节点 id 播种错开，非对称呼吸曲线（吸快呼慢、末端微顿，周期 4.2~6.8s）。**根因**：v1.4.2 的「闲置微动」在 sigma nodeReducer 里加 0.015 图谱单位偏移，但 sigma v3 的 reducer 输出变化不会推进 WebGL 渲染缓冲，画面实际静止；v1.5.0 改为 rAF 直写 graphology 坐标但只动位置且幅度 2.6~4.6px 太微弱；v1.5.1 加入大小通道并拉大幅度，经用户预览页确认效果。实现：FA2 收敛后快照基准位（floatBase），每帧写 `base + sin/cos 位置偏移` 与 `baseSize × (1 ± sizeAmp·breath)`，graphology 事件驱动 sigma 增量渲染真正上屏；nodeReducer 尊重引擎写入的 size 不再覆盖。拖拽/平移/缩放期间自动挂起、结束约 1s 后恢复；`prefers-reduced-motion` 默认关闭；设置面板「闲置微动」开关持久化；大图（>3000 节点 / >8000 边）自动关闭。暗/亮模式共用同一套呼吸逻辑（size/x/y 与主题解耦）。
 - **图谱布局观感修复**：FA2 斥力映射 `repel × 0.14`（旧版 scalingRatio=100 对 58 节点图过强，节点被推得极散、群落感尽失）；种子撒点半径 4→18，FA2 展开更充分；拖拽结果实时回写漂浮基准，松手不被拉回旧位。
-- **123UI v4.2 视觉体系落地**：图谱统计改数字卡（强数字+小单位）；tooltip/设置面板/缩放控件/图例玻璃拟态化（backdrop-filter blur + saturate）；暗色画布加深到 `#0a0f1d`；按钮微交互 120ms、`:active` 压感 `translateY(1px)`（v4 唯一许可的按压缩放外位移）；换肤过渡 200ms token 化。
-- **诊断可观测性**：`--smoke-float` 隐藏参数（打包 QA 用）——加载真实图谱后连抓两帧像素验证漂移上屏；`window.mshubDiagCount/mshubDiagBridge` 页面内诊断接口。
+- **123UI v4.2 视觉体系落地**：图谱统计改数字卡（强数字+小单位）；tooltip/设置面板/缩放控件/图例玻璃拟态化（backdrop-filter blur + saturate）；暗色画布加深到 `#0a0f1d`；按钮微交互 120ms、`:active` 压感 `translateY(1px)`；换肤过渡 200ms token 化。
+- **诊断可观测性**：`--smoke-float` 隐藏参数（打包 QA 用）——加载真实图谱后连抓两帧像素验证呼吸上屏；`window.mshubDiagCount/mshubDiagBridge` 页面内诊断接口；`docs/breath-preview.html` 独立呼吸效果预览页（与集成版同参数）。
 - 修复 `append_smoke` 只认 `--smoke-graph` 导致 smoke-float 全程无日志的观测盲区。
 
 ## 验证
 
-- Python 测试 193 passed；`--smoke-float` 真实记忆库（58 节点/48 边）实测：FA2 收敛后 floatBase 接管 58 节点，连抓两帧像素差异确认漂移上屏（`float-alive=True`），桥接数据 58 节点通畅。
-- 版本号：`src/mshub/__init__.py`、`pyproject.toml`、`tests/native/test_branding.py` 同步 1.5.0。
+- Python 测试 193 passed；`--smoke-float` 真实记忆库（58 节点/48 边）实测：FA2 收敛后 floatBase 接管 58 节点，连抓三帧节点总面积 8044→7806→8222 px² 真实收放，桥接数据 58 节点通畅。
+- 呼吸效果方向经 `docs/breath-preview.html` 用户确认；光晕效果因色阶不足显廉价，用户确认放弃。
+- 版本号：`src/mshub/__init__.py`、`pyproject.toml`、`tests/native/test_branding.py` 同步 1.5.1。
 
 # 123 MSHub v1.4.2 原生版迭代
 
