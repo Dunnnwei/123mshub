@@ -48,3 +48,14 @@ class AppState(QObject):
     def clear_error(self) -> None:
         self.update(last_error="")
 
+
+
+def ui_settings(config_dir) -> "QSettings":
+    """v1.8.0（审查 P2-4）：native-ui.ini 的 QSettings 构造工厂。
+
+    原来同样的构造式散在 8 处（main_window/skill_view/memory_view），路径或
+    格式改动时要逐处找——现在一处收口。
+    """
+    from PySide6.QtCore import QSettings
+
+    return QSettings(str(config_dir / "native-ui.ini"), QSettings.Format.IniFormat)

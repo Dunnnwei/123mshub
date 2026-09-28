@@ -13,11 +13,12 @@ from PySide6.QtWidgets import (
 )
 
 from ..memory_facade import MemoryFacade
+from ..state import ui_settings
 from ..task_runner import TaskRunner, RequestScope
 from ..widgets import MarkdownView
 from ..i18n import tr
 from ..ui import AdaptivePage, ElideLabel, FlowLayout, GuardedDialog, copy_agent_prompt, flow_bar, label_controls, make_agent_prompt_button, prepare_dialog
-from ..theme import PALETTES
+from ..theme import MUTED_TEXT_ON_SELECTION, PALETTES, ROW_TEXT_ON_SELECTION, current_palette as _current_palette
 
 TYPE_OPTIONS = [("用户", "user"), ("项目", "project"), ("参考", "reference"), ("反馈", "feedback")]
 TYPE_LABELS = dict(TYPE_OPTIONS)
@@ -89,10 +90,10 @@ class MemoryPage(AdaptivePage):
         # v1.7.4：选中行整行皇家蓝高亮（QSS 画底色），行内自绘文字色随之切换
         self.entry_list.itemSelectionChanged.connect(self._paint_selected_rows)
         splitter.addWidget(self.entry_list)
-        self.empty_card = QFrame(objectName="emptyCard"); empty_layout = QVBoxLayout(self.empty_card); empty_layout.setContentsMargins(36, 36, 36, 36); empty_layout.setSpacing(10); empty_title = QLabel("还没有记忆条目"); empty_title.setObjectName("title"); empty_layout.addWidget(empty_title, alignment=Qt.AlignmentFlag.AlignHCenter); empty_layout.addWidget(QLabel("先建立一条可复用的共享记忆，或者复制注入提示词给 Agent。", objectName="muted"), alignment=Qt.AlignmentFlag.AlignHCenter); empty_actions = QHBoxLayout(); empty_new = QPushButton("新建一条记忆"); empty_new.setObjectName("primary"); empty_new.clicked.connect(self.open_new_editor); empty_prompt = QPushButton("复制注入提示词"); empty_prompt.clicked.connect(self.copy_prompt); empty_actions.addWidget(empty_new); empty_actions.addWidget(empty_prompt); empty_layout.addLayout(empty_actions); root.addWidget(self.empty_card); self.empty_card.hide()
+        self.empty_card = QFrame(objectName="emptyCard"); empty_layout = QVBoxLayout(self.empty_card); empty_layout.setContentsMargins(36, 36, 36, 36); empty_layout.setSpacing(10); empty_title = QLabel("还没有记忆条目"); empty_title.setObjectName("title"); empty_layout.addWidget(empty_title, alignment=Qt.AlignmentFlag.AlignHCenter); empty_layout.addWidget(QLabel("先建立一条可复用的共享记忆，或者用右上角「Agent连接提示词」连接你的 Agent。", objectName="muted"), alignment=Qt.AlignmentFlag.AlignHCenter); empty_actions = QHBoxLayout(); empty_new = QPushButton("新建一条记忆"); empty_new.setObjectName("primary"); empty_new.clicked.connect(self.open_new_editor); empty_prompt = QPushButton("Agent连接提示词"); empty_prompt.clicked.connect(self.copy_prompt); empty_actions.addWidget(empty_new); empty_actions.addWidget(empty_prompt); empty_layout.addLayout(empty_actions); root.addWidget(self.empty_card); self.empty_card.hide()
         detail = QFrame(); detail.setObjectName("surface"); dl = QVBoxLayout(detail); dl.setContentsMargins(20, 18, 20, 18); dl.setSpacing(12)
         dh = QHBoxLayout(); self.detail_title = QLabel("选择一条记忆"); self.detail_title.setObjectName("sectionTitle"); dh.addWidget(self.detail_title); dh.addStretch(); self.new_button = QPushButton("新建"); self.new_button.setObjectName("primary"); self.new_button.clicked.connect(self.new_entry); dh.addWidget(self.new_button); dl.addLayout(dh)
-        form = QFormLayout(); self.name_edit = QLineEdit(); self.name_edit.setPlaceholderText("kebab-case，改名会重命名文件"); self.name_preview = QLabel(""); self.name_preview.setObjectName("muted"); self.collision_label = QLabel(""); self.collision_label.setStyleSheet("color:#B42318"); self.open_collision_button = QPushButton("打开它"); self.open_collision_button.setVisible(False); self.open_collision_button.clicked.connect(self._open_collision); collision_row = QHBoxLayout(); collision_row.setContentsMargins(0, 0, 0, 0); collision_row.addWidget(self.collision_label, 1); collision_row.addWidget(self.open_collision_button); nrow = QVBoxLayout(); nrow.addWidget(self.name_edit); nrow.addWidget(self.name_preview); nrow.addLayout(collision_row); form.addRow("条目名", nrow); self.title_edit = QLineEdit(); form.addRow("标题", self.title_edit)
+        form = QFormLayout(); self.name_edit = QLineEdit(); self.name_edit.setPlaceholderText("kebab-case，改名会重命名文件"); self.name_preview = QLabel(""); self.name_preview.setObjectName("muted"); self.collision_label = QLabel(""); self.collision_label.setStyleSheet(f"color:{_current_palette().get('error', '#B42318')}"); self.open_collision_button = QPushButton("打开它"); self.open_collision_button.setVisible(False); self.open_collision_button.clicked.connect(self._open_collision); collision_row = QHBoxLayout(); collision_row.setContentsMargins(0, 0, 0, 0); collision_row.addWidget(self.collision_label, 1); collision_row.addWidget(self.open_collision_button); nrow = QVBoxLayout(); nrow.addWidget(self.name_edit); nrow.addWidget(self.name_preview); nrow.addLayout(collision_row); form.addRow("条目名", nrow); self.title_edit = QLineEdit(); form.addRow("标题", self.title_edit)
         # v1.6.0：AI 生成描述按钮移到"一句话描述"右边
         desc_row = QHBoxLayout(); desc_row.setContentsMargins(0, 0, 0, 0); self.description_edit = QLineEdit(); desc_row.addWidget(self.description_edit, 1); ai_desc_small = QPushButton("AI 生成"); ai_desc_small.setMaximumWidth(80); ai_desc_small.clicked.connect(self.ai_description); desc_row.addWidget(ai_desc_small); form.addRow("一句话描述", desc_row)
         self.type_edit = QComboBox(); [self.type_edit.addItem(label, value) for label, value in TYPE_OPTIONS]; form.addRow("类型", self.type_edit); self.tags_edit = QLineEdit(); self.tags_edit.setPlaceholderText("Enter 或中英文逗号确认，最多 12 个"); form.addRow("标签", self.tags_edit); dl.addLayout(form)
@@ -275,9 +276,9 @@ class MemoryPage(AdaptivePage):
             if item is None or meta is None:
                 continue
             if item.isSelected():
-                meta["title"].setStyleSheet("font-size:14px;font-weight:650;color:#FFFFFF")
-                meta["badge"].setStyleSheet("color:#FFFFFF;font-size:12px;font-weight:550")
-                meta["desc"].setStyleSheet("font-size:12px;font-weight:450;color:#E9ECF4")
+                meta["title"].setStyleSheet(f"font-size:14px;font-weight:650;color:{ROW_TEXT_ON_SELECTION}")
+                meta["badge"].setStyleSheet(f"color:{ROW_TEXT_ON_SELECTION};font-size:12px;font-weight:550")
+                meta["desc"].setStyleSheet(f"font-size:12px;font-weight:450;color:{MUTED_TEXT_ON_SELECTION}")
             else:
                 meta["title"].setStyleSheet("font-size:14px;font-weight:650")
                 meta["badge"].setStyleSheet(f"color:{meta['color']};font-size:12px;font-weight:550")
@@ -372,7 +373,7 @@ class MemoryPage(AdaptivePage):
         self._load_detail(name, show=True)
 
     def _restore_editor_geometry(self):
-        settings = QSettings(str(self.facade.config_store.config_dir / "native-ui.ini"), QSettings.Format.IniFormat)
+        settings = ui_settings(self.facade.config_store.config_dir)
         geometry = settings.value("memory-editor/geometry")
         if geometry:
             self.editor_dialog.restoreGeometry(geometry)
@@ -381,7 +382,7 @@ class MemoryPage(AdaptivePage):
             self.editor_dialog.resize(min(1100, int(screen.width() * .85)), int(screen.height() * .75))
 
     def _save_editor_geometry(self):
-        settings = QSettings(str(self.facade.config_store.config_dir / "native-ui.ini"), QSettings.Format.IniFormat)
+        settings = ui_settings(self.facade.config_store.config_dir)
         settings.setValue("memory-editor/geometry", self.editor_dialog.saveGeometry())
 
     def _show_editor(self):
@@ -441,9 +442,7 @@ class MemoryPage(AdaptivePage):
 
     def copy_prompt(self):
         # v1.7.5：统一走右上角「Agent连接提示词」——复制成功在按钮下方弹「已复制」小框
-        if copy_agent_prompt(self.facade, self.agent_button):
-            self.promptCopied.emit()
-            self._set_status("注入提示词已复制")
+        copy_agent_prompt(self.facade, self.agent_button, self.runner)
 
     def batch_update_type(self, _index):
         names = self._selected_names(); value = self.batch_type.currentData();
@@ -459,18 +458,35 @@ class MemoryPage(AdaptivePage):
         if names and QMessageBox.question(self, "批量软删除", f"确认删除 {len(names)} 条？") == QMessageBox.StandardButton.Yes: self._batch(self.facade.bulk_delete, names)
 
     def batch_ai(self):
-        for name in self._selected_names():
-            try:
+        """v1.8.0（审查 P0-2）：AI 补全改后台任务——每条最长 60s 的网络调用
+        原来在 GUI 线程串行执行会冻结界面；现在有进度汇报，完成经
+        repositoryChanged 自动刷新列表。"""
+        names = self._selected_names()
+        if not names:
+            return
+
+        def work(report):
+            for index, name in enumerate(names, start=1):
                 entry = self.facade.get_entry(name)
                 if not entry.get("title") or not entry.get("description"):
-                    draft = self.facade.ai_draft(entry.get("body", "")); self.facade.update_entry(name, {k: v for k, v in draft.items() if not entry.get(k)})
-            except Exception as exc: self._set_status(f"批量 AI 首个失败：{exc}"); break
-        self.refresh()
+                    draft = self.facade.ai_draft(entry.get("body", ""))
+                    self.facade.update_entry(name, {key: value for key, value in draft.items() if not entry.get(key)})
+                report(int(index * 100 / len(names)), f"AI 补全 {index}/{len(names)}")
+            return {"updated": len(names)}
+
+        self.jobs.submit("ai", f"AI 补全（{len(names)} 条）", work, progress=True)
+        self._set_status(f"已提交 {len(names)} 条 AI 补全任务")
 
     def _batch(self, fn, *args, **kwargs):
-        try:
-            result = fn(*args, **kwargs); self.refresh_sync(); done = result.get("updated", result.get("deleted", [])); failed = result.get("failed", result.get("errors", [])); self._set_status(f"已 {len(done) if isinstance(done, list) else done} 条，失败 {len(failed)} 条")
-        except Exception as exc: self._set_status(f"批量操作失败：{exc}")
+        """v1.8.0（审查 P0-2）：批量写操作（改分类/打标签/软删除）改后台线程，
+        完成后回调里异步刷新列表，不再同步做全量对账。"""
+        def done(result):
+            updated = result.get("updated", result.get("deleted", []))
+            failed = result.get("failed", result.get("errors", []))
+            self._set_status(f"已 {len(updated) if isinstance(updated, list) else updated} 条，失败 {len(failed)} 条")
+            self.refresh()
+        self.scope.call("batch", fn, done, lambda msg: self._set_status(f"批量操作失败：{msg}"), *args, **kwargs)
+        self._set_status("批量操作执行中…")
 
     def _panel_dialog_active(self, attr: str) -> bool:
         """v1.7.3：浏览类窗口（投递箱/日报/索引）非模态后，重复点按钮置前已有窗口而不是再开一个。"""
@@ -496,36 +512,114 @@ class MemoryPage(AdaptivePage):
         dialog.show()
 
     def open_inbox(self):
+        """v1.8.0（审查 H-2/H-3）：投递列表改后台读取（扫目录不再冻结界面）；
+        窗口构造按「构造/填充/绑定」拆三个方法，替代原 500+ 字符单行长语句。"""
         if self._panel_dialog_active("_inbox_dialog"):
             return
-        try: result = self.facade.list_inbox()
-        except Exception as exc: self._set_status(f"投递箱读取失败：{exc}"); return
-        items = list(result.get("items") or []); dialog = QDialog(self); dialog.setWindowTitle(f"投递箱（{len(items)}）"); dialog.resize(1060, 650); root = QVBoxLayout(dialog); splitter = QSplitter(Qt.Orientation.Horizontal); left = QListWidget(); right = QFrame(); rl = QVBoxLayout(right); raw = QPlainTextEdit(); raw.setReadOnly(True); raw.setFont(QFont("Cascadia Mono", 9)); warning = QLabel(""); warning.setStyleSheet("color:#B42318;background:#FFF1F0;padding:8px"); rl.addWidget(warning); rl.addWidget(QLabel("投递原文（只读）")); rl.addWidget(raw, 1); form = QFormLayout(); title = QLineEdit(); name = QLineEdit(); typ = QComboBox(); [typ.addItem(label, value) for label, value in TYPE_OPTIONS]; tags = QLineEdit(); desc = QLineEdit(); form.addRow("标题", title); form.addRow("条目名", name); form.addRow("类型", typ); form.addRow("标签", tags); form.addRow("描述", desc); rl.addLayout(form); ai = QPushButton("AI 补全标题与描述"); rl.addWidget(ai); splitter.addWidget(left); splitter.addWidget(right); splitter.setSizes([350, 700]); root.addWidget(splitter, 1); buttons = QDialogButtonBox(); admit = buttons.addButton("收编入库", QDialogButtonBox.ButtonRole.AcceptRole); discard = buttons.addButton("丢弃选中", QDialogButtonBox.ButtonRole.DestructiveRole); all_discard = buttons.addButton("全部丢弃", QDialogButtonBox.ButtonRole.DestructiveRole); close = buttons.addButton("关闭", QDialogButtonBox.ButtonRole.RejectRole); root.addWidget(buttons)
+        self._set_status("正在读取投递箱…")
+
+        def done(result):
+            dialog, parts = self._build_inbox_dialog()
+            self._fill_inbox_items(dialog, parts, list(result.get("items") or []))
+            self._bind_inbox_actions(dialog, parts)
+            if parts["left"].count():
+                parts["left"].setCurrentRow(0)
+            self._register_panel_dialog("_inbox_dialog", dialog)
+
+        self.scope.call("inbox", self.facade.list_inbox, done, lambda msg: self._set_status(f"投递箱读取失败：{msg}"))
+
+    def _build_inbox_dialog(self):
+        dialog = QDialog(self)
+        dialog.resize(1060, 650)
+        root = QVBoxLayout(dialog)
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        left = QListWidget()
+        right = QFrame(); rl = QVBoxLayout(right)
+        raw = QPlainTextEdit(); raw.setReadOnly(True); raw.setFont(QFont("Cascadia Mono", 9))
+        warning = QLabel(""); warning.setObjectName("error"); warning.setWordWrap(True)
+        rl.addWidget(warning); rl.addWidget(QLabel("投递原文（只读）")); rl.addWidget(raw, 1)
+        form = QFormLayout()
+        title = QLineEdit(); name = QLineEdit(); typ = QComboBox(); [typ.addItem(label, value) for label, value in TYPE_OPTIONS]
+        tags = QLineEdit(); desc = QLineEdit()
+        form.addRow("标题", title); form.addRow("条目名", name); form.addRow("类型", typ); form.addRow("标签", tags); form.addRow("描述", desc)
+        rl.addLayout(form)
+        ai = QPushButton("AI 补全标题与描述"); rl.addWidget(ai)
+        splitter.addWidget(left); splitter.addWidget(right); splitter.setSizes([350, 700])
+        root.addWidget(splitter, 1)
+        buttons = QDialogButtonBox()
+        admit = buttons.addButton("收编入库", QDialogButtonBox.ButtonRole.AcceptRole)
+        discard = buttons.addButton("丢弃选中", QDialogButtonBox.ButtonRole.DestructiveRole)
+        all_discard = buttons.addButton("全部丢弃", QDialogButtonBox.ButtonRole.DestructiveRole)
+        close = buttons.addButton("关闭", QDialogButtonBox.ButtonRole.RejectRole)
+        root.addWidget(buttons)
+        parts = {"left": left, "raw": raw, "warning": warning, "title": title, "name": name, "typ": typ,
+                 "tags": tags, "desc": desc, "ai": ai, "admit": admit, "discard": discard, "all_discard": all_discard, "close": close}
+        return dialog, parts
+
+    def _fill_inbox_items(self, dialog, parts, items):
+        left = parts["left"]
         for item in items:
-            row = QListWidgetItem(f"{item.get('title') or item.get('suggested_name') or item.get('file')}\n{item.get('file')}"); row.setData(Qt.ItemDataRole.UserRole, item); left.addItem(row)
+            row = QListWidgetItem(f"{item.get('title') or item.get('suggested_name') or item.get('file')}\n{item.get('file')}")
+            row.setData(Qt.ItemDataRole.UserRole, item)
+            left.addItem(row)
+        dialog.setWindowTitle(f"投递箱（{len(items)}）")
+
+    def _bind_inbox_actions(self, dialog, parts):
+        left, raw, warning = parts["left"], parts["raw"], parts["warning"]
+
         def selected():
-            value = left.currentItem().data(Qt.ItemDataRole.UserRole) if left.currentItem() else None; return value if isinstance(value, dict) else None
+            value = left.currentItem().data(Qt.ItemDataRole.UserRole) if left.currentItem() else None
+            return value if isinstance(value, dict) else None
+
         def fill(item):
-            value = item.data(Qt.ItemDataRole.UserRole) if item else {}; raw.setPlainText(str(value.get("raw_text") or value.get("body") or "")); warning.setText("检测到疑似提示词注入内容，请仔细审阅" if value.get("injection_hits") else ""); title.setText(str(value.get("title") or value.get("suggested_name") or "")); name.setText(str(value.get("suggested_name") or "")); desc.setText(str(value.get("description") or "")); typ.setCurrentIndex(max(0, typ.findData(value.get("type", "reference")))); tags.setText(", ".join(value.get("tags") or []))
+            value = item.data(Qt.ItemDataRole.UserRole) if item else {}
+            raw.setPlainText(str(value.get("raw_text") or value.get("body") or ""))
+            warning.setText("检测到疑似提示词注入内容，请仔细审阅" if value.get("injection_hits") else "")
+            parts["title"].setText(str(value.get("title") or value.get("suggested_name") or ""))
+            parts["name"].setText(str(value.get("suggested_name") or ""))
+            parts["desc"].setText(str(value.get("description") or ""))
+            parts["typ"].setCurrentIndex(max(0, parts["typ"].findData(value.get("type", "reference"))))
+            parts["tags"].setText(", ".join(value.get("tags") or []))
+
         left.currentItemChanged.connect(fill)
+
         def admit_one():
-            value = selected();
+            value = selected()
             if not value: return
-            try: self.facade.admit_inbox(str(value.get("file")), {"title": title.text().strip(), "name": name.text().strip(), "type": typ.currentData(), "tags": [x.strip() for x in tags.text().split(",") if x.strip()], "description": desc.text().strip()}); left.takeItem(left.currentRow()); self.refresh_sync(); self._set_status("已收编")
+            try:
+                self.facade.admit_inbox(str(value.get("file")), {"title": parts["title"].text().strip(), "name": parts["name"].text().strip(), "type": parts["typ"].currentData(), "tags": [x.strip() for x in parts["tags"].text().split(",") if x.strip()], "description": parts["desc"].text().strip()})
+                left.takeItem(left.currentRow()); self.refresh(); self._set_status("已收编")
             except Exception as exc: self._set_status(f"收编失败：{exc}")
+
         def discard_one():
-            value = selected();
+            value = selected()
             if not value: return
-            try: self.facade.discard_inbox(str(value.get("file"))); left.takeItem(left.currentRow()); self.refresh_sync(); self._set_status("已丢弃")
+            try:
+                self.facade.discard_inbox(str(value.get("file"))); left.takeItem(left.currentRow()); self.refresh(); self._set_status("已丢弃")
             except Exception as exc: self._set_status(f"丢弃失败：{exc}")
+
         def discard_all():
-            if QMessageBox.question(dialog, "全部丢弃", "将全部投递移入回收区？") == QMessageBox.StandardButton.Yes: self.facade.discard_all_inbox(); left.clear(); self.refresh_sync()
+            if QMessageBox.question(dialog, "全部丢弃", "将全部投递移入回收区？") == QMessageBox.StandardButton.Yes:
+                self.facade.discard_all_inbox(); left.clear(); self.refresh()
+
         def ai_fill():
-            try: draft = self.facade.ai_draft(raw.toPlainText()); title.setText(title.text() or draft.get("title", "")); desc.setText(desc.text() or draft.get("description", ""))
-            except Exception as exc: warning.setText(f"AI 补全失败：{exc}")
-        admit.clicked.connect(admit_one); discard.clicked.connect(discard_one); all_discard.clicked.connect(discard_all); ai.clicked.connect(ai_fill); close.clicked.connect(dialog.reject)
-        if items: left.setCurrentRow(0)
-        self._register_panel_dialog("_inbox_dialog", dialog)
+            # v1.8.0（审查 P0-2）：AI 补全改后台——60s 网络调用不再冻结投递箱窗口
+            def done(draft):
+                parts["title"].setText(parts["title"].text() or draft.get("title", ""))
+                parts["desc"].setText(parts["desc"].text() or draft.get("description", ""))
+                parts["ai"].setEnabled(True)
+
+            def failed(msg):
+                warning.setText(f"AI 补全失败：{msg}"); parts["ai"].setEnabled(True)
+
+            parts["ai"].setEnabled(False)
+            self.scope.call("ai", self.facade.ai_draft, done, failed, raw.toPlainText())
+
+        parts["admit"].clicked.connect(admit_one)
+        parts["discard"].clicked.connect(discard_one)
+        parts["all_discard"].clicked.connect(discard_all)
+        parts["ai"].clicked.connect(ai_fill)
+        parts["close"].clicked.connect(dialog.reject)
 
     def tidy(self):
         if self.jobs: self.jobs.submit("tidy", "归纳整理", lambda: self.facade.tidy_run(use_ai=True))
@@ -547,13 +641,23 @@ class MemoryPage(AdaptivePage):
         self._register_panel_dialog("_reports_dialog", dialog)
 
     def copy_duty(self):
+        """v1.8.0（审查 P0-2）：值守提示词生成要读全库统计——改后台线程，
+        回 GUI 线程再写剪贴板。"""
         from PySide6.QtWidgets import QApplication
-        try: QApplication.clipboard().setText(self.facade.duty_prompt()); self._set_status("值守提示词已复制")
-        except Exception as exc: self._set_status(str(exc))
+
+        def done(text):
+            QApplication.clipboard().setText(str(text)); self._set_status("值守提示词已复制")
+
+        self._set_status("正在生成值守提示词…")
+        self.scope.call("duty", self.facade.duty_prompt, done, lambda msg: self._set_status(f"复制失败：{msg}"))
 
     def show_index(self):
         if self._panel_dialog_active("_index_dialog"):
             return
-        try: data = self.facade.index_file(); dialog = QDialog(self); dialog.setWindowTitle("MEMORY.md（只读索引源文件）"); dialog.resize(900, 650); layout = QVBoxLayout(dialog); note = QLabel(str(data.get("note") or "索引由程序维护，手动修改会被覆盖。")); note.setObjectName("muted"); layout.addWidget(note); view = QPlainTextEdit(); view.setReadOnly(True); view.setFont(QFont("Cascadia Mono", 9)); view.setPlainText(str(data.get("content") or "")); layout.addWidget(view)
-        except Exception as exc: self._set_status(str(exc)); return
-        self._register_panel_dialog("_index_dialog", dialog)
+        self._set_status("正在读取索引…")
+
+        def done(data):
+            dialog = QDialog(self); dialog.setWindowTitle("MEMORY.md（只读索引源文件）"); dialog.resize(900, 650); layout = QVBoxLayout(dialog); note = QLabel(str(data.get("note") or "索引由程序维护，手动修改会被覆盖。")); note.setObjectName("muted"); layout.addWidget(note); view = QPlainTextEdit(); view.setReadOnly(True); view.setFont(QFont("Cascadia Mono", 9)); view.setPlainText(str(data.get("content") or "")); layout.addWidget(view)
+            self._register_panel_dialog("_index_dialog", dialog)
+
+        self.scope.call("index", self.facade.index_file, done, lambda msg: self._set_status(f"索引读取失败：{msg}"))

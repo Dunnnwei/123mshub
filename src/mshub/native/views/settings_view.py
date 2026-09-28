@@ -141,6 +141,10 @@ class SettingsPage(AdaptivePage):
         self.ai_status = QLabel("", objectName="muted")
         self.ai_status.setWordWrap(True)
         form.addRow("已存状态", self.ai_status)
+        # v1.8.0（审查 M-2）：钥匙串不可用（密钥仅存内存）时醒目提示
+        self.secrets_backend_label = QLabel("", objectName="error")
+        self.secrets_backend_label.setWordWrap(True)
+        form.addRow("密钥保存方式", self.secrets_backend_label)
         self.github_key = QLineEdit()
         self.github_key.setEchoMode(QLineEdit.EchoMode.Password)
         github = QHBoxLayout()
@@ -218,6 +222,10 @@ class SettingsPage(AdaptivePage):
         self._clear_ai = self._clear_github = False
         self.ai_status.setText(mask_secret(self.facade.config_store.get_secret("ai_key")))
         self.github_status.setText(mask_secret(self.facade.config_store.get_secret("github_token")))
+        backend = str(getattr(config, "secrets_backend", "keyring") or "keyring")
+        self.secrets_backend_label.setText(
+            "⚠ 系统钥匙串不可用：密钥仅保存在内存，重启后需重新填写" if backend == "memory" else ""
+        )
         localize(self)
 
     def _append_mirror(self, value):
@@ -338,7 +346,7 @@ class SettingsPage(AdaptivePage):
 
     def copy_prompt(self):
         """v1.7.5：设置页右上角「Agent连接提示词」。"""
-        copy_agent_prompt(self.facade, self.agent_button)
+        copy_agent_prompt(self.facade, self.agent_button, self.runner)
 
     def _jobs_running(self) -> bool:
         return bool(self.jobs and any(job["status"] == "running" for job in self.jobs.list()))

@@ -6,7 +6,7 @@ from PySide6.QtGui import QPainter, QPalette
 from PySide6.QtWidgets import (
     QAbstractButton, QAbstractItemView, QBoxLayout, QComboBox, QDialog, QFormLayout, QFrame,
     QHBoxLayout, QHeaderView, QLabel, QLayout, QLineEdit, QPlainTextEdit,
-    QPushButton, QScrollArea, QSizePolicy, QTableWidget, QTextEdit,
+    QCheckBox, QPushButton, QScrollArea, QSizePolicy, QTableWidget, QTextEdit,
     QVBoxLayout, QWidget,
 )
 
@@ -39,20 +39,27 @@ def show_toast(anchor: QWidget, text: str, duration_ms: int = 1500) -> None:
     QTimer.singleShot(duration_ms, toast.close)
 
 
-def copy_agent_prompt(facade, button: QWidget) -> bool:
-    """v1.7.5：五个页面右上角「Agent连接提示词」共用的复制动作（注入提示词）。
-
-    成功弹「已复制」小框；失败（如未配置仓库）用小框给出可读原因。
-    """
+def copy_agent_prompt(facade, button: QWidget, runner) -> None:
+    """v1.7.5 起五页右上角「Agent连接提示词」共用的复制动作（注入提示词）；
+    v1.8.0（审查 P0-2）：injection_prompt 要读全库统计，改走后台线程生成，
+    回 GUI 线程再写剪贴板——大库不再冻结界面。成功弹「已复制」小框。"""
     from PySide6.QtWidgets import QApplication
 
-    try:
-        QApplication.clipboard().setText(facade.injection_prompt())
-    except Exception as exc:
-        show_toast(button, f"复制失败：{str(exc)[:60]}")
-        return False
-    show_toast(button, "已复制")
-    return True
+    def ok(_identifier, payload) -> None:
+        try:
+            QApplication.clipboard().setText(str(payload))
+        except Exception as exc:  # noqa: BLE001 - 剪贴板偶发占用
+            show_toast(button, f"复制失败：{exc}")
+            return
+        show_toast(button, "已复制")
+
+    def failed(_identifier, payload) -> None:
+        message = payload.get("error") if isinstance(payload, dict) else payload
+        show_toast(button, f"复制失败：{str(message)[:60]}")
+
+    handle = runner.submit(facade.injection_prompt)
+    handle.signals.finished.connect(ok)
+    handle.signals.failed.connect(failed)
 
 
 AGENT_PROMPT_BUTTON_TEXT = "Agent连接提示词"
@@ -61,6 +68,65 @@ AGENT_PROMPT_BUTTON_TIP = (
     "即赋予它读共享记忆、用共享技能库、投递新记忆的完整协议。"
 )
 
+
+
+def open_singleton_dialog(owner, attr: str, factory) -> "QDialog | None":
+    """v1.8.0（审查 P2-4）：非模态弹窗统一"关旧开新"单实例策略。
+
+    - 0.35s 防重入：itemActivated 与 itemDoubleClicked 双绑定时同一双击只开一窗
+    - WA_DeleteOnClose + destroyed 身份判断：旧窗延迟销毁不会抹掉新窗引用
+    - factory() 返回未 show 的 QDialog；引用挂在 owner.<attr> 上
+    """
+    import time
+
+    now = time.monotonic()
+    if now - getattr(owner, f"{attr}_last_open", 0.0) < 0.35:
+        return None
+    setattr(owner, f"{attr}_last_open", now)
+    existing = getattr(owner, attr, None)
+    if existing is not None:
+        try:
+            existing.close()
+        except RuntimeError:
+            pass  # C++ 对象已销毁
+        setattr(owner, attr, None)
+    dialog = factory()
+    dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
+    dialog.destroyed.connect(lambda *_, d=dialog: getattr(owner, attr, None) is d and setattr(owner, attr, None))
+    setattr(owner, attr, dialog)
+    dialog.show()
+    return dialog
+
+
+class CheckableTableMixin:
+    """v1.8.0（审查 P2-4）：「多选 + 表头排序」表格的公共状态机。
+
+    技能仓库与安全中心原来各复制一份：表头第 0 列点击 = 全选/全取消，
+    其余列点击 = 正/反序排序（表头箭头指示）。宿主需实现：
+      _apply_sort(col, order)      —— 按列排序并重建行
+      _after_select_all(target, count) —— 全选后写状态栏文案
+    """
+
+    def _header_clicked(self, col: int) -> None:
+        if col == 0:
+            checks = [self.table.cellWidget(row, 0) for row in range(self.table.rowCount())]
+            checks = [check for check in checks if isinstance(check, QCheckBox)]
+            if not checks:
+                return
+            target = not all(check.isChecked() for check in checks)
+            for check in checks:
+                check.setChecked(target)
+            self._after_select_all(target, len(checks))
+            return
+        if getattr(self, "_sort_col", None) == col:
+            self._sort_order = (Qt.SortOrder.DescendingOrder
+                                if self._sort_order == Qt.SortOrder.AscendingOrder
+                                else Qt.SortOrder.AscendingOrder)
+        else:
+            self._sort_col = col
+            self._sort_order = Qt.SortOrder.AscendingOrder
+        self.table.horizontalHeader().setSortIndicator(col, self._sort_order)
+        self._apply_sort(col, self._sort_order)
 
 def make_agent_prompt_button(parent: QWidget, clicked_slot) -> QPushButton:
     """v1.7.5：构造右上角皇家蓝「Agent连接提示词」按钮，保证五页样式文案一致。"""

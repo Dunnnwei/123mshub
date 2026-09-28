@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -30,6 +31,9 @@ class AppConfig:
     ai_key_configured: bool = False
     memory_root_override: str = ""
     language: str = "system"
+    # v1.8.0（审查 M-2）：密钥实际后端——keyring 不可用时降级为进程内存，
+    # 重启即丢。暴露给设置页提示用户，不再静默。
+    secrets_backend: str = "keyring"
 
     def public_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -40,6 +44,22 @@ class ConfigStore:
         self.config_dir = config_dir or default_config_dir()
         self.path = self.config_dir / "config.json"
         self._memory_secrets: dict[str, str] = {}
+        self._secrets_backend: str | None = None
+
+    def detect_secrets_backend(self) -> str:
+        """v1.8.0（审查 M-2）：探测钥匙串可用性并缓存；降级必须留痕。"""
+        if self._secrets_backend is None:
+            try:
+                import keyring  # type: ignore
+
+                keyring.get_keyring()
+                self._secrets_backend = "keyring"
+            except Exception as exc:
+                self._secrets_backend = "memory"
+                logging.getLogger(__name__).warning(
+                    "系统钥匙串不可用，密钥仅保存到进程内存（重启后丢失）：%s", exc
+                )
+        return self._secrets_backend
 
     def load(self) -> AppConfig:
         if not self.path.exists():
@@ -49,7 +69,9 @@ class ConfigStore:
         except (OSError, json.JSONDecodeError) as exc:
             raise ValidationError(f"配置文件无法读取：{exc}") from exc
         allowed = AppConfig.__dataclass_fields__.keys()
-        return AppConfig(**{key: value for key, value in data.items() if key in allowed})
+        config = AppConfig(**{key: value for key, value in data.items() if key in allowed})
+        config.secrets_backend = self.detect_secrets_backend()
+        return config
 
     def save(self, updates: dict[str, Any]) -> AppConfig:
         current = self.load()
@@ -72,6 +94,7 @@ class ConfigStore:
                 Path(current.memory_root_override).expanduser().resolve()
             )
         current.mirrors = [m.strip() for m in current.mirrors if m and m.strip()]
+        current.secrets_backend = self.detect_secrets_backend()
         self.config_dir.mkdir(parents=True, exist_ok=True)
         temp = self.path.with_suffix(".tmp")
         temp.write_text(
@@ -94,7 +117,11 @@ class ConfigStore:
             import keyring  # type: ignore
 
             keyring.set_password(SERVICE_NAME, name, value)
-        except Exception:
+        except Exception as exc:
+            # v1.8.0（审查 M-2）：降级必须留痕——否则用户"显示已配置"但重启即丢
+            logging.getLogger(__name__).warning(
+                "密钥 %s 写入系统钥匙串失败，退回进程内存（重启后丢失）：%s", name, exc
+            )
             self._memory_secrets[name] = value
 
     def delete_secret(self, name: str) -> None:
@@ -102,8 +129,9 @@ class ConfigStore:
             import keyring  # type: ignore
 
             keyring.delete_password(SERVICE_NAME, name)
-        except Exception:
-            pass
+        except Exception as exc:
+            # v1.8.0（审查 L-3）：删失败不阻断流程，但必须留排障线索
+            logging.getLogger(__name__).debug("删除钥匙串条目 %s 失败：%s", name, exc)
         self._memory_secrets.pop(name, None)
 
     def require_repo_root(self) -> Path:

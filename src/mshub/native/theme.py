@@ -1,5 +1,6 @@
 """123mshub Native design tokens shared by Qt and the local graph island."""
 import json
+import os
 from pathlib import Path
 
 from PySide6.QtCore import QObject, QSettings, Signal
@@ -64,7 +65,8 @@ def ensure_brand_fonts() -> str:
         return "Segoe UI"
     ensure_brand_fonts._checked = True
     candidates = (
-        Path("C:/Windows/Fonts"),
+        # v1.8.0（审查 L-1）：非标准安装盘时 SystemRoot 环境变量兜底
+        Path(os.environ.get("SystemRoot", r"C:\Windows")) / "Fonts",
         Path.home() / "AppData/Local/Microsoft/Windows/Fonts",
     )
     for weight in ("W1", "W15", "W20", "W27"):
@@ -78,6 +80,17 @@ PALETTES = _load_tokens()
 PALETTES.setdefault("light", {})
 PALETTES.setdefault("dark", {})
 
+
+# v1.8.0（审查 UI 项）：视图层行内 setStyleSheet 引用的语义色单一来源
+ROW_TEXT_ON_SELECTION = "#FFFFFF"
+MUTED_TEXT_ON_SELECTION = "#E9ECF4"
+
+def current_palette() -> dict:
+    """v1.8.0（审查 UI 项）：视图层行内样式的取色入口——亮暗跟随应用样式表。"""
+    app = QApplication.instance()
+    stylesheet = app.styleSheet() if app else ""
+    mode = "dark" if "#0B0E14" in stylesheet else "light"
+    return PALETTES.get(mode, {})
 
 def graph_palette(mode):
     token = PALETTES["dark" if mode == "dark" else "light"]

@@ -102,26 +102,15 @@ def scan_ai(
         "\"file\":\"...\",\"line\":1,\"rule\":\"...\",\"excerpt\":\"...\"}]}。"
         + "".join(excerpts)
     )
-    endpoint = f"{base_url.rstrip('/')}/chat/completions"
-    request_body: dict = {
-        "temperature": 0,
-        "response_format": {"type": "json_object"},
-        "messages": [{"role": "user", "content": prompt}],
-    }
-    if model:
-        request_body["model"] = model
-    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-    response = httpx.post(endpoint, headers=headers, json=request_body, timeout=timeout)
-    if response.status_code == 400:
-        # Some OpenAI-compatible providers support chat/completions but not response_format.
-        request_body.pop("response_format", None)
-        response = httpx.post(endpoint, headers=headers, json=request_body, timeout=timeout)
-    response.raise_for_status()
+    # v1.8.0（审查 P2-1）：AI HTTP 调用收敛到 ai_gateway（json_mode 的 400
+    # 降级重试内建在网关里）
+    from .ai_gateway import chat_completion, strip_fence
+
+    raw = chat_completion(base_url, api_key, model, prompt, timeout=timeout, json_mode=True, label="AI 审查请求")
     if progress:
         progress(88, "正在解析审查结果")
     try:
-        content = response.json()["choices"][0]["message"]["content"]
-        data = json.loads(_strip_fence(content))
+        data = json.loads(strip_fence(raw))
         findings = [
             ScanFinding(
                 severity=item.get("severity", "medium"),
@@ -177,9 +166,3 @@ def _reviewable_files(root: Path) -> list[Path]:
     ]
 
 
-def _strip_fence(value: str) -> str:
-    value = value.strip()
-    if value.startswith("```"):
-        value = re.sub(r"^```(?:json)?\s*", "", value)
-        value = re.sub(r"\s*```$", "", value)
-    return value

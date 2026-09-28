@@ -14,10 +14,13 @@ from PySide6.QtWidgets import (
 )
 
 from ..memory_facade import MemoryFacade
+from ..state import ui_settings
+from ..theme import current_palette as _current_palette
 from ..task_runner import TaskRunner, RequestScope
 from ..job_controller import JobController
 from ..i18n import tr
-from ..ui import AdaptivePage, DataTable, FlowLayout, copy_agent_prompt, make_agent_prompt_button, prepare_dialog, label_controls
+from ..ui import (AdaptivePage, CheckableTableMixin, DataTable, FlowLayout, copy_agent_prompt,
+                  make_agent_prompt_button, open_singleton_dialog, prepare_dialog, label_controls)
 
 
 def _error(payload: object) -> str:
@@ -33,8 +36,11 @@ SOFT_DELETE_SKILL_TIP = (
 
 
 def _interface_language_is_english() -> bool:
-    """界面语言是否为英文：语言控制器装上翻译器后 tr() 会改变中文探针。"""
-    return tr("中文") != "中文"
+    """v1.8.0（审查 M-3）：改读 LanguageController 维护的权威状态，
+    不再用 `tr("中文") != "中文"` 探针（依赖翻译表巧合，表一改就反转）。"""
+    from ..i18n import ui_is_english
+
+    return ui_is_english()
 
 
 # v1.7.3：安全状态中文映射从 SecurityPage 提为模块函数，技能列表"安全"列复用
@@ -78,7 +84,7 @@ class _SkillTable(QTableWidget):
         self.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
 
 
-class SkillsPage(AdaptivePage):
+class SkillsPage(CheckableTableMixin, AdaptivePage):
     def __init__(self, facade: MemoryFacade, runner: TaskRunner, jobs: JobController, parent=None):
         super().__init__(parent)
         self.facade, self.runner, self.jobs = facade, runner, jobs
@@ -223,7 +229,7 @@ class SkillsPage(AdaptivePage):
                 self.table.scrollToItem(anchor, QTableWidget.ScrollHint.PositionAtCenter)
 
     def _sort_rows(self):
-        """v1.7.4：按表头排序状态原地排序；未点过表头时保持服务层顺序。"""
+        """按表头排序状态原地排序；未点过表头时保持服务层顺序（纯排序，不重建行）。"""
         if self._sort_col is None:
             return
         col = self._sort_col
@@ -237,18 +243,14 @@ class SkillsPage(AdaptivePage):
             return ""
         self.items.sort(key=key, reverse=self._sort_order == Qt.SortOrder.DescendingOrder)
 
-    def _header_clicked(self, col: int):
-        """v1.7.4：表头点击——第 0 列"多选"切换全选/全取消，其余列正/反序排序。"""
-        if col == 0:
-            self._toggle_select_all()
-            return
-        if self._sort_col == col:
-            self._sort_order = Qt.SortOrder.DescendingOrder if self._sort_order == Qt.SortOrder.AscendingOrder else Qt.SortOrder.AscendingOrder
-        else:
-            self._sort_col = col
-            self._sort_order = Qt.SortOrder.AscendingOrder
-        self.table.horizontalHeader().setSortIndicator(col, self._sort_order)
+    def _apply_sort(self, col: int, order: Qt.SortOrder):
+        """v1.8.0（审查 P2-4）：表头点击分派进 CheckableTableMixin——排序并重建行。"""
+        self._sort_col, self._sort_order = col, order
+        self._sort_rows()
         self._apply_rows()
+
+    def _after_select_all(self, target: bool, count: int):
+        self._set_status(f"已{'全选' if target else '全部取消选择'} {count} 项")
 
     def _toggle_select_all(self):
         rows = range(self.table.rowCount())
@@ -293,53 +295,40 @@ class SkillsPage(AdaptivePage):
         v1.7.4：单实例——已有窗口时关旧开新，不再叠出多个要关多次的窗口；
         v1.7.5：0.35s 防重入（itemActivated 与 itemDoubleClicked 双绑定时同一双击
         可能两个信号都到，防重入保证只开一个窗）。"""
-        import time
-        now = time.monotonic()
-        if now - getattr(self, "_detail_last_open", 0.0) < 0.35:
-            return
-        self._detail_last_open = now
         item = self._selected()
         if not item:
             return
-        existing = self._detail_dialog
-        if existing is not None:
-            try:
-                existing.close()
-            except RuntimeError:
-                pass
-            self._detail_dialog = None
-        dialog = QDialog(self)
-        dialog.setWindowTitle(f"技能详情 - {item.get('name')}")
-        dialog.setModal(False)
-        dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
-        # ocr 审查修复：destroyed 只清理「仍是当前窗口」的引用——close() 走
-        # deleteLater，旧窗口的 destroyed 会在新窗口赋值后才触发，无条件清空
-        # 会把新窗口引用抹掉，单实例失效（后续双击叠窗）。
-        dialog.destroyed.connect(lambda *_, d=dialog: self._detail_dialog is d and setattr(self, "_detail_dialog", None))
-        dialog.resize(640, 480)
-        layout = QVBoxLayout(dialog)
-        layout.setContentsMargins(20, 18, 20, 18)
-        title = QLabel(str(item.get("name") or ""))
-        title.setStyleSheet("font-size:18px;font-weight:650")
-        layout.addWidget(title)
-        text = QTextBrowser()
-        text.setOpenExternalLinks(False)
-        text.setFont(QFont("Cascadia Mono", 9))
-        text.setPlainText(self._format_detail(item))
-        layout.addWidget(text, 1)
-        # 操作按钮（复用现有逻辑）
-        actions = QHBoxLayout()
-        check_btn = QPushButton("离线检查"); check_btn.clicked.connect(lambda: (self.scan("offline"), dialog.close())); actions.addWidget(check_btn)
-        ai_check_btn = QPushButton("AI 检查"); ai_check_btn.clicked.connect(lambda: (self.scan("ai"), dialog.close())); actions.addWidget(ai_check_btn)
-        trust_btn = QPushButton("信任放行"); trust_btn.clicked.connect(lambda: (self.trust(), dialog.close())); actions.addWidget(trust_btn)
-        update_btn = QPushButton("更新"); update_btn.clicked.connect(lambda: (self.update(), dialog.close())); update_btn.setEnabled(item.get("provider") != "local"); actions.addWidget(update_btn)
-        delete_btn = QPushButton("软删除"); delete_btn.setObjectName("danger"); delete_btn.setToolTip(SOFT_DELETE_SKILL_TIP); delete_btn.clicked.connect(lambda: (self.delete(), dialog.close())); actions.addWidget(delete_btn)
-        edit_btn = QPushButton("编辑信息"); edit_btn.clicked.connect(lambda: (self.edit_metadata(), dialog.close())); actions.addWidget(edit_btn)
-        layout.addLayout(actions)
-        close_btn = QPushButton("关闭"); close_btn.clicked.connect(dialog.close); layout.addWidget(close_btn)
-        prepare_dialog(dialog)
-        self._detail_dialog = dialog
-        dialog.show()
+
+        # v1.8.0（审查 P2-4）：单实例/防重入/销毁身份判断统一进 open_singleton_dialog
+        def build():
+            dialog = QDialog(self)
+            dialog.setWindowTitle(f"技能详情 - {item.get('name')}")
+            dialog.setModal(False)
+            dialog.resize(640, 480)
+            layout = QVBoxLayout(dialog)
+            layout.setContentsMargins(20, 18, 20, 18)
+            title = QLabel(str(item.get("name") or ""))
+            title.setStyleSheet("font-size:18px;font-weight:650")
+            layout.addWidget(title)
+            text = QTextBrowser()
+            text.setOpenExternalLinks(False)
+            text.setFont(QFont("Cascadia Mono", 9))
+            text.setPlainText(self._format_detail(item))
+            layout.addWidget(text, 1)
+            # 操作按钮（复用现有逻辑）
+            actions = QHBoxLayout()
+            check_btn = QPushButton("离线检查"); check_btn.clicked.connect(lambda: (self.scan("offline"), dialog.close())); actions.addWidget(check_btn)
+            ai_check_btn = QPushButton("AI 检查"); ai_check_btn.clicked.connect(lambda: (self.scan("ai"), dialog.close())); actions.addWidget(ai_check_btn)
+            trust_btn = QPushButton("信任放行"); trust_btn.clicked.connect(lambda: (self.trust(), dialog.close())); actions.addWidget(trust_btn)
+            update_btn = QPushButton("更新"); update_btn.clicked.connect(lambda: (self.update(), dialog.close())); update_btn.setEnabled(item.get("provider") != "local"); actions.addWidget(update_btn)
+            delete_btn = QPushButton("软删除"); delete_btn.setObjectName("danger"); delete_btn.setToolTip(SOFT_DELETE_SKILL_TIP); delete_btn.clicked.connect(lambda: (self.delete(), dialog.close())); actions.addWidget(delete_btn)
+            edit_btn = QPushButton("编辑信息"); edit_btn.clicked.connect(lambda: (self.edit_metadata(), dialog.close())); actions.addWidget(edit_btn)
+            layout.addLayout(actions)
+            close_btn = QPushButton("关闭"); close_btn.clicked.connect(dialog.close); layout.addWidget(close_btn)
+            prepare_dialog(dialog)
+            return dialog
+
+        open_singleton_dialog(self, "_detail_dialog", build)
 
     def scan(self, route):
         item = self._selected();
@@ -399,8 +388,7 @@ class SkillsPage(AdaptivePage):
 
     def copy_prompt(self):
         # v1.7.5：与全站统一——右上角「Agent连接提示词」复制注入提示词并弹「已复制」
-        if copy_agent_prompt(self.facade, self.agent_button):
-            self._set_status("注入提示词已复制")
+        copy_agent_prompt(self.facade, self.agent_button, self.runner)
 
     def copy_skill_prompt(self):
         item = self._selected();
@@ -453,7 +441,7 @@ class MetadataDialog(QDialog):
         note = QLabel("改名只改变身份；目录字段才决定仓库归属。目录不能包含 /、\\ 或以点开头。"); note.setObjectName("muted"); root.addWidget(note); buttons = QDialogButtonBox(); save = buttons.addButton("保存", QDialogButtonBox.ButtonRole.AcceptRole); close = buttons.addButton("关闭", QDialogButtonBox.ButtonRole.RejectRole); root.addWidget(buttons); save.clicked.connect(self.save); close.clicked.connect(self._hide); prepare_dialog(self); label_controls(self); self._restore_geometry(); self.load_item(item)
 
     def _restore_geometry(self):
-        settings = QSettings(str(self.page.facade.config_store.config_dir / "native-ui.ini"), QSettings.Format.IniFormat)
+        settings = ui_settings(self.page.facade.config_store.config_dir)
         geometry = settings.value("skill-editor/geometry")
         if geometry:
             self.restoreGeometry(geometry)
@@ -462,7 +450,7 @@ class MetadataDialog(QDialog):
             self.resize(min(1100, int(screen.width() * .85)), int(screen.height() * .75))
 
     def _save_geometry(self):
-        settings = QSettings(str(self.page.facade.config_store.config_dir / "native-ui.ini"), QSettings.Format.IniFormat)
+        settings = ui_settings(self.page.facade.config_store.config_dir)
         settings.setValue("skill-editor/geometry", self.saveGeometry())
 
     def _hide(self):
@@ -479,7 +467,7 @@ class MetadataDialog(QDialog):
         self.name.setText(str(item.get("name") or "")); self.directory.setText(Path(str(item.get("local_dir") or "")).name); self.provider.setCurrentIndex(max(0, self.provider.findData(item.get("provider", "github")))); self.source.setText(str(item.get("source_url") or "")); self.library.setCurrentIndex(max(0, self.library.findData(item.get("library", "skills")))); self.version.setText(str(item.get("version") or "")); self.description.setPlainText(str(item.get("description") or "")); self.description_zh.setPlainText(str(item.get("description_zh") or "")); self.translate_status.clear(); self._directory_hint(); self._source_hint(); self.setWindowTitle(f"编辑技能信息 · {item.get('name', '')}")
 
     def _directory_hint(self):
-        value = self.directory.text().strip(); self.directory.setStyleSheet("color:#B42318" if "/" in value or "\\" in value or value.startswith(".") else "")
+        value = self.directory.text().strip(); self.directory.setStyleSheet(f"color:{_current_palette().get('error', '#B42318')}" if "/" in value or "\\" in value or value.startswith(".") else "")
 
     def _source_hint(self):
         value = self.source.text().strip()
@@ -601,14 +589,14 @@ class AddSkillDialog(QDialog):
         self.accept()
 
 
-class SecurityPage(AdaptivePage):
+class SecurityPage(CheckableTableMixin, AdaptivePage):
     def __init__(self, facade, runner, jobs, parent=None):
         super().__init__(parent); self.facade, self.runner, self.jobs = facade, runner, jobs; self.scope = RequestScope(runner, self); self.items = []
         # v1.7.4：表头排序 +「检查通过后不显示」开关 + 多选列
         self._sort_col: int | None = None
         self._sort_order = Qt.SortOrder.AscendingOrder
         self._report_dialog: QDialog | None = None
-        settings = QSettings(str(facade.config_store.config_dir / "native-ui.ini"), QSettings.Format.IniFormat)
+        settings = ui_settings(facade.config_store.config_dir)
         hidden = settings.value("security/hidePassed", False)
         self._hide_passed = hidden in (True, "true", 1, "1")
         self._build()
@@ -618,12 +606,12 @@ class SecurityPage(AdaptivePage):
         # v1.7.5：页头改横排，右上角统一放「Agent连接提示词」皇家蓝按钮
         head = QHBoxLayout(); head.setSpacing(10)
         labels = QVBoxLayout(); labels.setSpacing(5)
-        eyebrow = QLabel("安全审核"); eyebrow.setObjectName("eyebrow"); title = QLabel("安全中心"); title.setObjectName("title"); note = QLabel("待确认条目可路线 A 离线检查、路线 B AI 检查，人工信任会保留记录。"); note.setObjectName("muted")
+        eyebrow = QLabel("安全审核"); eyebrow.setObjectName("eyebrow"); title = QLabel("安全中心"); title.setObjectName("title"); note = QLabel("需要确认的条目可路线 A 离线检查、路线 B AI 检查，人工信任会保留记录。"); note.setObjectName("muted")
         labels.addWidget(eyebrow); labels.addWidget(title); labels.addWidget(note); head.addLayout(labels); head.addStretch()
         self.agent_button = make_agent_prompt_button(self, self.copy_prompt); head.addWidget(self.agent_button)
         root.addLayout(head)
         route_hint = QLabel("推荐先用路线 A · 离线；路线 B · AI 会把摘要发送到已配置接口。"); route_hint.setObjectName("helper"); route_hint.setWordWrap(True); root.addWidget(route_hint)
-        bar = FlowLayout(spacing=10); self.route = QComboBox(); self.route.setAccessibleName("安全检查路线"); self.route.addItem("路线 A · 离线", "offline"); self.route.addItem("路线 B · AI", "ai"); bar.addWidget(self.route); self.batch = QPushButton("批量检查待确认"); self.batch.setObjectName("primary"); self.batch.setToolTip("勾选了条目时优先检查勾选项；未勾选时检查全部待确认条目。"); self.batch.clicked.connect(self.batch_scan); bar.addWidget(self.batch)
+        bar = FlowLayout(spacing=10); self.route = QComboBox(); self.route.setAccessibleName("安全检查路线"); self.route.addItem("路线 A · 离线", "offline"); self.route.addItem("路线 B · AI", "ai"); bar.addWidget(self.route); self.batch = QPushButton("批量检查需要确认"); self.batch.setObjectName("primary"); self.batch.setToolTip("勾选了条目时优先检查勾选项；未勾选时检查全部需要确认的条目。"); self.batch.clicked.connect(self.batch_scan); bar.addWidget(self.batch)
         # v1.7.4：打开后列表不再显示已通过检查的条目（配置存在 native-ui.ini，重启保留）
         self.hide_passed = QCheckBox("检查通过后不显示"); self.hide_passed.setChecked(self._hide_passed); self.hide_passed.toggled.connect(self._toggle_hide_passed); bar.addWidget(self.hide_passed)
         refresh = QPushButton("刷新"); refresh.clicked.connect(self.refresh); bar.addWidget(refresh); root.addLayout(bar)
@@ -642,7 +630,7 @@ class SecurityPage(AdaptivePage):
 
     def _toggle_hide_passed(self, checked: bool):
         self._hide_passed = bool(checked)
-        settings = QSettings(str(self.facade.config_store.config_dir / "native-ui.ini"), QSettings.Format.IniFormat)
+        settings = ui_settings(self.facade.config_store.config_dir)
         settings.setValue("security/hidePassed", self._hide_passed)
         self._apply({"items": self.items})
 
@@ -668,27 +656,13 @@ class SecurityPage(AdaptivePage):
             return ""
         return sorted(items, key=key, reverse=self._sort_order == Qt.SortOrder.DescendingOrder)
 
-    def _header_clicked(self, col: int):
-        if col == 0:
-            self._toggle_select_all()
-            return
-        if self._sort_col == col:
-            self._sort_order = Qt.SortOrder.DescendingOrder if self._sort_order == Qt.SortOrder.AscendingOrder else Qt.SortOrder.AscendingOrder
-        else:
-            self._sort_col = col
-            self._sort_order = Qt.SortOrder.AscendingOrder
-        self.table.horizontalHeader().setSortIndicator(col, self._sort_order)
+    def _apply_sort(self, col: int, order: Qt.SortOrder):
+        """v1.8.0（审查 P2-4）：表头点击分派进 CheckableTableMixin——安全中心按列重排并重建。"""
+        self._sort_col, self._sort_order = col, order
         self._apply({"items": self.items})
 
-    def _toggle_select_all(self):
-        checks = [self.table.cellWidget(row, 0) for row in range(self.table.rowCount())]
-        checks = [check for check in checks if isinstance(check, QCheckBox)]
-        if not checks:
-            return
-        target = not all(check.isChecked() for check in checks)
-        for check in checks:
-            check.setChecked(target)
-        self.status.setText(f"已{'全选' if target else '全部取消选择'} {len(checks)} 项")
+    def _after_select_all(self, target: bool, count: int):
+        self.status.setText(f"已{'全选' if target else '全部取消选择'} {count} 项")
 
     def _checked_items(self):
         out = []
@@ -779,13 +753,8 @@ class SecurityPage(AdaptivePage):
         self.report.setPlainText(json.dumps(findings, ensure_ascii=False, indent=2, default=str) if findings else "暂无命中项；状态由最近一次路线检查或人工放行记录提供。")
 
     def show_report_dialog(self):
-        """v1.6.0：双击行弹出检查报告窗口；v1.7.4：单实例，关旧开新不叠窗；
-        v1.7.5：0.35s 防重入（itemActivated/itemDoubleClicked 双绑定只开一个窗）。"""
-        import time
-        now = time.monotonic()
-        if now - getattr(self, "_report_last_open", 0.0) < 0.35:
-            return
-        self._report_last_open = now
+        """v1.6.0：双击行弹出检查报告窗口；v1.8.0（审查 P2-4）：单实例/防重入/
+        销毁身份判断统一进 ui.open_singleton_dialog（原为三段手写副本）。"""
         selected = self.table.selectionModel().selectedRows()
         if not selected:
             return
@@ -793,38 +762,31 @@ class SecurityPage(AdaptivePage):
         if rows[0] >= len(self._visible):
             return
         item = self._visible[rows[0]]
-        existing = self._report_dialog
-        if existing is not None:
-            try:
-                existing.close()
-            except RuntimeError:
-                pass
-            self._report_dialog = None
-        dialog = QDialog(self)
-        dialog.setWindowTitle(f"检查报告 - {item.get('name')}")
-        dialog.setModal(False)
-        dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
-        # ocr 审查修复：与技能详情窗同款身份判断，防止旧窗 destroyed 抹掉新窗引用
-        dialog.destroyed.connect(lambda *_, d=dialog: self._report_dialog is d and setattr(self, "_report_dialog", None))
-        dialog.resize(680, 520)
-        layout = QVBoxLayout(dialog)
-        layout.setContentsMargins(20, 18, 20, 18)
-        title = QLabel(str(item.get("name") or ""))
-        title.setObjectName("sectionTitle")
-        layout.addWidget(title)
-        meta = QLabel(f"来源：{item.get('provider', 'unknown')} · 状态：{_security_label(item.get('security_status', 'unchecked'))} · 最近检查：{str(item.get('updated_at', ''))[:19]}")
-        meta.setObjectName("muted")
-        layout.addWidget(meta)
-        report_text = QPlainTextEdit()
-        report_text.setReadOnly(True)
-        findings = item.get("security_findings") or []
-        import json
-        report_text.setPlainText(json.dumps(findings, ensure_ascii=False, indent=2, default=str) if findings else "暂无命中项；状态由最近一次路线检查或人工放行记录提供。")
-        layout.addWidget(report_text, 1)
-        close_btn = QPushButton("关闭"); close_btn.clicked.connect(dialog.close); layout.addWidget(close_btn)
-        prepare_dialog(dialog)
-        self._report_dialog = dialog
-        dialog.show()
+
+        def build():
+            dialog = QDialog(self)
+            dialog.setWindowTitle(f"检查报告 - {item.get('name')}")
+            dialog.setModal(False)
+            dialog.resize(680, 520)
+            layout = QVBoxLayout(dialog)
+            layout.setContentsMargins(20, 18, 20, 18)
+            title = QLabel(str(item.get("name") or ""))
+            title.setObjectName("sectionTitle")
+            layout.addWidget(title)
+            meta = QLabel(f"来源：{item.get('provider', 'unknown')} · 状态：{_security_label(item.get('security_status', 'unchecked'))} · 最近检查：{str(item.get('updated_at', ''))[:19]}")
+            meta.setObjectName("muted")
+            layout.addWidget(meta)
+            report_text = QPlainTextEdit()
+            report_text.setReadOnly(True)
+            findings = item.get("security_findings") or []
+            import json
+            report_text.setPlainText(json.dumps(findings, ensure_ascii=False, indent=2, default=str) if findings else "暂无命中项；状态由最近一次路线检查或人工放行记录提供。")
+            layout.addWidget(report_text, 1)
+            close_btn = QPushButton("关闭"); close_btn.clicked.connect(dialog.close); layout.addWidget(close_btn)
+            prepare_dialog(dialog)
+            return dialog
+
+        open_singleton_dialog(self, "_report_dialog", build)
 
     def batch_scan(self):
         route = self.route.currentData()
@@ -836,7 +798,7 @@ class SecurityPage(AdaptivePage):
 
     def copy_prompt(self):
         """v1.7.5：安全中心右上角「Agent连接提示词」。"""
-        copy_agent_prompt(self.facade, self.agent_button)
+        copy_agent_prompt(self.facade, self.agent_button, self.runner)
 
     def showEvent(self, event): self.refresh(); super().showEvent(event)
 

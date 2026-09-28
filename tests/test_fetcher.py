@@ -83,3 +83,25 @@ def test_git_fetcher_uses_mirror_then_direct(monkeypatch) -> None:
     finally:
         cleanup_fetch(result)
 
+
+
+def test_git_auth_header_builds_correct_basic_credentials() -> None:
+    """v1.8.0（K3 审查跟进）：git 通道 Basic 认证头必须有单测盯住。
+
+    git HTTP 只认 Basic（用户名:令牌），用户名惯例 x-access-token。这条路径
+    曾在审查报告中被误报为 f-string 缺陷（实为报告脱敏伪影），但"该路径无
+    测试"属实——补上后，任何人真改坏这一行都会立刻红灯。
+    """
+    import base64
+
+    from mshub.fetcher import _git_auth_header
+
+    token = "ghp_UnitTestProbe0001"
+    header = _git_auth_header(token)
+    expected = "AUTHORIZATION: basic " + base64.b64encode(
+        f"x-access-token:{token}".encode("utf-8")
+    ).decode("ascii")
+    assert header == expected
+    # 解码回读：凭据原文必须是 "用户名:完整令牌"，无省略/截断/多余字面量
+    decoded = base64.b64decode(header.split("basic ", 1)[1]).decode("utf-8")
+    assert decoded == f"x-access-token:{token}"

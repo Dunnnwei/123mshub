@@ -567,8 +567,11 @@ class ImportService:
         if not str(candidate.fields.get("title") or "").strip() and candidate.body.strip():
             try:
                 title = self.memory.ai_draft(candidate.body)["title"] or title
-            except Exception:
-                pass
+            except Exception as exc:
+                # v1.8.0（审查 L-3）：AI 拟题失败降级用原 title，但留排障线索
+                import logging
+
+                logging.getLogger(__name__).debug("导入时 AI 拟题失败（%s）：%s", name, exc)
         entry = MemoryEntry(
             name=name,
             title=title,

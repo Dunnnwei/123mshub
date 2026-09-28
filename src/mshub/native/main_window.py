@@ -31,7 +31,7 @@ from PySide6.QtWidgets import (
 )
 
 from .memory_facade import MemoryFacade
-from .state import AppState
+from .state import AppState, ui_settings
 from .task_runner import TaskRunner
 from .job_controller import JobController
 from .theme import PALETTES, ThemeController, ensure_brand_fonts
@@ -100,7 +100,7 @@ class MainWindow(QMainWindow):
         self.jobs = JobController(self)
         self.language = LanguageController(self)
         self.state = AppState(self)
-        self.theme = ThemeController(QSettings(str(self.facade.config_store.config_dir / "native-ui.ini"), QSettings.Format.IniFormat), parent=self)
+        self.theme = ThemeController(ui_settings(self.facade.config_store.config_dir), parent=self)
         self._build_ui()
         self.theme.changed.connect(self._theme_changed)
         self.theme.apply()
@@ -294,7 +294,7 @@ class MainWindow(QMainWindow):
             self.brand_logo.setPixmap(apply_brand_icon(self.theme.effective_mode).pixmap(self.brand_logo.size()))
 
     def _ui_settings(self) -> QSettings:
-        return QSettings(str(self.facade.config_store.config_dir / "native-ui.ini"), QSettings.Format.IniFormat)
+        return ui_settings(self.facade.config_store.config_dir)
 
     def _restore_sidebar_width(self) -> None:
         """v1.7.2：恢复用户上次拖出的侧栏宽度；首次启动用默认 236。"""

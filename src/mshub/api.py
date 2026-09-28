@@ -1,3 +1,7 @@
+"""[DEPRECATED v1.8.0] web 旧线 HTTP API——pywebview/Vue 前端已退役，本模块冻结维护。
+现行交付物为 PySide6 native 壳（src/mshub/native，经 MemoryFacade 直调服务层）。
+保留仅供历史参考，不再接收缺陷修复与功能演进。
+"""
 from __future__ import annotations
 
 import os

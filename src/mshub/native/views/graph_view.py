@@ -159,4 +159,4 @@ class GraphView(QWidget):
 
     def _copy_prompt(self) -> None:
         """v1.7.5：图谱页右上角「Agent连接提示词」。"""
-        copy_agent_prompt(self.facade, self.agent_button)
+        copy_agent_prompt(self.facade, self.agent_button, self.runner)

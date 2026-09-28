@@ -1,3 +1,38 @@
+# 123 MSHub v1.8.0 架构治理版（双轮审查收敛 + web 旧线退役）
+
+> 本版按 K3 综合审查报告（docs/reviews/，四份分报告）执行 A/B1/C/D 四批整改，并完成阿里 open-code-review 二轮全量复核。审查中 P0-1「fetcher 认证 f-string 缺陷」经运行时/AST/码点三重验证确认为**报告脱敏伪影误报**（真实代码正确），但据此补上了该路径缺失的单元测试。web 旧线（pywebview+Vue）正式退役冻结，native 壳成为唯一交付线。
+
+## A 批 · 立即修复（native 线）
+
+- **GUI 线程阻塞 IO 全部收敛**（审查 P0-2/M-5/H-2）：「Agent连接提示词」复制（全库读）、批量 AI 补全（每条最长 60s）、批量改分类/打标签/软删除、投递箱列表、值守提示词、索引查看全部改走后台线程（RequestScope/JobManager），回 GUI 线程再写剪贴板与刷新；顺带修复投递箱 fill 回调引用错误项的潜伏 bug。
+- 语言判定权威化（M-3）：视图层 `tr("中文")!="中文"` 巧合探针改为 `i18n.ui_is_english()`（LanguageController 维护）。
+- 钥匙串降级可感知（M-2）：keyring 不可用时记录 warning、`secrets_backend` 暴露进配置、设置页醒目提示「密钥仅存内存，重启后需重新填写」。
+- 首屏状态不再吞错（M-4）：仓库 fast 路径的记忆根目录失败写入 `memory_error` 并记日志。
+- fetcher git Basic 认证头补单元测试（P0-1 的有效部分）。
+- 术语统一（P1-4，基准=native 线+README）：安全中心「待确认」→「需要确认」；记忆空状态卡片按钮 →「Agent连接提示词」；i18n 词条同步。
+- 投递箱 500+ 字符单行长语句拆分为构造/填充/绑定三方法（H-3）。
+
+## B1 批 · web 旧线退役
+
+`web/src/`、`src/mshub/api.py`、`src/mshub/gui.py` 文件头标注 DEPRECATED 冻结维护；README 新增退役说明与「把提示词装进 agent 常驻配置」（AGENTS.md/CLAUDE.md/Cursor Rules 等位置指引，替代原截图缺口）。审查中落在 web 线的 10 项修复随之全部关闭不做；双壳设计 token 不同源问题自动消解。
+
+## C 批 · 结构债（按审查顺序）
+
+- `ai_gateway.py`：五处手写「拼 endpoint→httpx.post→剥围栏」收敛为 `chat_completion()`（含 json_mode 400 降级重试），`_strip_fence` 两份重复归一；`settings_service.test_connection` 作为连通探测保留独立并注明。
+- `SkillRef` NamedTuple：`(name, library)` 复合键空值归一化封装（`of()/db_library`）；`_dir_name_for()` 消除 install 与 _target_exists 的目录名拼装重复。
+- `CheckableTableMixin` + `open_singleton_dialog()`：技能/安全两页的表头排序/全选状态机与「关旧开新+防重入+销毁身份判断」弹窗策略各两份副本收敛为 ui.py 公共件。
+- `ui_settings()` 工厂：native-ui.ini 的 QSettings 构造 8 处收口（state.py）。
+
+## D 批 · 文档与细节
+
+v1 需求/架构两份顶层规格文档头部加回写修订框（注明原生化授权链，消除「只读 v1 文档会得到错误架构预期」的失真）；视图层行内裸色（选中行白字、错误红）收编为 theme token 常量 + `current_palette()`；品牌字体路径改 `SystemRoot` 环境变量兜底；`datetime_stamp` 统一 `%f` 微秒后缀（消除两套回收目录命名）；config/importer 的静默 except 补 debug 日志。
+
+## 验证
+
+全量测试（含新增：fetcher 认证头断言、异步复制轮询等待改写）；build-native.ps1 全流程（测试→打包→冒烟→双包拆分→缺环境探测）。版本号自本版起由 build 脚本从 `__init__.py` 单一来源读取。
+
+---
+
 # 123 MSHub v1.7.5 原生版页头统一（正式雏形首发 GitHub）
 
 > v1.7.4 已由用户实测通过（暂未发现问题），作为正式雏形首次发布到 GitHub。本版按用户要求统一全部页面右上角动作区，并把 GitHub 发布流程与总机日报联动跑通。

@@ -28,8 +28,8 @@ Claude Desktop、Cursor 等）管理两类共享资产：
 ## 快速开始（三步）
 
 1. **解压即用**：从 [GitHub Releases](https://github.com/Dunnnwei/123mshub/releases) 下载
-   v1.7.5 起发布物分为两个包：**程序包**（`native-v1.7.5/123mshub/`，约 50MB）与
-   **环境包**（`123mshub-environment-v1.7.5-win-x64.zip`，约 300MB 的 PySide6/Qt 运行库）。
+   v1.8.0 起发布物分为两个包：**程序包**（`native-v1.8.0/123mshub/`，约 50MB）与
+   **环境包**（`123mshub-environment-v1.8.0-win-x64.zip`，约 300MB 的 PySide6/Qt 运行库）。
    首次使用：解压程序包，再把环境包里的 `PySide6` 文件夹解压到 `123mshub\_internal\`
    内，双击 `123mshub.exe`；之后更新只需下载新版程序包覆盖（保留 `_internal\PySide6`）。
    已有环境的老用户不用再下环境包；缺环境启动时程序会弹窗给出下载地址，也可自行安装。
@@ -44,12 +44,31 @@ Claude Desktop、Cursor 等）管理两类共享资产：
 
 ### Windows 系统依赖
 
-v1.7.5 起 native 版的图形运行时（PySide6/Qt，含 QtWebEngine）放在独立的**环境包**
+v1.8.0 起 native 版的图形运行时（PySide6/Qt，含 QtWebEngine）放在独立的**环境包**
 `123mshub-environment-vX.Y.Z-win-x64.zip` 里（见上文"快速开始"），程序包本体保持小巧；
 环境包与程序版本对应，除非发布页注明环境包升级，更新程序时无需重新下载。
 Git for Windows 只在选择 Git 拉取、项目更新或 Git bundle 自愈时需要，默认
 archive 模式不强制依赖 Git。旧版（≤ v1.3.3 的 web 线）另有 WebView2 / .NET 4.8
 系统依赖与环境安装包，见历史版本说明。
+
+### 把提示词装进 agent 常驻配置
+
+除了在对话首条消息粘贴，也可以把「Agent连接提示词」的内容放进 agent 的常驻
+配置，一劳永逸。常见位置：
+
+- **ZCode / Claude Code 类**：仓库或项目根的 `AGENTS.md` / `CLAUDE.md`
+- **Cursor**：Settings → Rules for AI（项目规则）
+- **ChatGPT / 通用对话**：Custom Instructions（自定义指令）或系统提示词
+- **自建管线**：系统提示词模板里插入该段
+
+装好后新开对话即已接入；用上面的「连通暗号」可随时验证。
+
+### web 旧线已退役（v1.8.0 起）
+
+v1.0.0–v1.3.3 的 pywebview + Vue 桌面线（`web/src/`、`src/mshub/api.py`、
+`src/mshub/gui.py`）自 v1.8.0 起正式退役、冻结维护：文件头已标注 DEPRECATED，
+不再接收缺陷修复与功能演进。现行唯一交付物为 **PySide6 native 壳**；
+旧版发布物在 GitHub Releases 历史版本中仍可下载。
 
 ### 连通暗号
 

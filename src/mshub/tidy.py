@@ -192,26 +192,10 @@ class TidyService:
             "3. 不要罗列全部数字（报告前半已有统计），不要建议清单之外的系统操作。\n"
             "只输出 markdown 正文，不要代码围栏。\n\n" + _json.dumps(brief, ensure_ascii=False)
         )
-        endpoint = f"{config.ai_base_url.rstrip('/')}/chat/completions"
-        request_body: dict[str, Any] = {
-            "temperature": 0.2,
-            "messages": [{"role": "user", "content": prompt}],
-        }
-        if config.ai_model:
-            request_body["model"] = config.ai_model
-        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-        try:
-            response = httpx.post(endpoint, headers=headers, json=request_body, timeout=90)
-            response.raise_for_status()
-            data = response.json()
-        except httpx.HTTPError as exc:
-            raise ValidationError(f"AI 分析请求失败：{exc}") from exc
-        except ValueError as exc:
-            raise ValidationError("AI 网关返回的内容不是有效 JSON。") from exc
-        try:
-            content = str(data["choices"][0]["message"]["content"]).strip()
-        except (KeyError, TypeError, ValueError) as exc:
-            raise ValidationError("AI 没有返回可用的分析内容。") from exc
+        # v1.8.0（审查 P2-1）：AI HTTP 调用收敛到 ai_gateway
+        from .ai_gateway import chat_completion
+
+        content = chat_completion(config.ai_base_url, api_key, config.ai_model, prompt, temperature=0.2, timeout=90, label="AI 分析请求")
         content = re.sub(r"^```(?:markdown|md)?\s*", "", content)
         content = re.sub(r"\s*```$", "", content)
         if not content:

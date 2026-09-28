@@ -43,7 +43,7 @@ EN = {
     "程序库": "Programs", "分支": "Branch", "子目录": "Subdirectory", "版本": "Version", "目录名": "Directory name",
     "条目身份（改名不改目录）": "Identity (renaming keeps directory)", "源地址": "Source URL",
     "需要确认": "Needs review", "路线 A · 离线": "Route A · Offline", "路线 B · AI": "Route B · AI",
-    "批量检查待确认": "Check pending entries", "状态": "Status", "最近检查": "Last check", "摘要": "Summary",
+    "批量检查需要确认": "Check pending entries", "状态": "Status", "最近检查": "Last check", "摘要": "Summary",
     "配置目录固定为 %APPDATA%\\mshub；修改草稿不会立即生效。": "Configuration: %APPDATA%\\mshub. Save to apply changes.",
     "仓库根目录": "Repository root", "选择…": "Browse…", "记忆库位置覆盖": "Memory root override",
     "语言": "Language", "主题": "Theme", "跟随系统": "System", "跟随系统 / System": "System",
@@ -76,6 +76,15 @@ class NativeTranslator(QTranslator):
 
 def tr(text):
     return QCoreApplication.translate("Native", text)
+
+
+# v1.8.0（审查 M-3）：界面是否英文的模块级权威状态，由 LanguageController.apply 维护。
+# 视图层不要再靠 `tr("中文") != "中文"` 这类翻译探针巧合判断——翻译表一改就静默反转。
+_english_ui = False
+
+
+def ui_is_english() -> bool:
+    return _english_ui
 
 
 def localize(root):
@@ -136,10 +145,12 @@ class LanguageController(QObject):
         self.mode = "system"
 
     def apply(self, mode):
+        global _english_ui
         self.mode = mode or "system"
         app = QApplication.instance()
         app.removeTranslator(self.translator)
         english = self.mode == "en" or (self.mode == "system" and QLocale.system().language() != QLocale.Language.Chinese)
+        _english_ui = english
         if english:
             app.installTranslator(self.translator)
         for window in app.topLevelWidgets():

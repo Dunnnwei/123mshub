@@ -591,25 +591,15 @@ class MemoryService:
             '只输出 JSON：{"title": "…", "description": "…"}，不要输出其他内容。\n\n'
             + text[:20_000]
         )
-        endpoint = f"{config.ai_base_url.rstrip('/')}/chat/completions"
-        request_body: dict[str, Any] = {"temperature": 0, "messages": [{"role": "user", "content": prompt}]}
-        if config.ai_model:
-            request_body["model"] = config.ai_model
-        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+        # v1.8.0（审查 P2-1）：AI HTTP 调用收敛到 ai_gateway（五处手写副本之一）
+        from .ai_gateway import chat_completion, strip_fence
+
+        raw = chat_completion(config.ai_base_url, api_key, config.ai_model, prompt, timeout=60, label="AI 请求")
         try:
-            response = httpx.post(endpoint, headers=headers, json=request_body, timeout=60)
-            response.raise_for_status()
-            data = response.json()
-        except httpx.HTTPError as exc:
-            raise ValidationError(f"AI 请求失败：{exc}") from exc
-        except ValueError as exc:
-            raise ValidationError("AI 网关返回的内容不是有效 JSON。") from exc
-        try:
-            content = data["choices"][0]["message"]["content"]
-            parsed = json.loads(_strip_fence(str(content)))
+            parsed = json.loads(strip_fence(raw))
             title = str(parsed.get("title") or "").strip()
             description = str(parsed.get("description") or "").strip()
-        except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        except (TypeError, ValueError, json.JSONDecodeError) as exc:
             raise ValidationError("AI 返回内容无法解析为标题与描述。") from exc
         if not title and not description:
             raise ValidationError("AI 没有返回可用的标题或描述。")
@@ -702,9 +692,11 @@ class MemoryService:
 
 
 def datetime_stamp() -> str:
+    # v1.8.0（审查 L-2）：统一 %f 微秒后缀，与 repository/recovery/syncsafe 一致
+    #（原来毫秒拼接是第二套命名格式）
     from datetime import datetime
 
-    return datetime.now().strftime("%Y%m%d-%H%M%S") + f"-{int(time.time() * 1000) % 1000:03d}"
+    return datetime.now().strftime("%Y%m%d-%H%M%S-%f")
 
 
 def _safe_file_name(file_name: str) -> str:
@@ -718,10 +710,7 @@ def _safe_file_name(file_name: str) -> str:
 
 
 def _strip_fence(value: str) -> str:
-    import re
+    # v1.8.0：实现归一到 ai_gateway.strip_fence，这里保留薄别名供历史调用点
+    from .ai_gateway import strip_fence
 
-    value = value.strip()
-    if value.startswith("```"):
-        value = re.sub(r"^```(?:json)?\s*", "", value)
-        value = re.sub(r"\s*```$", "", value)
-    return value
+    return strip_fence(value)

@@ -47,29 +47,8 @@ def translate_description(
             "不要加引号、解释或前后缀；专有名词（产品名/命令/文件名）保留原文。\n\n"
             + text.strip()
         )
-    endpoint = f"{base_url.rstrip('/')}/chat/completions"
-    request_body: dict = {
-        "temperature": 0,
-        "messages": [{"role": "user", "content": prompt}],
-    }
-    if model:
-        request_body["model"] = model
-    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-    try:
-        response = httpx.post(endpoint, headers=headers, json=request_body, timeout=timeout)
-        response.raise_for_status()
-        data = response.json()
-    except httpx.HTTPError as exc:
-        raise ValidationError(f"翻译请求失败：{exc}") from exc
-    except ValueError as exc:
-        raise ValidationError("网关返回的内容不是有效 JSON。") from exc
-    choices = data.get("choices") if isinstance(data, dict) else None
-    content = ""
-    if isinstance(choices, list) and choices:
-        message = choices[0].get("message") if isinstance(choices[0], dict) else None
-        if isinstance(message, dict):
-            content = str(message.get("content") or "")
-    content = content.strip().strip('"“”‘’').strip()
-    if not content:
-        raise ValidationError("网关没有返回翻译结果。")
-    return content
+    # v1.8.0（审查 P2-1）：AI HTTP 调用收敛到 ai_gateway
+    from .ai_gateway import chat_completion
+
+    content = chat_completion(base_url, api_key, model, prompt, timeout=timeout, label="翻译请求")
+    return content.strip().strip('"“”‘’').strip()

@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import logging
 import shutil
 import tempfile
 import threading
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, NamedTuple
 
 from .config import ConfigStore
 from .database import Database
@@ -64,6 +65,37 @@ def _human_size(value: float) -> str:
     return f"{value / 1024 ** 2:.1f} MB"
 
 
+class SkillRef(NamedTuple):
+    """v1.8.0（审查 P2-2）：技能复合键 (name, library) 的归一化封装。
+
+    "`library or None`（DB 层）/ `or ''`（记录层）"的空值规则原先散在十多处，
+    一处漏写就查不到记录。新代码经 SkillRef.of() 归一后取 .name / .db_library。
+    """
+    name: str
+    library: str
+
+    @classmethod
+    def of(cls, name: str, library: str | None = "") -> "SkillRef":
+        return cls(str(name or "").strip(), str(library or "").strip())
+
+    @property
+    def db_library(self) -> str | None:
+        """Database.* 期望的形态：空串归一为 None（flat 布局）。"""
+        return self.library or None
+
+
+def _dir_name_for(source: SourceSpec) -> str:
+    """v1.8.0（审查 P2-2）：来源 → 目标目录名的唯一拼装点。
+
+    原来在 install 与 _target_exists 各写一遍（owner/repo + 子目录后缀），
+    一处改动另一处漏改就会出现"装进 A 目录、却在 B 目录判存在"的错位。
+    """
+    dir_name = safe_dir_name(source.owner, source.repo)
+    if source.subdir:
+        dir_name = f"{dir_name}__{source.subdir.replace('/', '_')}"
+    return dir_name
+
+
 class SkillRepository:
     def __init__(self, config_store: ConfigStore | None = None) -> None:
         self.config_store = config_store or ConfigStore()
@@ -114,8 +146,13 @@ class SkillRepository:
                 error = self._reconcile_error
             try:
                 memory_root = str(self.memory.memory_root())
-            except Exception:
+                memory_error = ""
+            except Exception as exc:  # noqa: BLE001 - 首屏不拖垮，但错误必须可见
+                # v1.8.0（审查 M-4）：fast 路径曾静默吞成空串——用户只能去别的
+                # 页面撞错。记入结果与日志，让设置/状态页能显示原因。
                 memory_root = ""
+                memory_error = str(exc) or exc.__class__.__name__
+                logging.getLogger(__name__).warning("status fast-path memory_root failed: %s", memory_error)
             return {
                 "configured": True,
                 "repo_root": str(root),
@@ -126,6 +163,7 @@ class SkillRepository:
                 "reconcile_error": error,
                 "memory_heal": {"pending": pending},
                 "memory_root": memory_root,
+                "memory_error": memory_error,
                 "memory": {"memory_root": memory_root, "inbox_pending": 0},
                 "multi_library": repo_uses_libraries(root),
                 "libraries": [
@@ -553,9 +591,7 @@ class SkillRepository:
                     raise ValidationError("local_dir_name 只能是目录名，不能包含路径分隔符。")
                 dir_name = local_dir_name
             else:
-                dir_name = safe_dir_name(source.owner, source.repo)
-                if source.subdir:
-                    dir_name = f"{dir_name}__{source.subdir.replace('/', '_')}"
+                dir_name = _dir_name_for(source)
             target = base / dir_name
             # 身份与归属分离：条目名 = 来源身份（作者/仓库[/子目录]），库归属单独存。
             # 同一技能装进多个库 = 同名不同库的多条记录（复合键不冲突）。
@@ -1044,16 +1080,15 @@ class SkillRepository:
     def _existing(self, name: str, library: str = "") -> dict[str, Any] | None:
         try:
             _, database = self._storage()
-            return database.get_skill(name, library or None)
+            ref = SkillRef.of(name, library)
+            return database.get_skill(ref.name, ref.db_library)
         except ValidationError:
             return None
 
     def _target_exists(self, source: SourceSpec) -> bool:
         try:
             root, database = self._storage()
-            dir_name = safe_dir_name(source.owner, source.repo)
-            if source.subdir:
-                dir_name = f"{dir_name}__{source.subdir.replace('/', '_')}"
+            dir_name = _dir_name_for(source)
             try:
                 known = bool(database.get_skill(source.name))
             except ConflictError:

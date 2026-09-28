@@ -1,3 +1,6 @@
+"""[DEPRECATED v1.8.0] web 旧线 pywebview 桌面壳——已退役，冻结维护。
+现行交付物为 PySide6 native 壳（src/mshub/native）。
+"""
 from __future__ import annotations
 
 import os

@@ -33,16 +33,34 @@ def test_secondary_actions_are_ghost_buttons(qapp, native_facade: MemoryFacade):
     window.close()
 
 
+def _wait_for(qapp, predicate, timeout=2000):
+    """v1.8.0：copy_agent_prompt 改后台线程，回 GUI 线程是排队信号——轮询等待。"""
+    from PySide6.QtCore import QEventLoop, QTimer
+
+    loop = QEventLoop()
+    deadline = QTimer(); deadline.setSingleShot(True); deadline.timeout.connect(loop.quit)
+    poll = QTimer(); poll.setInterval(10)
+    poll.timeout.connect(lambda: loop.quit() if predicate() else None)
+    poll.start(); deadline.start(timeout)
+    if not predicate():
+        loop.exec()
+    poll.stop(); deadline.stop()
+    return bool(predicate())
+
+
 def test_agent_prompt_copy_shows_toast(qapp, native_facade: MemoryFacade):
     """点击后：剪贴板拿到注入提示词，按钮下方弹出「已复制」小框。"""
     native_facade.create_entry({"name": "seed", "title": "种子", "type": "project", "body": "正文"})
     window = MainWindow(native_facade)
     window.show()
     window.memory_page.agent_button.click()
-    text = QApplication.clipboard().text()
-    assert "记忆" in text or "memory" in text.lower(), "剪贴板应是注入提示词"
-    toast = window.findChild(QLabel, "mshubToast")
-    assert toast is not None and toast.isVisible() and toast.text() == "已复制"
+
+    def delivered():
+        toast = window.findChild(QLabel, "mshubToast")
+        return toast is not None and toast.text() == "已复制"
+
+    assert _wait_for(qapp, delivered), "复制应异步完成并弹「已复制」小框"
+    assert "记忆" in QApplication.clipboard().text() or "memory" in QApplication.clipboard().text().lower()
     window.close()
 
 
@@ -53,10 +71,14 @@ def test_agent_prompt_failure_is_readable(qapp, tmp_path):
     store = ConfigStore(tmp_path / "config")  # 未设置 repo_root
     facade = MemoryFacade(store)
     window = MainWindow(facade)
-    ok = copy_agent_prompt(facade, window.memory_page.agent_button)
-    assert ok is False
-    toast = window.findChild(QLabel, "mshubToast")
-    assert toast is not None and toast.text().startswith("复制失败")
+    window.show()
+    window.memory_page.agent_button.click()
+
+    def delivered():
+        toast = window.findChild(QLabel, "mshubToast")
+        return toast is not None and toast.text().startswith("复制失败")
+
+    assert _wait_for(qapp, delivered), "失败也应异步回 UI 并给出可读原因"
     window.close()
 
 
@@ -127,7 +149,7 @@ def test_real_double_click_opens_skill_detail(qapp, native_facade: MemoryFacade)
     qapp.processEvents()
     assert page._detail_dialog is not None and page._detail_dialog.isVisible(), "双击行应打开详情窗口"
     # 双信号（doubleClicked+activated）同时到达时只开一个窗（0.35s 防重入）
-    page._detail_last_open = 0.0  # 模拟用户稍后再次双击另一行
+    page._detail_dialog_last_open = 0.0  # 模拟用户稍后再次双击另一行
     _raw_double_click(page.table, page.table.item(0, 1))
     qapp.processEvents()
     from PySide6.QtWidgets import QDialog as _Dlg
