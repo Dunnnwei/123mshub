@@ -318,7 +318,16 @@ else { message.textContent = '图谱桥接未就绪（请从 Qt WebEngine 打开
 
 function bindSettingsPanel() {
   const panel = $('#graph-settings'); const toggle = $('#settings-toggle');
+  // v1.7.5 修复：面板浮层盖住工具栏"设置"按钮后没有任何关闭出口（死胡同）。
+  // closePanel 统一收口：保存并关闭按钮、Esc、点击面板外区域三条路都走这里。
+  const closePanel = () => { panel.hidden = true; toggle.setAttribute('aria-expanded', 'false') }
   toggle.addEventListener('click', () => { panel.hidden = !panel.hidden; toggle.setAttribute('aria-expanded', String(!panel.hidden)) })
+  $('#save-settings')?.addEventListener('click', () => { saveSettings(); closePanel() })
+  document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !panel.hidden) closePanel() })
+  document.addEventListener('pointerdown', (event) => {
+    if (panel.hidden || panel.contains(event.target) || toggle.contains(event.target)) return
+    closePanel()
+  })
   const types = panel.querySelectorAll('[data-type]'); types.forEach((input) => input.addEventListener('change', () => { graphSettings.selectedTypes[input.dataset.type] = input.checked; saveSettings(); load() }))
   const orphan = $('#show-orphans'); orphan.addEventListener('change', () => { graphSettings.showOrphans = orphan.checked; saveSettings(); load() })
   const motion = $('#motion-toggle'); motion.checked = readMotionSetting(); motion.addEventListener('change', () => { localStorage.setItem(motionKey, JSON.stringify({ enabled: motion.checked })); if (!motion.checked) stopFloat(); else { snapshotFloatBase(); syncFloat() } })

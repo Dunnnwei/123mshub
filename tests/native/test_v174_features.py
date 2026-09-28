@@ -166,6 +166,8 @@ def test_skill_detail_dialog_is_single_instance(qapp, native_facade: MemoryFacad
     page.show_detail_dialog()
     first = page._detail_dialog
     assert first is not None and first.isVisible()
+    # v1.7.5 加了 0.35s 防重入（双信号只开一窗）——重置时间戳模拟用户稍后再开
+    page._detail_last_open = 0.0
     page.show_detail_dialog()
     assert page._detail_dialog is not first, "第二次打开应换新窗口而不是叠加"
     window.close()

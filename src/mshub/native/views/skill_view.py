@@ -109,14 +109,22 @@ class SkillsPage(AdaptivePage):
         self.provider = QComboBox(); self.provider.addItem("全部来源", ""); self.provider.addItem("GitHub 源", "github"); self.provider.addItem("本地自研", "local"); self.provider.currentIndexChanged.connect(self.refresh); filters.addWidget(self.provider)
         self.category = QComboBox(); self.category.addItem("全部资产", ""); self.category.addItem("技能", "skill"); self.category.addItem("程序", "project"); self.category.currentIndexChanged.connect(self.refresh); filters.addWidget(self.category)
         refresh = QPushButton("刷新"); refresh.clicked.connect(self.refresh); filters.addWidget(refresh)
+        # v1.7.5：显式编辑入口——双击路径失效时（v1.7.4 曾发生）也能进编辑窗口
+        edit_selected = QPushButton("编辑选中"); edit_selected.setToolTip("打开当前选中行的「编辑技能信息」窗口；双击行亦可进入详情后编辑。"); edit_selected.clicked.connect(self.edit_metadata); filters.addWidget(edit_selected)
         root.addLayout(filters)
         splitter = QSplitter(Qt.Orientation.Horizontal)
         # v1.7.4：表头"选"改"多选"；各列表头点击排序（正/反序切换），
         # "多选"表头点击 = 全选 / 全取消（见 _header_clicked）
-        self.table = _SkillTable(0, 7); self.table.setAccessibleName("技能与程序列表"); self.table.setAccessibleDescription("使用方向键选择，Enter 或双击查看详情；点击表头按该列排序"); self.table.setHorizontalHeaderLabels(["多选", "名称", "来源", "说明", "安全", "标签", "更新时间"]); self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch); self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows); self.table.verticalHeader().setDefaultSectionSize(52); self.table.verticalHeader().setMinimumSectionSize(52); self.table.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Fixed); self.table.setWordWrap(False); self.table.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded); self.table.itemSelectionChanged.connect(self._selection_changed); self.table.itemActivated.connect(lambda _item: self.show_detail_dialog())
-        # v1.7.4 修复：v1.6.0 同时连了 itemActivated 与 itemDoubleClicked，
-        # 双击时两个信号都触发 → 弹出两个详情窗口（要关两次）。itemActivated
-        # 在 Windows 上已覆盖 Enter 与双击，保留它即可。
+        self.table = _SkillTable(0, 7); self.table.setAccessibleName("技能与程序列表"); self.table.setAccessibleDescription("使用方向键选择，Enter 或双击查看详情；点击表头按该列排序"); self.table.setHorizontalHeaderLabels(["多选", "名称", "来源", "说明", "安全", "标签", "更新时间"]); self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch); self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows); self.table.verticalHeader().setDefaultSectionSize(52); self.table.verticalHeader().setMinimumSectionSize(52); self.table.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Fixed); self.table.setWordWrap(False); self.table.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded); self.table.itemSelectionChanged.connect(self._selection_changed); self.table.itemActivated.connect(lambda _item: self.show_detail_dialog()); self.table.itemDoubleClicked.connect(lambda _item: self.show_detail_dialog())
+        # v1.7.5 修复（推翻 v1.7.4 的判断）：v1.7.4 只留 itemActivated（以为 Windows
+        # 双击必触发它），实测打包版双击无反应 → 详情打不开、编辑无入口。现恢复
+        # itemDoubleClicked 为主路径 + itemActivated（Enter 键）备用；show_detail_dialog
+        # 内 0.35s 防重入，双信号同时到达也不会叠开两个窗口。
+        # v1.7.5 修复（根因）：_SkillTable 漏设 NoEditTriggers——QTableWidget 默认
+        # editTriggers 含 DoubleClicked，双击被"进入编辑"路径吞掉，clicked/
+        # doubleClicked/activated 全都不发射（安全中心的 DataTable 设过所以双信号
+        # 都发、v1.6.0 才会弹双窗；技能表没设，v1.7.4 删掉 doubleClicked 后彻底无反应）。
+        self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.horizontalHeader().sectionClicked.connect(self._header_clicked)
         # v1.7.4：隐藏行号列（与安全中心 DataTable 一致；原来技能表一直显示 1/2/3…）
         self.table.verticalHeader().hide()
@@ -282,7 +290,14 @@ class SkillsPage(AdaptivePage):
 
     def show_detail_dialog(self):
         """v1.6.0：双击行弹出详情窗口（和记忆库的双击编辑逻辑一致）；
-        v1.7.4：单实例——已有窗口时关旧开新，不再叠出多个要关多次的窗口。"""
+        v1.7.4：单实例——已有窗口时关旧开新，不再叠出多个要关多次的窗口；
+        v1.7.5：0.35s 防重入（itemActivated 与 itemDoubleClicked 双绑定时同一双击
+        可能两个信号都到，防重入保证只开一个窗）。"""
+        import time
+        now = time.monotonic()
+        if now - getattr(self, "_detail_last_open", 0.0) < 0.35:
+            return
+        self._detail_last_open = now
         item = self._selected()
         if not item:
             return
@@ -606,9 +621,10 @@ class SecurityPage(AdaptivePage):
         # v1.7.4：补"多选"列（与技能仓库一致），表头点击排序
         self.table = DataTable(["多选", "名称", "来源", "状态", "最近检查", "摘要"], "security"); self.table.setAccessibleDescription("使用方向键选择，Enter 或双击查看完整检查报告；点击表头按该列排序"); self.table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeMode.Stretch); self.table.setWordWrap(False)
         self.table.horizontalHeader().sectionClicked.connect(self._header_clicked)
-        # v1.7.4 修复：v1.6.0 同时连了 itemActivated 与 itemDoubleClicked，双击会弹两个
-        # 报告窗口（要关两次）。itemActivated 在 Windows 上已覆盖 Enter 与双击。
+        # v1.7.5 修复：与技能仓库同因——v1.7.4 只留 itemActivated，实测双击不触发。
+        # 恢复双绑 + show_report_dialog 内防重入，双击/Enter 都能开且只开一个窗。
         self.table.itemActivated.connect(lambda _item: self.show_report_dialog())
+        self.table.itemDoubleClicked.connect(lambda _item: self.show_report_dialog())
         root.addWidget(self.table, 1)
         # v1.6.0：报告面板默认隐藏（改为双击弹窗），保留 widget 便于回退
         self.report = QPlainTextEdit(); self.report.setReadOnly(True); self.report.setPlaceholderText("选择条目查看检查报告"); self.report.setVisible(False); root.addWidget(self.report, 0); self.status = QLabel(""); self.status.setObjectName("status"); root.addWidget(self.status)
@@ -753,7 +769,13 @@ class SecurityPage(AdaptivePage):
         self.report.setPlainText(json.dumps(findings, ensure_ascii=False, indent=2, default=str) if findings else "暂无命中项；状态由最近一次路线检查或人工放行记录提供。")
 
     def show_report_dialog(self):
-        """v1.6.0：双击行弹出检查报告窗口；v1.7.4：单实例，关旧开新不叠窗。"""
+        """v1.6.0：双击行弹出检查报告窗口；v1.7.4：单实例，关旧开新不叠窗；
+        v1.7.5：0.35s 防重入（itemActivated/itemDoubleClicked 双绑定只开一个窗）。"""
+        import time
+        now = time.monotonic()
+        if now - getattr(self, "_report_last_open", 0.0) < 0.35:
+            return
+        self._report_last_open = now
         selected = self.table.selectionModel().selectedRows()
         if not selected:
             return

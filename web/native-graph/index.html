@@ -29,6 +29,9 @@
         <section><h3>显示</h3><label><span>节点尺寸</span><input data-setting="nodeScale" type="range" min="0.6" max="1.8" step="0.1" value="1" /><output>1</output></label><label><span>标签阈值</span><input data-setting="labelThreshold" type="range" min="2" max="18" step="1" value="8" /><output>8</output></label></section>
         <section><h3>布局参数</h3><label><span>中心力</span><input data-setting="forces.center" type="range" min="0.1" max="4" step="0.1" value="1" /><output>1</output></label><label><span>斥力</span><input data-setting="forces.repel" type="range" min="20" max="220" step="10" value="100" /><output>100</output></label><label><span>弹簧</span><input data-setting="forces.link" type="range" min="0" max="2" step="0.1" value="1" /><output>1</output></label><label><span>连接距离</span><input data-setting="forces.distance" type="range" min="40" max="160" step="10" value="80" /><output>80</output></label></section>
         <section class="settings-reset"><button id="reset-settings" type="button" title="把筛选、显示与布局参数恢复为默认值（闲置微动开关不受影响）">恢复默认</button></section>
+        <!-- v1.7.5 修复：面板浮层会挡住工具栏的"设置"按钮，打开后无出口（死胡同）。
+             底部加"保存并关闭"主按钮收起面板；Esc / 点击画布也可关闭。 -->
+        <section class="settings-save"><button id="save-settings" type="button">保存并关闭</button></section>
       </aside>
       <section id="surface" class="surface" aria-label="记忆关系图">
         <div id="sigma-container" class="sigma-container"></div>
