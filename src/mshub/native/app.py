@@ -8,6 +8,46 @@ import sys
 from pathlib import Path
 
 
+# v1.7.4：程序包/环境包分离后，环境包（_internal\PySide6）缺失时的提示与下载入口
+ENV_PACKAGE_URL = "https://github.com/Dunnnwei/123mshub/releases"
+ENV_PACKAGE_NAME = "123mshub-environment"
+
+
+def missing_environment_text() -> str | None:
+    """打包模式下检测环境包（_internal\\PySide6）是否缺失；缺失返回提示文本。
+
+    非打包（源码运行）始终返回 None。检测标记文件 Qt6Core.dll：它在
+    prune-webengine 之后仍保留在 PySide6 目录中，能代表整套 Qt 运行库。
+    """
+    if not getattr(sys, "frozen", False):
+        return None
+    marker = Path(sys.executable).resolve().parent / "_internal" / "PySide6" / "Qt6Core.dll"
+    if marker.is_file():
+        return None
+    return (
+        "缺少运行环境（环境包未安装）。\n\n"
+        "本程序包为「程序包」，不包含图形运行环境。请到发布页下载配套的「环境包」：\n"
+        f"{ENV_PACKAGE_URL}\n"
+        f"下载 {ENV_PACKAGE_NAME} 压缩包后，把其中的 PySide6 文件夹解压到\n"
+        "本程序目录下的 _internal 文件夹里，再重新启动本程序。\n\n"
+        "缺少的环境也可以由你自行安装：环境包就是本程序所用版本的\n"
+        "PySide6 / Qt 运行库，自行准备时需保持版本一致。"
+    )
+
+
+def _show_env_missing_dialog(message: str) -> None:
+    """环境缺失提示用 Win32 原生 MessageBox：此时 Qt 尚不可用。"""
+    if os.environ.get("MSHUB_ENV_CHECK_SILENT"):
+        return
+    try:
+        import ctypes
+
+        # MB_ICONINFORMATION | MB_OK | MB_TOPMOST
+        ctypes.windll.user32.MessageBoxW(0, message, "123 MSHub 缺少运行环境", 0x40040)
+    except Exception:
+        pass
+
+
 def show_duplicate_message(timeout_ms: int = 4000) -> None:
     from PySide6.QtCore import QTimer
     from PySide6.QtWidgets import QMessageBox
@@ -32,11 +72,19 @@ def main(argv: list[str] | None = None) -> int:
             handle.write(f"{message}\n")
 
     append_smoke("main-enter")
+    # v1.7.4：程序包不含图形环境——启动第一时间检测环境包，缺失则原生弹窗给出下载地址
+    env_missing = missing_environment_text()
+    if env_missing is not None:
+        append_smoke("env-missing")
+        print(env_missing, file=sys.stderr)
+        _show_env_missing_dialog(env_missing)
+        return 2
     try:
         from PySide6.QtWidgets import QApplication
     except ImportError as exc:  # keep the CLI/service installation usable without native extra
         append_smoke(f"import-error={exc}")
         print("原生界面需要安装可选依赖：python -m pip install 'mshub[native]'", file=sys.stderr)
+        print("打包版若看到此提示，通常是环境包（PySide6）缺失或损坏：请到发布页重新下载环境包", file=sys.stderr)
         print(f"详细原因：{exc}", file=sys.stderr)
         return 2
 
@@ -146,6 +194,10 @@ def main(argv: list[str] | None = None) -> int:
                 failure["message"] = "图谱脚本未完成 WebChannel/Sigma 渲染"
                 app.quit()
                 return
+            graph.web_view.page().runJavaScript(
+                "window.mshubDiagRender ? window.mshubDiagRender() : 'no-diag-render'",
+                lambda value: append_smoke(f"diag-render={value}"),
+            )
             if args.smoke_float or args.smoke_float_stable:
                 # 先做一次桥接数据诊断：直接调 getGraph 看页面侧拿到的真实节点数，
                 # 分辨"数据没到页面"与"到了但渲染为 0"。

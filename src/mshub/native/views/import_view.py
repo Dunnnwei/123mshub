@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (QCheckBox, QDialog, QDialogButtonBox, QHBoxLayout
     QLabel, QPlainTextEdit, QPushButton, QVBoxLayout)
 
 from ..task_runner import RequestScope
+from ..ui import prepare_dialog, label_controls
 
 
 class ImportDialog(QDialog):
@@ -26,10 +27,11 @@ class ImportDialog(QDialog):
         self.memory = QCheckBox("导入记忆"); self.memory.setChecked(True); options.addWidget(self.memory)
         self.skills = QCheckBox("导入技能 / 程序"); self.skills.setChecked(True); options.addWidget(self.skills)
         options.addStretch(); self.scan_button = QPushButton("扫描预览"); options.addWidget(self.scan_button); root.addLayout(options)
-        self.preview = QPlainTextEdit(); self.preview.setReadOnly(True); self.preview.setFont(QFont("Cascadia Mono", 9)); root.addWidget(self.preview, 1)
+        self.preview = QPlainTextEdit(); self.preview.setReadOnly(True); self.preview.setAccessibleName("导入扫描预览"); self.preview.setFont(QFont("Cascadia Mono", 9)); root.addWidget(self.preview, 1)
         self.status = QLabel("尚未扫描"); self.status.setObjectName("status"); root.addWidget(self.status)
         buttons = QDialogButtonBox(); self.import_button = buttons.addButton("确认导入", QDialogButtonBox.ButtonRole.AcceptRole); close = buttons.addButton("关闭", QDialogButtonBox.ButtonRole.RejectRole); self.import_button.setEnabled(False); root.addWidget(buttons)
         self.scan_button.clicked.connect(self.scan); self.import_button.clicked.connect(self.start_import); close.clicked.connect(self.reject)
+        prepare_dialog(self); label_controls(self)
         self.scan()
 
     def scan(self):

@@ -13,6 +13,7 @@ from ..repository import SkillRepository
 from ..tidy import TidyService
 from ..importer import ImportService
 from ..ai_presets import AI_PROVIDER_PRESETS
+from ..translation import translate_description
 
 
 class MemoryFacade:
@@ -117,6 +118,17 @@ class MemoryFacade:
 
     def skill_translate(self, name: str, library: str = ""):
         return self.repository.translate_one(name, library)
+
+    def skill_translate_text(self, text: str, target: str = "zh") -> str:
+        """v1.7.2：编辑器内即时翻译一段说明文本（不落库），target 为 zh/en。"""
+        config = self.config_store.load()
+        return translate_description(
+            text,
+            base_url=config.ai_base_url,
+            api_key=self.config_store.get_secret("ai_key"),
+            model=config.ai_model,
+            target="en" if target == "en" else "zh",
+        )
 
     def skill_translate_batch(self, names: list[str] | None = None, progress=None):
         return self.repository.translate_descriptions(names, progress=progress)

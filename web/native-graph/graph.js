@@ -4,7 +4,7 @@ import FA2Layout from 'graphology-layout-forceatlas2/worker'
 import Sigma from 'sigma'
 import { drawDiscNodeLabel, NodeCircleProgram } from 'sigma/rendering'
 
-const colors = { user: '#A78BFA', project: '#6EA8FE', reference: '#77C5D5', feedback: '#E3A85B' }
+const colors = { user: '#7144B8', project: '#0148D2', reference: '#006F72', feedback: '#97500A' }
 const typeLabels = { user: '用户', project: '项目', reference: '参考', feedback: '反馈' }
 const programs = { user: NodeCircleProgram, project: NodeCircleProgram, reference: NodeCircleProgram, feedback: NodeCircleProgram }
 const settingsKey = 'mshub.memoryGraph.settings.v1'
@@ -17,13 +17,16 @@ let hovered = null
 let hoveredNeighbors = new Set()
 let raw = { nodes: [], edges: [] }
 let query = ''
-let theme = { background: '#FFFFFF', label: '#000A1E', dimNode: '#E7E4DF', dimEdge: '#D7DEE8', focusEdge: '#B9C5D8' }
+let theme = { background: '#FFFFFF', label: '#171B23', dimNode: '#F3F5F8', dimEdge: '#E2E6EE', focusEdge: '#C1C9D7' }
 let paletteFromBridge = null
-let graphSettings = {
+// v1.7.3：默认值提为常量，"恢复默认"按钮直接引用（mergeSettings 的基底也换成它，
+// 否则用当前值当基底会把已改的设置"固化"进恢复结果）
+const DEFAULT_GRAPH_SETTINGS = {
   includeTags: false, showOrphans: true, labelThreshold: 8, nodeScale: 1,
   selectedTypes: { user: true, project: true, reference: true, feedback: true },
   forces: { center: 1, repel: 100, link: 1, distance: 80 },
 }
+let graphSettings = DEFAULT_GRAPH_SETTINGS
 let floatFrame = 0
 let lastInteraction = 0
 let interactionDepth = 0
@@ -41,20 +44,38 @@ let floatTime = 0
 let floatLastTick = 0
 let floatGraphPerPx = 1     // 图谱单位/屏幕像素，用于把幅度换算成恒定屏幕位移
 window.mshubGraphReady = false
+window.mshubDiagRender = () => {
+  const canvas = document.querySelector('#sigma-container canvas')
+  const first = graph?.nodes?.()[0]
+  const node = first && graph ? graph.getNodeAttributes(first) : null
+  const rect = $('#sigma-container')?.getBoundingClientRect()
+  let camera = null
+  try { camera = renderer?.getCamera()?.getState?.() || null } catch {}
+  return JSON.stringify({
+    canvas: canvas ? { width: canvas.width, height: canvas.height, cssWidth: canvas.clientWidth, cssHeight: canvas.clientHeight } : null,
+    rect: rect ? { width: rect.width, height: rect.height } : null,
+    first: first || null,
+    node: node ? { x: node.x, y: node.y, size: node.size, color: node.color } : null,
+    camera,
+  })
+}
 
 const $ = (selector) => document.querySelector(selector)
 const surface = $('#surface')
 const message = $('#message')
 const tooltip = $('#tooltip')
+const nodeBrowser = $('#node-browser')
+const nodeList = $('#node-list')
+const openNode = $('#open-node')
 
 function readSettings() { try { return JSON.parse(localStorage.getItem(settingsKey) || '{}') } catch { return {} } }
 function mergeSettings(value) {
   const incoming = value && typeof value === 'object' ? value : {}
   return {
-    ...graphSettings,
+    ...DEFAULT_GRAPH_SETTINGS,
     ...incoming,
-    selectedTypes: { ...graphSettings.selectedTypes, ...(incoming.selectedTypes || {}) },
-    forces: { ...graphSettings.forces, ...(incoming.forces || {}) },
+    selectedTypes: { ...DEFAULT_GRAPH_SETTINGS.selectedTypes, ...(incoming.selectedTypes || {}) },
+    forces: { ...DEFAULT_GRAPH_SETTINGS.forces, ...(incoming.forces || {}) },
   }
 }
 function saveSettings() { try { localStorage.setItem(settingsKey, JSON.stringify(graphSettings)); bridge?.writeGraphSettings(JSON.stringify(graphSettings)) } catch {} }
@@ -63,7 +84,7 @@ function stableHash(value) { let hash = 2166136261; for (const char of String(va
 function seededPosition(id, index) { return { x: ((stableHash(`${id}:x:${index}`) / 0xffffffff) * 2 - 1) * 18, y: ((stableHash(`${id}:y:${index}`) / 0xffffffff) * 2 - 1) * 18 } }
 function parseColor(value) { const text = String(value || '').trim(); const hex = text.match(/^#([0-9a-f]{6})$/i); if (hex) return [parseInt(hex[1].slice(0,2),16), parseInt(hex[1].slice(2,4),16), parseInt(hex[1].slice(4,6),16)]; const rgb = text.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i); return rgb ? rgb.slice(1, 4).map(Number) : null }
 function mix(fg, amount, bg) { const a = parseColor(fg) || [166,166,166]; const b = parseColor(bg) || [255,255,255]; const v = Math.max(0, Math.min(1, Number(amount) || 0)); return `#${a.map((x, i) => Math.round(x * v + b[i] * (1 - v)).toString(16).padStart(2,'0')).join('')}` }
-function refreshTheme() { const bg = paletteFromBridge?.background || '#FFFFFF'; const label = paletteFromBridge?.label || '#000A1E'; theme = { background: bg, label, dimNode: mix('#A6A6A6', .1, bg), dimEdge: mix('#8C8C8C', .12, bg), focusEdge: mix('#8C8C8C', .45, bg) }; renderer?.setSetting('labelColor', { color: theme.label }); renderer?.refresh() }
+function refreshTheme() { const bg = paletteFromBridge?.background || '#FFFFFF'; const label = paletteFromBridge?.label || '#171B23'; Object.assign(colors, paletteFromBridge?.types || {}); theme = { background: bg, label, dimNode: mix('#A6A6A6', .1, bg), dimEdge: mix('#8C8C8C', .12, bg), focusEdge: paletteFromBridge?.line || mix('#8C8C8C', .45, bg) }; if (graph) graph.forEachNode((id) => graph.setNodeAttribute(id, 'color', colors[graph.getNodeAttribute(id, 'type')] || colors.reference)); renderer?.setSetting('labelColor', { color: theme.label }); renderer?.refresh() }
 function normalize(node, index) { const id = String(node.id || node.name || `memory-${index}`); const pos = seededPosition(id, index); const type = colors[node.type] ? node.type : 'reference'; return { id, label: String(node.title || id), title: String(node.title || id), type, source: String(node.source || ''), tags: Array.isArray(node.tags) ? node.tags : [], x: Number.isFinite(node.x) ? node.x : pos.x, y: Number.isFinite(node.y) ? node.y : pos.y, baseX: Number.isFinite(node.x) ? node.x : pos.x, baseY: Number.isFinite(node.y) ? node.y : pos.y, phase: stableHash(`${id}:float`) % 6283 / 1000, color: colors[type] } }
 function nodeMatch(data) { const q = query.trim().toLocaleLowerCase(); if (!q) return true; return [data.id, data.title, data.source, ...(data.tags || [])].some((value) => String(value || '').toLocaleLowerCase().includes(q)) }
 // v1.5.0：reducer 不再掺漂浮偏移（sigma v3 的 reducer 输出不进 WebGL 缓冲），
@@ -82,12 +103,19 @@ function drawLabel(context, data, settings) {
   const weight = isHovered ? '700' : settings.labelWeight
   context.font = `${weight} ${size}px ${settings.labelFont}`
   // 去掉 strokeText 描边（那个"背景条"在暗色模式下是浅色导致标签同色看不见）
-  context.fillStyle = isHovered ? theme.label : (data.color || settings.labelColor.color)
+  // Node colors describe the type, not the text. Ordinary labels always use
+  // the palette label color so dark/light theme changes remain readable.
+  context.fillStyle = theme.label
   context.fillText(data.label, data.x + data.size + 3, data.y + size / 3)
   context.restore()
 }
+// v1.7.2：悬停时 sigma 默认会用 defaultDrawNodeHover 再画一个带背景的小字标签，
+// 和加粗大字标签重复且互相遮挡（用户截图反馈）。置空它：悬停高亮圈（WebGL 层）
+// 与 DOM 悬停弹窗不受影响，只去掉重复的小药丸标签。
+function drawHover(_context, _data, _settings) {}
 function edgeKey(source, target, kind) { const pair = [source, target].sort(); return `${kind}:${pair[0]}::${pair[1]}` }
-function syncGraph(data) { graph = new Graph({ type: 'undirected', multi: true }); const selected = graphSettings.selectedTypes || {}; data.nodes.filter((node) => selected[node.type] !== false).forEach((node, index) => { const item = normalize(node, index); graph.addNode(item.id, item) }); const distance = Number(graphSettings.forces?.distance || 80); const distanceMultiplier = 2 - (distance / 160) * 1.5; data.edges.forEach((edge) => { const source = String(edge.source); const target = String(edge.target); if (!graph.hasNode(source) || !graph.hasNode(target) || source === target) return; const kind = edge.kind || '双链'; const key = edgeKey(source, target, kind); if (!graph.hasEdge(key)) { const baseWeight = kind === '共同标签' ? .5 : 2; graph.addEdgeWithKey(key, source, target, { kind, baseWeight, weight: baseWeight * distanceMultiplier, size: 1 }) } }); if (graphSettings.showOrphans === false) graph.forEachNode((id) => { if (graph.degree(id) === 0) graph.dropNode(id) }) }
+function syncGraph(data) { graph = new Graph({ type: 'undirected', multi: true }); const selected = graphSettings.selectedTypes || {}; data.nodes.filter((node) => selected[node.type] !== false).forEach((node, index) => { const item = normalize(node, index); graph.addNode(item.id, item) }); const distance = Number(graphSettings.forces?.distance || 80); const distanceMultiplier = 2 - (distance / 160) * 1.5; data.edges.forEach((edge) => { const source = String(edge.source); const target = String(edge.target); if (!graph.hasNode(source) || !graph.hasNode(target) || source === target) return; const kind = edge.kind || '双链'; const key = edgeKey(source, target, kind); if (!graph.hasEdge(key)) { const baseWeight = kind === '共同标签' ? .5 : 2; graph.addEdgeWithKey(key, source, target, { kind, baseWeight, weight: baseWeight * distanceMultiplier, size: 1 }) } }); if (graphSettings.showOrphans === false) graph.forEachNode((id) => { if (graph.degree(id) === 0) graph.dropNode(id) }); updateNodeList() }
+function updateNodeList() { if (!nodeList || !graph) return; nodeList.replaceChildren(); const nodes = []; graph.forEachNode((id, data) => nodes.push({ id, title: data.title, type: typeLabels[data.type] || data.type })); nodes.sort((a, b) => a.title.localeCompare(b.title, 'zh-CN')); for (const item of nodes) { const option = document.createElement('option'); option.value = item.id; option.textContent = `${item.title} · ${item.type}`; nodeList.append(option) } nodeBrowser.hidden = nodes.length === 0 }
 function applyForceSettings() { if (!graph) return; const distance = Number(graphSettings.forces?.distance || 80); const distanceMultiplier = 2 - (distance / 160) * 1.5; graph.forEachEdge((edge) => { const data = graph.getEdgeAttributes(edge); graph.setEdgeAttribute(edge, 'weight', Number(data.baseWeight || data.weight || 1) * distanceMultiplier) }) }
 function layoutSettings() { return { gravity: 1, scalingRatio: 100, slowDown: 1, barnesHutOptimize: true, barnesHutTheta: .5, edgeWeightInfluence: 1, adjustSizes: true } }
 // v1.5.0：斥力映射 ×0.14。旧版直接把 forces.repel（默认 100）塞给 scalingRatio，
@@ -131,10 +159,17 @@ function reheatAfterDrag() {
 }
 function showTooltip(node, event) { const data = graph.getNodeAttributes(node); tooltip.innerHTML = ''; const title = document.createElement('strong'); title.textContent = data.title; const meta = document.createElement('span'); meta.textContent = `${typeLabels[data.type] || data.type} · ${graph.degree(node)} 个连接`; const tags = document.createElement('span'); tags.textContent = `标签：${data.tags?.join('、') || '无标签'}`; tooltip.append(title, meta, tags); tooltip.hidden = false; const rect = surface.getBoundingClientRect(); tooltip.style.left = `${Math.min(rect.width - tooltip.offsetWidth - 16, Math.max(16, event.x + 12))}px`; tooltip.style.top = `${Math.min(rect.height - tooltip.offsetHeight - 16, Math.max(16, event.y + 12))}px` }
 function clearHover() { hovered = null; hoveredNeighbors = new Set(); tooltip.hidden = true; renderer?.refresh() }
-function bindRenderer() { renderer.on('enterNode', ({ node, event }) => { hovered = node; hoveredNeighbors = new Set([node, ...graph.neighbors(node)]); showTooltip(node, event); renderer.refresh() }); renderer.on('leaveNode', clearHover); renderer.on('clickNode', ({ node }) => bridge?.openMemory(node)); renderer.on('clickStage', clearHover); renderer.on('doubleClickStage', () => renderer.getCamera().animatedReset({ duration: 300 })); renderer.on('downNode', ({ node, event }) => { pauseFloat(); renderer.getCamera().disable(); event.preventSigmaDefault(); event.original.preventDefault(); layout?.start(); renderer.getMouseCaptor().on('mousemovebody', moveNode); renderer.getMouseCaptor().once('mouseup', () => { renderer.getCamera().enable(); renderer.getMouseCaptor().removeListener('mousemovebody', moveNode); if (layout) window.setTimeout(() => { layout?.stop(); layout = null; snapshotFloatBase(); syncFloat() }, 1800); else reheatAfterDrag(); resumeFloat() }); function moveNode(mouseEvent) { const position = renderer.viewportToGraph(mouseEvent); graph.setNodeAttribute(node, 'x', position.x); graph.setNodeAttribute(node, 'y', position.y); graph.setNodeAttribute(node, 'baseX', position.x); graph.setNodeAttribute(node, 'baseY', position.y); floatBase.set(node, { x: position.x, y: position.y }); renderer.refresh() } }); renderer.getMouseCaptor().on('mousedown', pauseFloat); renderer.getMouseCaptor().on('mouseup', resumeFloat); renderer.getMouseCaptor().on('wheel', pauseFloat) }
-function render(data) { raw = data; syncGraph(data); $('#node-count').textContent = String(graph.order); $('#edge-count').textContent = String(graph.size); message.classList.toggle('hidden', graph.order > 0); refreshTheme(); if (!renderer) { renderer = new Sigma(graph, $('#sigma-container'), { renderLabels: true, labelRenderedSizeThreshold: Number(graphSettings.labelThreshold || 8), labelFont: 'Segoe UI, Microsoft YaHei, sans-serif', labelSize: 12, labelWeight: '500', labelColor: { color: theme.label }, defaultNodeColor: '#A6A6A6', defaultEdgeColor: theme.focusEdge, defaultNodeType: 'circle', nodeProgramClasses: programs, defaultDrawNodeLabel: drawLabel, nodeReducer, edgeReducer, hideEdgesOnMove: graph.size > 8000, stagePadding: 28, zIndex: true }); bindRenderer() } else renderer.setGraph(graph); startLayout(); window.mshubGraphReady = true; window.mshubGraphNodeCount = graph.order; window.mshubGraphEdgeCount = graph.size }
-function load() { if (!bridge) return; message.textContent = '正在读取记忆关系…'; message.classList.remove('hidden'); const kinds = $('#include-tags').checked ? 'link,tag' : 'link'; bridge.getGraph(kinds, (payload) => { try { render(JSON.parse(payload)) } catch (error) { message.textContent = `图谱数据解析失败：${error}` } }) }
-window.mshubSetTheme = (mode) => { const value = mode === 'dark' ? 'dark' : 'light'; document.documentElement.dataset.theme = value; document.body.dataset.theme = value; refreshTheme() }
+function bindRenderer() { renderer.on('enterNode', ({ node, event }) => { hovered = node; hoveredNeighbors = new Set([node, ...graph.neighbors(node)]); if (nodeList) nodeList.value = node; showTooltip(node, event); renderer.refresh() }); renderer.on('leaveNode', clearHover); renderer.on('clickNode', ({ node }) => bridge?.openMemory(node)); renderer.on('clickStage', clearHover); renderer.on('doubleClickStage', () => renderer.getCamera().animatedReset({ duration: 300 })); renderer.on('downNode', ({ node, event }) => { pauseFloat(); renderer.getCamera().disable(); event.preventSigmaDefault(); event.original.preventDefault(); layout?.start(); renderer.getMouseCaptor().on('mousemovebody', moveNode); renderer.getMouseCaptor().once('mouseup', () => { renderer.getCamera().enable(); renderer.getMouseCaptor().removeListener('mousemovebody', moveNode); if (layout) window.setTimeout(() => { layout?.stop(); layout = null; snapshotFloatBase(); syncFloat() }, 1800); else reheatAfterDrag(); resumeFloat() }); function moveNode(mouseEvent) { markInteraction(); const position = renderer.viewportToGraph(mouseEvent); graph.setNodeAttribute(node, 'x', position.x); graph.setNodeAttribute(node, 'y', position.y); graph.setNodeAttribute(node, 'baseX', position.x); graph.setNodeAttribute(node, 'baseY', position.y); floatBase.set(node, { x: position.x, y: position.y }); renderer.refresh() } }); renderer.getMouseCaptor().on('mousedown', pauseFloat); renderer.getMouseCaptor().on('mouseup', resumeFloat)
+// v1.7.4：滚轮缩放不再绑定 markInteraction——旧逻辑把 wheel 记为"交互"，
+// floatTick 在交互后 900ms 内直接 return，导致缩放期间呼吸冻结、停手约 1s
+// 才恢复。缩放只是相机矩阵变化，不冲突坐标写入；幅度换算改由 floatTick
+// 每帧调 updateFloatScale 实时跟踪缩放比，动画全程连续。
+}
+function render(data) { raw = data; syncGraph(data); $('#node-count').textContent = String(graph.order); $('#edge-count').textContent = String(graph.size); // v1.7.2：仓库已配置但没有任何记忆时，给出下一步指引而不是卡在"正在读取"
+  if (graph.order === 0) message.textContent = '仓库中暂无记忆条目：在「记忆仓库」新建或导入后，这里会展示关系图。'; message.classList.toggle('hidden', graph.order > 0); refreshTheme(); if (!renderer) { renderer = new Sigma(graph, $('#sigma-container'), { renderLabels: true, labelRenderedSizeThreshold: Number(graphSettings.labelThreshold || 8), labelFont: 'Segoe UI, Microsoft YaHei, sans-serif', labelSize: 12, labelWeight: '500', labelColor: { color: theme.label }, defaultNodeColor: '#A6A6A6', defaultEdgeColor: theme.focusEdge, defaultNodeType: 'circle', nodeProgramClasses: programs, defaultDrawNodeLabel: drawLabel, defaultDrawNodeHover: drawHover, nodeReducer, edgeReducer, hideEdgesOnMove: graph.size > 8000, stagePadding: 28, zIndex: true }); bindRenderer() } else renderer.setGraph(graph); startLayout(); window.mshubGraphReady = true; window.mshubGraphNodeCount = graph.order; window.mshubGraphEdgeCount = graph.size }
+function load() { if (!bridge) return; message.textContent = '正在读取记忆关系…'; message.classList.remove('hidden'); const kinds = $('#include-tags').checked ? 'link,tag' : 'link'; bridge.getGraph(kinds, (payload) => { let data = null; try { data = JSON.parse(payload) } catch (error) { message.textContent = `图谱数据解析失败：${error}`; return } // v1.7.2：仓库未配置/读取失败时返回带 unavailable 标记的结构化载荷，给出人话提示而不是 JSON 报错
+  if (data && data.unavailable) { message.textContent = data.unavailable === 'repo-not-set' ? '尚未配置仓库路径，记忆图示暂无法显示。请先在「设置选项 → 仓库与语言」选择仓库根目录并保存。' : `仓库读取失败：${data.message || '未知错误'}`; return } render(data) }) }
+window.mshubSetTheme = (mode) => { const value = mode === 'dark' ? 'dark' : 'light'; document.documentElement.dataset.theme = value; document.body.dataset.theme = value; const meta = document.querySelector('meta[name="theme-color"]'); if (meta) meta.content = value === 'dark' ? '#0B0E14' : '#F2F4F8'; refreshTheme() }
 window.mshubSetPalette = (payload) => { try { paletteFromBridge = typeof payload === 'string' ? JSON.parse(payload) : payload; window.mshubSetTheme(paletteFromBridge.theme); } catch {} }
 window.mshubSetGraphSettings = (payload) => { try { graphSettings = mergeSettings(typeof payload === 'string' ? JSON.parse(payload) : payload); saveSettings(); load() } catch {} }
 // ---- v1.5.0 呼吸引擎 ----------------------------------------------------
@@ -213,11 +248,19 @@ function applyFloatFrame() {
 }
 function floatTick(now) {
   floatFrame = requestAnimationFrame(floatTick)
-  if (interactionDepth || now - lastInteraction < 1000 || !graph || !renderer) return
+  const idleFor = now - lastInteraction
+  // A missed mouseup must not permanently disable motion. After one second
+  // of no pointer activity the timestamp is authoritative and stale depth is
+  // cleared as a safety net.
+  if (interactionDepth && idleFor >= 1000) interactionDepth = 0
+  if (interactionDepth || idleFor < 900 || !graph || !renderer) return
   // 拖拽/平移/缩放时 sigma 自己会触发渲染；静止期由这里驱动增量渲染。
   if (!floatLastTick) floatLastTick = now
   floatTime += Math.min(64, now - floatLastTick)  // 帧率波动时步长封顶，漂浮不跳变
   floatLastTick = now
+  // v1.7.4：每帧跟踪缩放比（开销两次 viewportToGraph）。滚轮缩放期间相机
+  // 比例连续变化，若仍按交互结束后才刷新，缩放中屏幕位移幅度会漂移/放大。
+  updateFloatScale()
   applyFloatFrame()
 }
 function syncFloat() {
@@ -226,8 +269,18 @@ function syncFloat() {
   if (!enabled && floatFrame) stopFloat()
 }
 function stopFloat() { if (floatFrame) { cancelAnimationFrame(floatFrame); floatFrame = 0 }; floatLastTick = 0 }
-function pauseFloat() { interactionDepth += 1; lastInteraction = performance.now() }
-function resumeFloat() { interactionDepth = Math.max(0, interactionDepth - 1); lastInteraction = performance.now(); updateFloatScale() }
+function markInteraction() {
+  lastInteraction = performance.now()
+  if (floatResumeTimer) window.clearTimeout(floatResumeTimer)
+  floatResumeTimer = window.setTimeout(() => {
+    interactionDepth = 0
+    // Preserve the diagnostic timestamp while allowing the next frame to run.
+    lastInteraction = performance.now() - 1000
+    updateFloatScale()
+  }, 1100)
+}
+function pauseFloat() { interactionDepth = Math.min(interactionDepth + 1, 4); markInteraction() }
+function resumeFloat() { interactionDepth = Math.max(0, interactionDepth - 1); markInteraction(); updateFloatScale() }
 window.mshubReloadGraph = () => load()
 // v1.5.1 诊断接口：smoke-float 用它分辨"数据没到页面"与"渲染为 0"。
 window.mshubDiagCount = () => JSON.stringify({ rawNodes: raw.nodes.length, rawEdges: raw.edges.length, graphOrder: graph?.order ?? -1, graphSize: graph?.size ?? -1, driftTime: Math.round(floatTime), floatBaseSize: floatBase.size })
@@ -246,12 +299,15 @@ window.mshubDiagFloat = () => JSON.stringify({
   motionEnabled: readMotionSetting(),
 })
 window.mshubDiagBridge = (cb) => { try { bridge?.getGraph('link', (p) => { try { const d = JSON.parse(p); cb(JSON.stringify({ payloadNodes: d.nodes?.length ?? -1, payloadLen: p.length })) } catch (e) { cb('parse-err:' + e) } }) } catch (e) { cb('call-err:' + e) } }
+function openSelectedNode() { const id = nodeList?.value; if (id) bridge?.openMemory(id) }
 $('#query').addEventListener('input', (event) => { query = event.target.value; renderer?.refresh() })
 $('#clear').addEventListener('click', () => { $('#query').value = ''; query = ''; renderer?.refresh() })
 $('#refresh').addEventListener('click', load)
 $('#reset').addEventListener('click', () => renderer?.getCamera().animatedReset({ duration: 300 }))
 $('#zoom-in').addEventListener('click', () => renderer?.getCamera().animatedZoom({ factor: .75, duration: 220 }))
 $('#zoom-out').addEventListener('click', () => renderer?.getCamera().animatedUnzoom({ factor: .75, duration: 220 }))
+nodeList?.addEventListener('change', () => { const id = nodeList.value; if (id && graph?.hasNode(id)) { hovered = id; hoveredNeighbors = new Set([id, ...graph.neighbors(id)]); renderer?.refresh() } })
+openNode?.addEventListener('click', openSelectedNode)
 graphSettings = mergeSettings(readSettings())
 reduceMotion = Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches)
 $('#include-tags').checked = Boolean(graphSettings.includeTags)
@@ -266,8 +322,21 @@ function bindSettingsPanel() {
   const types = panel.querySelectorAll('[data-type]'); types.forEach((input) => input.addEventListener('change', () => { graphSettings.selectedTypes[input.dataset.type] = input.checked; saveSettings(); load() }))
   const orphan = $('#show-orphans'); orphan.addEventListener('change', () => { graphSettings.showOrphans = orphan.checked; saveSettings(); load() })
   const motion = $('#motion-toggle'); motion.checked = readMotionSetting(); motion.addEventListener('change', () => { localStorage.setItem(motionKey, JSON.stringify({ enabled: motion.checked })); if (!motion.checked) stopFloat(); else { snapshotFloatBase(); syncFloat() } })
-  panel.querySelectorAll('[data-setting]').forEach((input) => input.addEventListener('input', () => { const [group, key] = input.dataset.setting.split('.'); if (group === 'forces') graphSettings.forces[key] = Number(input.value); else graphSettings[key] = Number(input.value); input.nextElementSibling.textContent = input.value; saveSettings(); if (group === 'forces') { applyForceSettings(); startLayout(); } if (key === 'labelThreshold') renderer?.setSetting('labelRenderedSizeThreshold', Number(input.value)); renderer?.refresh() }))
+  // v1.7.3：修复存量 bug——单键设置（nodeScale/labelThreshold）split 后 key=undefined，
+  // 值被写进 graphSettings[undefined]，这两个滑杆从 v1.5 起就没真正生效（显示 min-max 中点）。
+  const settingKeyOf = (name) => { const parts = name.split('.'); return parts.length === 2 ? ['nested', parts[0], parts[1]] : ['flat', parts[0], parts[0]] }
+  panel.querySelectorAll('[data-setting]').forEach((input) => input.addEventListener('input', () => { const [kind, group, key] = settingKeyOf(input.dataset.setting); if (kind === 'nested') graphSettings[group][key] = Number(input.value); else graphSettings[key] = Number(input.value); input.nextElementSibling.textContent = input.value; saveSettings(); if (kind === 'nested' && group === 'forces') { applyForceSettings(); startLayout(); } if (key === 'labelThreshold') renderer?.setSetting('labelRenderedSizeThreshold', Number(input.value)); renderer?.refresh() }))
+  // v1.7.3：恢复默认——清本地与 Qt 两侧的已存设置，回到 DEFAULT_GRAPH_SETTINGS 并重载图谱
+  const reset = $('#reset-settings')
+  reset?.addEventListener('click', () => {
+    try { localStorage.removeItem(settingsKey); bridge?.writeGraphSettings(JSON.stringify(DEFAULT_GRAPH_SETTINGS)) } catch {}
+    graphSettings = mergeSettings({})
+    $('#include-tags').checked = Boolean(graphSettings.includeTags)
+    syncSettingsPanel()
+    renderer?.setSetting('labelRenderedSizeThreshold', Number(graphSettings.labelThreshold || 8))
+    load()
+  })
   syncSettingsPanel()
 }
-function syncSettingsPanel() { const panel = $('#graph-settings'); if (!panel) return; panel.querySelectorAll('[data-setting]').forEach((input) => { const [group, key] = input.dataset.setting.split('.'); input.value = group === 'forces' ? graphSettings.forces[key] : graphSettings[key]; input.nextElementSibling.textContent = input.value }); panel.querySelectorAll('[data-type]').forEach((input) => { input.checked = graphSettings.selectedTypes[input.dataset.type] !== false }); $('#show-orphans').checked = graphSettings.showOrphans !== false; $('#motion-toggle').checked = readMotionSetting() }
+function syncSettingsPanel() { const panel = $('#graph-settings'); if (!panel) return; panel.querySelectorAll('[data-setting]').forEach((input) => { const parts = input.dataset.setting.split('.'); input.value = parts.length === 2 ? graphSettings[parts[0]][parts[1]] : graphSettings[parts[0]]; input.nextElementSibling.textContent = input.value }); panel.querySelectorAll('[data-type]').forEach((input) => { input.checked = graphSettings.selectedTypes[input.dataset.type] !== false }); $('#show-orphans').checked = graphSettings.showOrphans !== false; $('#motion-toggle').checked = readMotionSetting() }
 bindSettingsPanel()

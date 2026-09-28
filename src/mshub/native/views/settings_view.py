@@ -4,16 +4,18 @@ from pathlib import Path
 from PySide6.QtCore import Signal, QUrl
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (QComboBox, QFileDialog, QFormLayout, QHBoxLayout,
-    QLabel, QLineEdit, QPlainTextEdit, QPushButton, QTabWidget, QVBoxLayout, QWidget)
+    QLabel, QLineEdit, QMessageBox, QPlainTextEdit, QPushButton, QTabWidget,
+    QVBoxLayout, QWidget, QFrame)
 
 from .. import NATIVE_VERSION
 from ..i18n import LanguageController, localize
 from ..settings_service import detect_proxy, list_models, mask_secret, test_connection, validate_endpoint
 from ..task_runner import RequestScope, TaskRunner
 from ..widgets import button
+from ..ui import AdaptivePage, copy_agent_prompt, label_controls, make_agent_prompt_button, scroll_form
 
 
-class SettingsPage(QWidget):
+class SettingsPage(AdaptivePage):
     saved = Signal(object)
     statusMessage = Signal(str)
     importRequested = Signal(str)
@@ -30,18 +32,24 @@ class SettingsPage(QWidget):
 
     def _build_ui(self):
         root = QVBoxLayout(self)
-        root.setContentsMargins(30, 26, 30, 24)
-        root.addWidget(QLabel("LOCAL CONFIGURATION", objectName="eyebrow"))
+        root.setContentsMargins(28, 24, 28, 16)
+        root.setSpacing(16)
+        root.addWidget(QLabel("本地配置", objectName="eyebrow"))
         root.addWidget(QLabel("设置选项", objectName="title"))
         root.addWidget(QLabel("配置目录固定为 %APPDATA%\\mshub；修改草稿不会立即生效。", objectName="muted"))
         # v1.6.0："关于 123 MSHub"从导航栏移到设置页
+        # v1.7.5：右上角统一「Agent连接提示词」皇家蓝按钮（最右），关于按钮在其左
         about_row = QHBoxLayout()
         about_row.addStretch()
         about_btn = QPushButton("关于 123 MSHub")
         about_btn.clicked.connect(lambda: self._show_about())
         about_row.addWidget(about_btn)
+        self.agent_button = make_agent_prompt_button(self, self.copy_prompt)
+        about_row.addWidget(self.agent_button)
         root.addLayout(about_row)
         self.tabs = QTabWidget()
+        self.tabs.setAccessibleName("设置分类")
+        self.tabs.setUsesScrollButtons(True)
         root.addWidget(self.tabs, 1)
         general = QWidget()
         form = QFormLayout(general)
@@ -51,11 +59,32 @@ class SettingsPage(QWidget):
         repo.addWidget(self.repo_edit)
         repo.addWidget(button("选择…", self.choose_repo))
         form.addRow("仓库根目录", repo)
+        # v1.7.2：记忆库位置覆盖补悬停注解（用户反馈看不出这个字段做什么用）
         self.memory_edit = QLineEdit()
-        form.addRow("记忆库位置覆盖", self.memory_edit)
+        memory_tip = (
+            "默认记忆存放在「仓库根目录\\memory」下。\n"
+            "如需把记忆库放到其他位置（例如另一块盘或别的同步目录），"
+            "在此填写该目录的完整路径；留空表示使用默认位置。\n"
+            "修改后需点「保存设置」生效。"
+        )
+        self.memory_edit.setToolTip(memory_tip)
+        memory_label = QLabel("记忆库位置覆盖")
+        memory_label.setToolTip(memory_tip)
+        form.addRow(memory_label, self.memory_edit)
+        # v1.7.2：抓取方式改为中文可读选项（数据值仍是 archive/git，存量配置无缝兼容），
+        # 字段名改为"技能下载方式"并补悬停注解
         self.fetcher = QComboBox()
-        self.fetcher.addItems(["archive", "git"])
-        form.addRow("抓取方式", self.fetcher)
+        for text, value in (("ZIP 压缩包（免装 Git）", "archive"), ("Git 克隆（保留完整历史）", "git")):
+            self.fetcher.addItem(text, value)
+        fetcher_tip = (
+            "从 GitHub 获取技能/程序文件的方式：\n"
+            "ZIP 压缩包——下载仓库打包快照，速度快、无需安装 Git，但没有提交历史；\n"
+            "Git 克隆——完整克隆仓库，保留提交历史、可增量更新，需要本机已安装 Git。"
+        )
+        self.fetcher.setToolTip(fetcher_tip)
+        fetcher_label = QLabel("技能下载方式")
+        fetcher_label.setToolTip(fetcher_tip)
+        form.addRow(fetcher_label, self.fetcher)
         self.language = QComboBox()
         for text, value in [("跟随系统 / System", "system"), ("中文", "zh-CN"), ("English", "en")]:
             self.language.addItem(text, value)
@@ -79,7 +108,7 @@ class SettingsPage(QWidget):
         for value in ("https://ghproxy.link/", "https://ghfast.top/"):
             mirrors.addWidget(button(value, lambda _=False, v=value: self._append_mirror(v)))
         form.addRow("常用镜像", mirrors)
-        self.tabs.addTab(general, "仓库与语言")
+        self.tabs.addTab(scroll_form(general), "仓库与语言")
 
         ai = QWidget()
         form = QFormLayout(ai)
@@ -121,15 +150,42 @@ class SettingsPage(QWidget):
         self.github_status = QLabel("", objectName="muted")
         form.addRow("已存状态", self.github_status)
         form.addRow(QLabel("匿名访问可用，但更容易触发 GitHub 速率限制。", objectName="muted"))
-        self.tabs.addTab(ai, "AI 与凭据")
+        self.tabs.addTab(scroll_form(ai), "AI 与凭据")
         maintenance = QWidget()
         layout = QVBoxLayout(maintenance)
         self.heal_button = button("重新识别已同步条目", self.heal)
         layout.addWidget(self.heal_button)
         layout.addWidget(button("导入记忆技能库…", self.choose_import))
         layout.addWidget(button("打开仓库目录", self.open_repo))
+        # v1.7.4：快速重置入口——换仓库 / 重新导入新仓库时不必手工清理
+        reset_line = QFrame()
+        reset_line.setObjectName("line")
+        reset_line.setFrameShape(QFrame.Shape.HLine)
+        layout.addWidget(reset_line)
+        self.detach_repo_button = button("清除仓库数据保留配置", self.clear_repo_data)
+        self.detach_repo_button.setObjectName("danger")
+        self.detach_repo_button.setToolTip(
+            "解除当前仓库的关联：清空「仓库根目录」和「记忆库位置覆盖」设置，\n"
+            "API 密钥、语言、主题等配置保留。\n仓库里已有的数据与文件不会被删除。"
+        )
+        layout.addWidget(self.detach_repo_button)
+        self.clear_all_button = button("清除所有配置", self.clear_all_settings)
+        self.clear_all_button.setObjectName("danger")
+        self.clear_all_button.setToolTip(
+            "清空全部配置：仓库路径、API 密钥、语言、界面偏好都恢复初始状态。\n"
+            "仓库里已有的数据与文件不会被删除。"
+        )
+        layout.addWidget(self.clear_all_button)
+        reset_note = QLabel(
+            "说明：「清除所有配置」和「清除仓库数据保留配置」都不会删除仓库里已有的数据和文件；\n"
+            "清除后再使用时，需要重新导入或重新指定仓库路径；「清除所有配置」还需重新配置 AI 接口调用。\n"
+            "适用于快速重新导入新仓库、或更换导入新的仓库数据。"
+        )
+        reset_note.setObjectName("muted")
+        reset_note.setWordWrap(True)
+        layout.addWidget(reset_note)
         layout.addStretch()
-        self.tabs.addTab(maintenance, "维护与导入")
+        self.tabs.addTab(scroll_form(maintenance), "维护与导入")
         actions = QHBoxLayout()
         self.status = QLabel("", objectName="status")
         self.status.setWordWrap(True)
@@ -138,6 +194,7 @@ class SettingsPage(QWidget):
         actions.addWidget(self.save_button)
         root.addLayout(actions)
         root.addWidget(QLabel(f"123 MSHub Native {NATIVE_VERSION}", objectName="muted"))
+        label_controls(self)
 
     def _show_about(self):
         """v1.6.0：显示"关于"对话框（从导航栏移到设置页）"""
@@ -149,7 +206,7 @@ class SettingsPage(QWidget):
         config = self.original
         self.repo_edit.setText(config.repo_root)
         self.memory_edit.setText(config.memory_root_override)
-        self.fetcher.setCurrentText(config.fetcher)
+        self.fetcher.setCurrentIndex(max(0, self.fetcher.findData(config.fetcher)))
         self.language.setCurrentIndex(max(0, self.language.findData(config.language)))
         self.theme_combo.setCurrentIndex(max(0, self.theme_combo.findData(self.theme.mode)))
         self.proxy.setText(config.proxy)
@@ -235,7 +292,7 @@ class SettingsPage(QWidget):
 
     def heal(self):
         if self.jobs:
-            self.jobs.submit("reconcile", "重新识别已同步条目", self.facade.rebuild)
+            self.jobs.submit("reconcile", "识别条目", self.facade.rebuild)
             self.status.setText("已提交后台任务，完成后自动刷新列表。")
 
     def choose_import(self):
@@ -251,7 +308,7 @@ class SettingsPage(QWidget):
             base = self.ai_base_url.text().strip()
             validate_endpoint(base)
             updates = {"memory_root_override": self.memory_edit.text().strip(),
-                "fetcher": self.fetcher.currentText(), "language": self.language.currentData(),
+                "fetcher": self.fetcher.currentData() or "archive", "language": self.language.currentData(),
                 "proxy": self.proxy.text().strip(), "mirrors": self.mirrors.toPlainText().splitlines(),
                 "ai_base_url": base, "ai_model": self.ai_model.currentText().strip()}
             # Saving an unrelated draft must not persist a --repo session override.
@@ -278,3 +335,72 @@ class SettingsPage(QWidget):
     def open_repo(self):
         if self.repo_edit.text().strip():
             QDesktopServices.openUrl(QUrl.fromLocalFile(self.repo_edit.text().strip()))
+
+    def copy_prompt(self):
+        """v1.7.5：设置页右上角「Agent连接提示词」。"""
+        copy_agent_prompt(self.facade, self.agent_button)
+
+    def _jobs_running(self) -> bool:
+        return bool(self.jobs and any(job["status"] == "running" for job in self.jobs.list()))
+
+    def clear_repo_data(self):
+        """v1.7.4：清除仓库数据（保留配置）——解除仓库关联，仓库文件原样保留。
+
+        用户诉求：已导入仓库后无法清空重来。这里只清「仓库根目录 / 记忆库
+        位置覆盖」两个关联设置，API 密钥、语言等全部保留；仓库里的数据与
+        文件一个不动。再次使用时重新指定仓库路径或重新导入即可。
+        """
+        if self._jobs_running():
+            self.status.setText("请等待后台任务完成后再清除仓库数据。")
+            return
+        asked = QMessageBox.question(self, "清除仓库数据", (
+            "解除当前仓库的关联？\n\n"
+            "· 仓库根目录与记忆库位置设置将被清空（列表立即无数据）；\n"
+            "· API 密钥、语言、主题等配置保留；\n"
+            "· 仓库里已有的数据与文件不会被删除。\n"
+            "再次使用时需重新导入或重新指定仓库路径。"
+        ))
+        if asked != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            config = self.facade.save_config({"repo_root": "", "memory_root_override": ""})
+            self.load_config()
+            self.status.setText("已解除仓库关联：请重新指定仓库路径或重新导入新仓库。")
+            self.statusMessage.emit("已清除仓库数据（配置保留）")
+            self.saved.emit(config)
+        except Exception as exc:
+            self.status.setText(f"清除仓库数据失败：{exc}")
+
+    def clear_all_settings(self):
+        """v1.7.4：清除所有配置——恢复出厂状态，仓库文件与数据不删。
+
+        覆盖 config.json 全部字段（含删除钥匙串里的 API 密钥与 GitHub
+        Token）和 native-ui.ini 界面偏好（主题/侧栏宽/编辑器几何/引导抑制）。
+        """
+        if self._jobs_running():
+            self.status.setText("请等待后台任务完成后再清除配置。")
+            return
+        asked = QMessageBox.question(self, "清除所有配置", (
+            "确认清除全部配置？\n\n"
+            "· 仓库路径、API 密钥、语言、界面偏好等全部恢复初始；\n"
+            "· 仓库里已有的数据与文件不会被删除；\n"
+            "· 再次使用时需重新导入或重新指定仓库路径，并重新配置 AI 接口。"
+        ))
+        if asked != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            config = self.facade.save_config({
+                "repo_root": "", "memory_root_override": "", "mirrors": [], "proxy": "",
+                "fetcher": "archive", "language": "system",
+                "ai_base_url": "https://api.openai.com/v1", "ai_model": "gpt-4.1-mini",
+                "ai_key": "", "github_token": "",
+            })
+            (self.facade.config_store.config_dir / "native-ui.ini").unlink(missing_ok=True)
+            self.theme.apply("system")
+            self.language_controller.apply("system")
+            self.load_config()
+            self.status.setText("已清除所有配置：请重新指定仓库路径并配置 AI 接口。")
+            self.statusMessage.emit("已清除所有配置")
+            self.saved.emit(config)
+        except Exception as exc:
+            self.status.setText(f"清除配置失败：{exc}")

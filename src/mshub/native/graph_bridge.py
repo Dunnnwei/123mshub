@@ -40,9 +40,25 @@ class GraphBridge(QObject):
         cached = self._graph_cache.get(normalized)
         if cached is not None:
             return cached
-        payload = json.dumps(self.facade.graph(normalized), ensure_ascii=False)
-        self._graph_cache[normalized] = payload
-        return payload
+        try:
+            payload = self.facade.graph(normalized)
+        except Exception as exc:  # noqa: BLE001 - reported to the page as data
+            # A missing repository must not surface in the island as a JSON
+            # parse error ("Unexpected end of JSON input"): the slot raising
+            # makes WebChannel deliver an empty string instead. Return a
+            # structured payload so the page can show a proper hint.
+            if not str(getattr(self.facade.config(), "repo_root", "") or "").strip():
+                reason = "repo-not-set"
+                message = "尚未配置仓库根目录，请先在「设置选项 → 仓库与语言」选择并保存。"
+            else:
+                reason = "error"
+                message = str(exc)
+            return json.dumps(
+                {"nodes": [], "edges": [], "unavailable": reason, "message": message},
+                ensure_ascii=False,
+            )
+        self._graph_cache[normalized] = json.dumps(payload, ensure_ascii=False)
+        return self._graph_cache[normalized]
 
     def set_graph_cache(self, kinds: str, payload: dict[str, Any]) -> None:
         """Accept a worker-produced graph payload before the page asks for it."""

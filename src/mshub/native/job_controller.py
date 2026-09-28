@@ -54,6 +54,16 @@ class JobController(QObject):
         self.changed.emit()
         return removed
 
+    def clear_finished(self) -> int:
+        """v1.7.3：一键清除全部已结束任务（运行中保留），供侧栏任务面板使用。
+
+        已结束任务的 id 记录（observed/callbacks/mutations）保持不动：
+        uuid 不会复用，残留条目是惰性的，误清反而可能吞掉未派发的回调。
+        """
+        removed = self.manager.clear_finished()
+        self.changed.emit()
+        return removed
+
     def shutdown(self):
         self.timer.stop()
         self.manager._executor.shutdown(wait=True)

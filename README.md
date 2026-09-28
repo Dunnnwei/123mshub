@@ -12,19 +12,29 @@ Claude Desktop、Cursor 等）管理两类共享资产：
 | **技能库（Skills）** | GitHub 技能 + 本地自研技能 + 程序仓 | 挂载/复制安装，统一更新与安全检查 |
 | **记忆库（Memory）** | 索引 + 条目文件（一人一条知识） | 注入提示词教 agent 先读索引、按需读条目、往 inbox 投递 |
 
-核心理念：你在任意本地 agent 里**粘贴一段注入提示词**，agent 即获得
+核心理念：你在任意本地 agent 里**粘贴一段注入提示词**（程序内任意页面右上角的
+「Agent连接提示词」按钮，一键复制），agent 即获得
 读共享记忆、用共享技能库、投递新记忆的完整协议。程序只做管理与审查，
 不管同步——同步、迁移、复制由你自己的工具搞定（网盘、NAS、U 盘都行）。
+
+![记忆图示 · 暗色主题](docs/images/screenshot-graph-dark.png)
+
+![记忆仓库 · 亮色主题](docs/images/screenshot-memory-light.png)
+
+![技能仓库 · 亮色主题](docs/images/screenshot-skills-light.png)
 
 ---
 
 ## 快速开始（三步）
 
 1. **解压即用**：从 [GitHub Releases](https://github.com/Dunnnwei/123mshub/releases) 下载
-   最新 `123mshub-v1.3.3-win64.zip`，解压到任意目录，双击 `123mshub.exe`；主 EXE 已内置
-   Python、FastAPI、前端静态资源和 Sigma 图谱，不需要另装 Python、Node.js、npm 或 pip；
-   `native/v2` 的 v1.4.2 onedir 验证产物位于 `release/native-v1.4.2/123mshub/`，
-   图谱页使用 QtWebEngine 本地资源，不启动 localhost 服务；
+   v1.7.5 起发布物分为两个包：**程序包**（`native-v1.7.5/123mshub/`，约 50MB）与
+   **环境包**（`123mshub-environment-v1.7.5-win-x64.zip`，约 300MB 的 PySide6/Qt 运行库）。
+   首次使用：解压程序包，再把环境包里的 `PySide6` 文件夹解压到 `123mshub\_internal\`
+   内，双击 `123mshub.exe`；之后更新只需下载新版程序包覆盖（保留 `_internal\PySide6`）。
+   已有环境的老用户不用再下环境包；缺环境启动时程序会弹窗给出下载地址，也可自行安装。
+   主 EXE 已内置 Python、FastAPI、前端静态资源和 Sigma 图谱，不需要另装
+   Python、Node.js、npm 或 pip；图谱页使用 QtWebEngine 本地资源，不启动 localhost 服务；
 2. **首启三件事**：
    - 设定**仓库位置**（本地一个文件夹，建议放进你的同步盘）；
    - **AI 接口**可填可不填（安全审查 B 路线 + 记忆辅助共用；不填程序照用，只是没有 AI 能力）；
@@ -34,15 +44,12 @@ Claude Desktop、Cursor 等）管理两类共享资产：
 
 ### Windows 系统依赖
 
-主 EXE 仍依赖 Windows 的原生渲染运行时：完整桌面窗口需要 **Microsoft Edge WebView2 Runtime** 和
-**.NET Framework 4.8**；Git for Windows 只在选择 Git 拉取、项目更新或 Git bundle 自愈时需要，默认
-archive 模式不强制依赖 Git。Windows 10/11 通常已经有前两项，但不能承诺任意全新 Windows 环境都预装。
-
-发布目录另有独立的 `123mshub-environment-vX.Y.Z-win-x64.zip`。在干净机器上先解压它，双击
-`一键安装环境依赖.cmd`，安装器会先显示已有环境和准备补充的包，再由你确认安装；安装器使用官方离线
-payload、SHA-256 和 Authenticode 校验。只复制主 EXE 也会尝试在 WebView2 不可用时用默认浏览器打开本地页，
-但完整桌面嵌入体验应先配置环境包。习惯用 agent 的同学也可以不下载环境包：把仓库里
-`packaging/environment/README-环境依赖.md` 的内容发给你的 agent，让它按清单检测并安装即可。
+v1.7.5 起 native 版的图形运行时（PySide6/Qt，含 QtWebEngine）放在独立的**环境包**
+`123mshub-environment-vX.Y.Z-win-x64.zip` 里（见上文"快速开始"），程序包本体保持小巧；
+环境包与程序版本对应，除非发布页注明环境包升级，更新程序时无需重新下载。
+Git for Windows 只在选择 Git 拉取、项目更新或 Git bundle 自愈时需要，默认
+archive 模式不强制依赖 Git。旧版（≤ v1.3.3 的 web 线）另有 WebView2 / .NET 4.8
+系统依赖与环境安装包，见历史版本说明。
 
 ### 连通暗号
 

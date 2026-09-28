@@ -1,9 +1,22 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
+from mshub.config import ConfigStore
 from mshub.native.graph_bridge import GraphBridge
 from mshub.native.memory_facade import MemoryFacade
+
+
+def test_graph_bridge_reports_unconfigured_repo_with_friendly_payload(tmp_path: Path) -> None:
+    """v1.7.2：仓库未配置时返回结构化载荷，而不是让页面收到空串报 JSON 解析错误。"""
+    store = ConfigStore(tmp_path / "config")
+    assert not store.load().repo_root
+    bridge = GraphBridge(MemoryFacade(store))
+    payload = json.loads(bridge.getGraph("link"))
+    assert payload["unavailable"] == "repo-not-set"
+    assert payload["nodes"] == [] and payload["edges"] == []
+    assert "仓库" in payload["message"]
 
 
 def test_graph_bridge_matches_service_graph_contract(native_facade: MemoryFacade) -> None:
@@ -32,7 +45,12 @@ def test_graph_bridge_accepts_worker_warm_cache(native_facade: MemoryFacade) -> 
 
 def test_graph_bridge_persists_settings_and_explicit_palette(native_facade: MemoryFacade) -> None:
     bridge = GraphBridge(native_facade, "dark")
-    assert json.loads(bridge.getPalette()) == {"theme": "dark", "background": "#0C1730", "label": "#FFFFFF"}
+    palette = json.loads(bridge.getPalette())
+    assert palette["theme"] == "dark"
+    assert palette["background"] == "#141926"
+    assert palette["label"] == "#E9ECF4"
+    assert palette["accent"] == "#8DB5FF"
+    assert palette["types"]["project"] == "#8DB5FF"
     assert bridge.writeGraphSettings('{"labelThreshold": 12, "forces": {"center": 2}}') is True
     restored = GraphBridge(native_facade, "dark")
     settings = json.loads(restored.readGraphSettings())

@@ -68,3 +68,52 @@ def test_language_controller_changes_native_chrome(qapp, native_facade: MemoryFa
     window.language.apply("zh-CN")
     assert window.nav.item(0).text() == "记忆仓库"
     window.close()
+
+
+def test_security_label_maps_enum_to_chinese():
+    from mshub.native.views.skill_view import _security_label
+
+    assert _security_label("unchecked") == "未检查"
+    assert _security_label("SAFE") == "已通过"
+    assert _security_label("warning") == "需复核"
+    assert _security_label("critical") == "存在风险"
+    assert _security_label(None) == "未检查"
+
+
+def test_clear_finished_jobs_keeps_running(qapp, native_facade: MemoryFacade):
+    """v1.7.3：清除已完成入口——已结束任务移除、运行中保留。"""
+    window = MainWindow(native_facade)
+    window.jobs.submit("quick", "即时任务", lambda: {"ok": True})
+    assert wait_for(qapp, lambda: all(j["status"] != "running" for j in window.jobs.list()))
+    assert window.jobs.list(), "已结束任务应先留在面板里"
+    window._clear_finished_jobs()
+    assert window.jobs.list() == []
+    release = {"done": False}
+
+    def long_job(report=None):
+        import time
+
+        time.sleep(1.5)
+        release["done"] = True
+        return {"ok": True}
+
+    window.jobs.submit("long", "长任务", long_job, progress=True)
+    assert wait_for(qapp, lambda: any(j["status"] == "running" for j in window.jobs.list()))
+    window._clear_finished_jobs()
+    assert any(j["label"] == "长任务" for j in window.jobs.list()), "运行中的任务不能被清除"
+    assert wait_for(qapp, lambda: release["done"], 4000)
+    window.close()
+
+
+def test_add_skill_dialog_inherits_fetcher_setting(qapp, native_facade: MemoryFacade):
+    """v1.7.3：添加技能弹窗的下载方式默认值继承设置页当前配置。"""
+    from mshub.native.views.skill_view import AddSkillDialog
+
+    native_facade.save_config({"fetcher": "git"})
+    window = MainWindow(native_facade)
+    dialog = AddSkillDialog(window.skills_page)
+    assert dialog.fetcher.currentData() == "git"
+    assert dialog.fetcher.currentText() == "Git 克隆（保留完整历史）"
+    dialog.close()
+    native_facade.save_config({"fetcher": "archive"})
+    window.close()

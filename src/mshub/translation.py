@@ -27,17 +27,26 @@ def translate_description(
     api_key: str,
     model: str = "",
     timeout: float = 60,
+    target: str = "zh",
 ) -> str:
-    """调用 OpenAI 兼容网关把技能备注翻译为简体中文。"""
+    """调用 OpenAI 兼容网关翻译技能备注；target=zh 译为简体中文，target=en 译为英文。"""
     if not text.strip():
         raise ValidationError("备注为空，没有可翻译的内容。")
     if not base_url or not api_key:
         raise ValidationError("翻译备注需要先在设置中填写 AI 网关地址与 Key。")
-    prompt = (
-        "把下面的 agent skill 备注翻译成简体中文。只输出译文本身，"
-        "不要加引号、解释或前后缀；专有名词（产品名/命令/文件名）保留原文。\n\n"
-        + text.strip()
-    )
+    if target == "en":
+        prompt = (
+            "Translate the following agent skill note into concise English. "
+            "Only output the translation itself, without quotes, explanations "
+            "or prefixes; keep proper nouns (product names/commands/file names) as-is.\n\n"
+            + text.strip()
+        )
+    else:
+        prompt = (
+            "把下面的 agent skill 备注翻译成简体中文。只输出译文本身，"
+            "不要加引号、解释或前后缀；专有名词（产品名/命令/文件名）保留原文。\n\n"
+            + text.strip()
+        )
     endpoint = f"{base_url.rstrip('/')}/chat/completions"
     request_body: dict = {
         "temperature": 0,

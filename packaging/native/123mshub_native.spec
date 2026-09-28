@@ -22,7 +22,10 @@ graph_datas = [
 ]
 
 icon_root = project_root / "packaging/native/icons"
-datas = graph_datas + [(str(project_root / "README.md"), ".")] + [
+datas = graph_datas + [
+    (str(project_root / "README.md"), "."),
+    (str(src_root / "mshub/native/design_tokens.json"), "mshub/native"),
+] + [
     (str(icon_root / name), "mshub/native/icons")
     for name in ("123mshublogo.ico", "123mshublogohei.ico")
 ]
