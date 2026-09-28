@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QSplitter,
     QStackedWidget,
-    QStyle, QHeaderView,
+    QHeaderView,
     QVBoxLayout,
     QWidget,
     QToolButton,

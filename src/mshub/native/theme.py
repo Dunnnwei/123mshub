@@ -10,12 +10,38 @@ DURATIONS = {"hover": 120, "fade": 180, "panel": 220}
 
 _TOKENS_PATH = Path(__file__).with_name("design_tokens.json")
 
+# ocr 审查修复：design_tokens.json 缺失/损坏时（打包或环境包部署异常）曾静默
+# 返回空 dict，下游 stylesheet()/graph_palette() 直接 KeyError 且远离根因。
+# 嵌一份与 json 同源的完整默认令牌作兜底：文件丢了 UI 也能起来（颜色不漂移）。
+_FALLBACK_TOKENS = {
+    "light": {"bg": "#F2F4F8", "sidebar": "#F7F8FA", "surface": "#FFFFFF", "raised": "#FFFFFF", "inset": "#F3F5F8",
+              "ink": "#171B23", "muted": "#4E5766", "faint": "#606A7A", "line": "#E2E6EE", "strong": "#828DA0",
+              "action": "#0156FC", "on_action": "#FFFFFF", "accent": "#0148D2", "selection": "#E7F0FF",
+              "error": "#AF2424", "error_soft": "#FBEAEA", "ok": "#116B3A", "ok_soft": "#E5F4EB",
+              "warning": "#88420A", "warning_soft": "#FBF0DD", "user": "#7144B8", "project": "#0148D2",
+              "reference": "#006F72", "feedback": "#97500A", "glass": "#F7F8FA", "action_hover": "#0148D2",
+              "action_pressed": "#003CAF"},
+    "dark": {"bg": "#0B0E14", "sidebar": "#0F1219", "surface": "#141926", "raised": "#1B2232", "inset": "#1B2232",
+             "ink": "#E9ECF4", "muted": "#A7B0C2", "faint": "#9AA6BC", "line": "#303A4D", "strong": "#73839E",
+             "action": "#0156FC", "on_action": "#FFFFFF", "accent": "#8DB5FF", "selection": "#172E57",
+             "error": "#FFAAA3", "error_soft": "#3D242A", "ok": "#58DFAC", "ok_soft": "#17392F",
+             "warning": "#F5C46A", "warning_soft": "#40341F", "user": "#B8A0FC", "project": "#8DB5FF",
+             "reference": "#6ED7D0", "feedback": "#F5BD74", "glass": "#1B2232", "action_hover": "#0148D2",
+             "action_pressed": "#003CAF"},
+}
+
 
 def _load_tokens() -> dict:
     try:
-        return json.loads(_TOKENS_PATH.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return {}
+        loaded = json.loads(_TOKENS_PATH.read_text(encoding="utf-8"))
+        if not isinstance(loaded, dict) or not loaded.get("light") or not loaded.get("dark"):
+            raise ValueError("design tokens 不完整")
+        return loaded
+    except (OSError, ValueError) as exc:
+        import logging
+
+        logging.getLogger(__name__).error("设计令牌文件加载失败，使用内置默认令牌：%s", exc)
+        return json.loads(json.dumps(_FALLBACK_TOKENS))
 
 _DREAM_FONT_FAMILY = "Dream Han Sans CN"
 _dream_fonts_loaded = False
@@ -32,6 +58,11 @@ def ensure_brand_fonts() -> str:
     global _dream_fonts_loaded
     if _dream_fonts_loaded:
         return _DREAM_FONT_FAMILY
+    # ocr 审查修复：字体未装时原来每次调用都重扫字体目录+枚举系统字体，
+    # 而 resizeEvent 会高频调用（拖窗口卡顿）——记住"已尝试"，失败直接回退。
+    if getattr(ensure_brand_fonts, "_checked", False):
+        return "Segoe UI"
+    ensure_brand_fonts._checked = True
     candidates = (
         Path("C:/Windows/Fonts"),
         Path.home() / "AppData/Local/Microsoft/Windows/Fonts",

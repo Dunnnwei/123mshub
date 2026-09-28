@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (QCheckBox, QDialog, QDialogButtonBox, QHBoxLayout
     QLabel, QPlainTextEdit, QPushButton, QVBoxLayout)
 
 from ..task_runner import RequestScope
-from ..ui import prepare_dialog, label_controls
+from ..ui import prepare_dialog
 
 
 class ImportDialog(QDialog):
@@ -31,7 +31,7 @@ class ImportDialog(QDialog):
         self.status = QLabel("尚未扫描"); self.status.setObjectName("status"); root.addWidget(self.status)
         buttons = QDialogButtonBox(); self.import_button = buttons.addButton("确认导入", QDialogButtonBox.ButtonRole.AcceptRole); close = buttons.addButton("关闭", QDialogButtonBox.ButtonRole.RejectRole); self.import_button.setEnabled(False); root.addWidget(buttons)
         self.scan_button.clicked.connect(self.scan); self.import_button.clicked.connect(self.start_import); close.clicked.connect(self.reject)
-        prepare_dialog(self); label_controls(self)
+        prepare_dialog(self)  # ocr 审查修复：prepare_dialog 内已调用 label_controls，去掉冗余
         self.scan()
 
     def scan(self):

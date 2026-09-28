@@ -1,12 +1,12 @@
 """Shared presentation controls for the MASTER design system; no service policy."""
 from __future__ import annotations
 
-from PySide6.QtCore import QEvent, QPoint, QRect, QSize, Qt, QTimer
+from PySide6.QtCore import QPoint, QRect, QSize, Qt, QTimer
 from PySide6.QtGui import QPainter, QPalette
 from PySide6.QtWidgets import (
     QAbstractButton, QAbstractItemView, QBoxLayout, QComboBox, QDialog, QFormLayout, QFrame,
     QHBoxLayout, QHeaderView, QLabel, QLayout, QLineEdit, QPlainTextEdit,
-    QPushButton, QScrollArea, QSizePolicy, QStyle, QTableWidget, QTextEdit,
+    QPushButton, QScrollArea, QSizePolicy, QTableWidget, QTextEdit,
     QVBoxLayout, QWidget,
 )
 

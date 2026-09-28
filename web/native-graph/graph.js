@@ -32,6 +32,10 @@ let lastInteraction = 0
 let interactionDepth = 0
 let floatResumeTimer = null
 let reduceMotion = false
+// v1.7.5（ocr 审查修复）：显式跟踪按键按住状态。空闲安全网（1s 清零
+// interactionDepth）无法区分"漏掉的 mouseup"和"按住不动"——拖拽节点按住
+// 超 1s 时动效会恢复并重写正被拖拽的节点坐标，造成按住回弹/漂移。
+let pointerHeld = false
 // ---- v1.5.0 漂浮引擎：直写 graphology 坐标的显示层漂移 ----
 // v1.4.2 的"闲置微动"在 nodeReducer 里加 0.015 单位偏移，但 sigma v3 的
 // reducer 输出变化不会推进 WebGL 渲染缓冲，实际画面是静止的——这就是
@@ -160,6 +164,8 @@ function reheatAfterDrag() {
 function showTooltip(node, event) { const data = graph.getNodeAttributes(node); tooltip.innerHTML = ''; const title = document.createElement('strong'); title.textContent = data.title; const meta = document.createElement('span'); meta.textContent = `${typeLabels[data.type] || data.type} · ${graph.degree(node)} 个连接`; const tags = document.createElement('span'); tags.textContent = `标签：${data.tags?.join('、') || '无标签'}`; tooltip.append(title, meta, tags); tooltip.hidden = false; const rect = surface.getBoundingClientRect(); tooltip.style.left = `${Math.min(rect.width - tooltip.offsetWidth - 16, Math.max(16, event.x + 12))}px`; tooltip.style.top = `${Math.min(rect.height - tooltip.offsetHeight - 16, Math.max(16, event.y + 12))}px` }
 function clearHover() { hovered = null; hoveredNeighbors = new Set(); tooltip.hidden = true; renderer?.refresh() }
 function bindRenderer() { renderer.on('enterNode', ({ node, event }) => { hovered = node; hoveredNeighbors = new Set([node, ...graph.neighbors(node)]); if (nodeList) nodeList.value = node; showTooltip(node, event); renderer.refresh() }); renderer.on('leaveNode', clearHover); renderer.on('clickNode', ({ node }) => bridge?.openMemory(node)); renderer.on('clickStage', clearHover); renderer.on('doubleClickStage', () => renderer.getCamera().animatedReset({ duration: 300 })); renderer.on('downNode', ({ node, event }) => { pauseFloat(); renderer.getCamera().disable(); event.preventSigmaDefault(); event.original.preventDefault(); layout?.start(); renderer.getMouseCaptor().on('mousemovebody', moveNode); renderer.getMouseCaptor().once('mouseup', () => { renderer.getCamera().enable(); renderer.getMouseCaptor().removeListener('mousemovebody', moveNode); if (layout) window.setTimeout(() => { layout?.stop(); layout = null; snapshotFloatBase(); syncFloat() }, 1800); else reheatAfterDrag(); resumeFloat() }); function moveNode(mouseEvent) { markInteraction(); const position = renderer.viewportToGraph(mouseEvent); graph.setNodeAttribute(node, 'x', position.x); graph.setNodeAttribute(node, 'y', position.y); graph.setNodeAttribute(node, 'baseX', position.x); graph.setNodeAttribute(node, 'baseY', position.y); floatBase.set(node, { x: position.x, y: position.y }); renderer.refresh() } }); renderer.getMouseCaptor().on('mousedown', pauseFloat); renderer.getMouseCaptor().on('mouseup', resumeFloat)
+// v1.7.5（ocr 审查修复）：维护 pointerHeld 供空闲安全网区分"按住不动"与"漏掉的 mouseup"
+renderer.getMouseCaptor().on('mousedown', () => { pointerHeld = true }); renderer.getMouseCaptor().on('mouseup', () => { pointerHeld = false })
 // v1.7.4：滚轮缩放不再绑定 markInteraction——旧逻辑把 wheel 记为"交互"，
 // floatTick 在交互后 900ms 内直接 return，导致缩放期间呼吸冻结、停手约 1s
 // 才恢复。缩放只是相机矩阵变化，不冲突坐标写入；幅度换算改由 floatTick
@@ -251,8 +257,9 @@ function floatTick(now) {
   const idleFor = now - lastInteraction
   // A missed mouseup must not permanently disable motion. After one second
   // of no pointer activity the timestamp is authoritative and stale depth is
-  // cleared as a safety net.
-  if (interactionDepth && idleFor >= 1000) interactionDepth = 0
+  // cleared as a safety net. v1.7.5：pointerHeld 为真（按钮仍按着）时不清——
+  // 那不是漏掉的 mouseup，而是用户按住节点未松手。
+  if (interactionDepth && idleFor >= 1000 && !pointerHeld) interactionDepth = 0
   if (interactionDepth || idleFor < 900 || !graph || !renderer) return
   // 拖拽/平移/缩放时 sigma 自己会触发渲染；静止期由这里驱动增量渲染。
   if (!floatLastTick) floatLastTick = now

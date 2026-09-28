@@ -3,11 +3,14 @@
 )
 
 $ErrorActionPreference = "Stop"
+$projectRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path))
 # v1.7.4：发布拆分为「程序包」（release\native-vX，不含 PySide6）与
 # 「环境包」（release\123mshub-environment-vX-win-x64.zip，仅 _internal\PySide6）。
-# 有环境的老用户以后只需下载程序包；版本号改这里一处即可。
-$Version = "1.7.5"
-$projectRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path))
+# 有环境的老用户以后只需下载程序包。
+# ocr 审查修复：版本号以 src\mshub\__init__.py 的 __version__ 为单一事实来源
+# （窗口标题/测试断言都用它）；pyproject.toml 与 web\package.json 仍需发版时手工同步。
+$Version = (Select-String -Path (Join-Path $projectRoot "src\mshub\__init__.py") -Pattern '__version__ = "([^"]+)"').Matches[0].Groups[1].Value
+if (-not $Version) { throw "无法从 src\mshub\__init__.py 解析 __version__。" }
 Set-Location -LiteralPath $projectRoot
 $python = Join-Path $projectRoot ".venv\Scripts\python.exe"
 $env:PYTHONPATH = Join-Path $projectRoot "src"
@@ -90,6 +93,9 @@ New-Item -ItemType Directory -Path $envStage -Force | Out-Null
 Move-Item -LiteralPath $pyside -Destination $envStage
 
 $env:MSHUB_ENV_CHECK_SILENT = "1"
+# ocr 审查修复：记住外层是否原本设置过该变量，finally 恢复原值而不是无条件清除
+$prevSilent = $null
+if (Test-Path Env:\MSHUB_ENV_CHECK_SILENT) { $prevSilent = $env:MSHUB_ENV_CHECK_SILENT }
 try {
     $probe = Start-Process -FilePath (Join-Path $root "123mshub.exe") -ArgumentList "--smoke-graph" -WindowStyle Hidden -PassThru
     if (-not $probe.WaitForExit(20000)) {
@@ -98,7 +104,11 @@ try {
     }
     if ($probe.ExitCode -ne 2) { throw "程序包缺环境时应退出码 2（弹下载提示），实际 $($probe.ExitCode)。" }
 } finally {
-    Remove-Item Env:\MSHUB_ENV_CHECK_SILENT -ErrorAction SilentlyContinue
+    if ($null -eq $prevSilent) {
+        Remove-Item Env:\MSHUB_ENV_CHECK_SILENT -ErrorAction SilentlyContinue
+    } else {
+        $env:MSHUB_ENV_CHECK_SILENT = $prevSilent
+    }
 }
 
 $pysideVersion = (& $python -c "import PySide6; print(PySide6.__version__)" 2>$null)

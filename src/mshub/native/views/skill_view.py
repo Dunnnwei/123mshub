@@ -312,7 +312,10 @@ class SkillsPage(AdaptivePage):
         dialog.setWindowTitle(f"技能详情 - {item.get('name')}")
         dialog.setModal(False)
         dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
-        dialog.destroyed.connect(lambda *_: setattr(self, "_detail_dialog", None))
+        # ocr 审查修复：destroyed 只清理「仍是当前窗口」的引用——close() 走
+        # deleteLater，旧窗口的 destroyed 会在新窗口赋值后才触发，无条件清空
+        # 会把新窗口引用抹掉，单实例失效（后续双击叠窗）。
+        dialog.destroyed.connect(lambda *_, d=dialog: self._detail_dialog is d and setattr(self, "_detail_dialog", None))
         dialog.resize(640, 480)
         layout = QVBoxLayout(dialog)
         layout.setContentsMargins(20, 18, 20, 18)
@@ -471,6 +474,8 @@ class MetadataDialog(QDialog):
 
     def load_item(self, item):
         self.item = item
+        # ocr 审查修复：切换条目时复位按钮（上一条的翻译任务可能还在跑/已过期）
+        self.translate_button.setEnabled(True)
         self.name.setText(str(item.get("name") or "")); self.directory.setText(Path(str(item.get("local_dir") or "")).name); self.provider.setCurrentIndex(max(0, self.provider.findData(item.get("provider", "github")))); self.source.setText(str(item.get("source_url") or "")); self.library.setCurrentIndex(max(0, self.library.findData(item.get("library", "skills")))); self.version.setText(str(item.get("version") or "")); self.description.setPlainText(str(item.get("description") or "")); self.description_zh.setPlainText(str(item.get("description_zh") or "")); self.translate_status.clear(); self._directory_hint(); self._source_hint(); self.setWindowTitle(f"编辑技能信息 · {item.get('name', '')}")
 
     def _directory_hint(self):
@@ -530,6 +535,10 @@ class MetadataDialog(QDialog):
         self.translate_status.setText(f"{moved}正在调用 AI 翻译…")
 
         def done(job):
+            # ocr 审查修复：编辑窗是复用单例——翻译期间用户切换到另一条技能时，
+            # 过期译文不能写进当前条目（A 的译文污染 B 的说明）
+            if str(self.item.get("name") or "") != name:
+                return
             self.translate_button.setEnabled(True)
             if job.get("status") == "error":
                 self.translate_status.setText(f"翻译失败：{job.get('error') or '未知错误'}"); return
@@ -711,7 +720,8 @@ class SecurityPage(AdaptivePage):
             values = (item.get("name", ""), provider, _security_label(item.get("security_status", "unchecked")), str(item.get("updated_at", ""))[:19], self._security_summary(item))
             for col, value in enumerate(values):
                 cell = QTableWidgetItem(str(value))
-                if col == 5:
+                if col == 4:
+                    # ocr 审查修复：values 是 5 元组（0-4），原判断 col == 5 永假
                     cell.setToolTip("双击查看完整检查报告")
                 self.table.setItem(row, col + 1, cell)
             for col in range(self.table.columnCount()):
@@ -794,7 +804,8 @@ class SecurityPage(AdaptivePage):
         dialog.setWindowTitle(f"检查报告 - {item.get('name')}")
         dialog.setModal(False)
         dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
-        dialog.destroyed.connect(lambda *_: setattr(self, "_report_dialog", None))
+        # ocr 审查修复：与技能详情窗同款身份判断，防止旧窗 destroyed 抹掉新窗引用
+        dialog.destroyed.connect(lambda *_, d=dialog: self._report_dialog is d and setattr(self, "_report_dialog", None))
         dialog.resize(680, 520)
         layout = QVBoxLayout(dialog)
         layout.setContentsMargins(20, 18, 20, 18)

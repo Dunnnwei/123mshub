@@ -57,9 +57,22 @@ class JobController(QObject):
     def clear_finished(self) -> int:
         """v1.7.3：一键清除全部已结束任务（运行中保留），供侧栏任务面板使用。
 
-        已结束任务的 id 记录（observed/callbacks/mutations）保持不动：
-        uuid 不会复用，残留条目是惰性的，误清反而可能吞掉未派发的回调。
+        ocr 审查修复（2026-09-29）：任务可能在工作线程刚完成、还没被 200ms 轮询
+        观察到时就被清理——其 callback（如翻译 done）与 repositoryChanged 会被
+        静默吞掉。先按 poll 的逻辑派发一遍未观察的已结束任务，再清理。
         """
+        for job in self.manager.list_jobs():
+            if job["status"] == "running" or job["id"] in self._observed:
+                continue
+            identifier = job["id"]
+            self._observed.add(identifier)
+            callback = self._callbacks.pop(identifier, None)
+            if callback:
+                callback(job)
+            self.completed.emit(job)
+            if identifier in self._mutations:
+                self._mutations.discard(identifier)
+                self.repositoryChanged.emit()
         removed = self.manager.clear_finished()
         self.changed.emit()
         return removed

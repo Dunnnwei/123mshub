@@ -36,6 +36,15 @@ def _type_color(kind: str) -> str:
     return PALETTES.get(mode, {}).get(kind, PALETTES.get(mode, {}).get("accent", "#0148D2"))
 
 
+def _type_colors_cached() -> dict:
+    """ocr 审查修复：单次刷新内亮暗模式不变——一次算好四类颜色，行循环只查表，
+    不再每行扫描整份应用级联样式表（搜索/筛选热路径）。"""
+    stylesheet = QApplication.instance().styleSheet() if QApplication.instance() else ""
+    mode = "dark" if "#0B0E14" in stylesheet else "light"
+    palette = PALETTES.get(mode, {})
+    return {kind: palette.get(kind, palette.get("accent", "#0148D2")) for kind, _value in TYPE_OPTIONS}
+
+
 def _error(payload: object) -> str:
     return str(payload.get("error") if isinstance(payload, dict) else payload)
 
@@ -138,6 +147,7 @@ class MemoryPage(AdaptivePage):
         auto_load_name = ""
         self._refreshing_listing = True
         self._row_meta = []
+        type_colors = _type_colors_cached()  # ocr 审查修复：循环外算一次，行内查表
         was_blocked = self.entry_list.blockSignals(True)
         try:
             self.entry_list.clear()
@@ -173,7 +183,7 @@ class MemoryPage(AdaptivePage):
                 badge.setMinimumWidth(140)
                 badge.setMaximumWidth(320)
                 badge.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
-                type_color = _type_color(item.get("type", "reference"))
+                type_color = type_colors.get(item.get("type"), type_colors.get("reference", "#0148D2"))
                 badge.setStyleSheet(f"color:{type_color};font-size:12px;font-weight:550")
                 badge.setToolTip(badge.text())
                 title_row.addWidget(badge)
@@ -309,6 +319,9 @@ class MemoryPage(AdaptivePage):
             self._apply_detail(entry)
         def failed(msg):
             self._loading = False
+            # ocr 审查修复：加载失败时编辑器停在"全字段禁用"状态无法输入——
+            # 恢复可用让用户可以改投别的条目或直接重试
+            self._set_editor_enabled(True)
             self._set_status(f"详情读取失败：{msg}")
             self.detail_title.setText("读取失败")
         self.scope.call("detail", self.facade.get_entry, done, failed, name)
@@ -420,6 +433,9 @@ class MemoryPage(AdaptivePage):
         def done(result):
             if not before_title and not self.title_edit.text().strip(): self.title_edit.setText(str(result.get("title") or ""))
             if not before_desc and not self.description_edit.text().strip(): self.description_edit.setText(str(result.get("description") or ""))
+            # ocr 审查修复：程序化回填不触发 _mark_dirty 的焦点判定——不显式
+            # 标脏的话，焦点在编辑器外时关闭窗口不会弹"放弃修改"确认，AI 内容静默丢失
+            self._dirty = True
             self._set_status("AI 草稿已填入空位，请确认后保存")
         self.scope.call("ai", self.facade.ai_draft, done, lambda msg: self._set_status(f"AI 草稿失败：{msg}"), body)
 

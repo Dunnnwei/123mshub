@@ -47,7 +47,16 @@ class GraphBridge(QObject):
             # parse error ("Unexpected end of JSON input"): the slot raising
             # makes WebChannel deliver an empty string instead. Return a
             # structured payload so the page can show a proper hint.
-            if not str(getattr(self.facade.config(), "repo_root", "") or "").strip():
+            import logging
+
+            logging.getLogger(__name__).exception("graph payload generation failed for kinds=%s", normalized)
+            # ocr 审查修复：facade.graph 常因配置损坏而失败，此处再读 config()
+            # 可能二次抛同一异常跳出 except——单独保护，失败按未配置处理。
+            try:
+                repo_root = str(getattr(self.facade.config(), "repo_root", "") or "").strip()
+            except Exception:  # noqa: BLE001 - config itself may be broken
+                repo_root = ""
+            if not repo_root:
                 reason = "repo-not-set"
                 message = "尚未配置仓库根目录，请先在「设置选项 → 仓库与语言」选择并保存。"
             else:
