@@ -182,6 +182,7 @@ class SkillsPage(ShiftRangeCheckMixin, CheckableTableMixin, AdaptivePage):
         self.scope.call("list", self.facade.skills, done, lambda msg: self._set_status(f"技能列表读取失败：{msg}"))
 
     def _apply_rows(self):
+        self.invalidate_shift_anchor()  # v1.9.1：行号即将重建，旧 Shift 锚点作废（审查 P1-3）
         # v1.7.4：重建行前记住勾选与选中项，排序/刷新后不丢多选，并跳回原选中行
         checked = {(name, library) for name, library in self.table.selected_names()}
         previous = self.current
@@ -654,16 +655,15 @@ class SecurityPage(ShiftRangeCheckMixin, CheckableTableMixin, AdaptivePage):
         self.agent_button = make_agent_prompt_button(self, self.copy_prompt); head.addWidget(self.agent_button)
         root.addLayout(head)
         route_hint = QLabel("推荐先用路线 A · 离线；路线 B · AI 会把摘要发送到已配置接口。"); route_hint.setObjectName("helper"); route_hint.setWordWrap(True); root.addWidget(route_hint)
-        # v1.9.0（需求 4/5）：功能按钮行统一 FlowLayout + 增加信任按钮；
-        # 「检查通过后不显示」是勾选框、与按钮视觉不一致——移出按钮行，
-        # 右对齐靠表格右边线独立摆放。
+        # v1.9.1（需求 B）：按钮行从 FlowLayout 改回 QHBoxLayout 横排靠左——
+        # FlowLayout 挂进 QHBoxLayout 后布局协商异常，实际渲染成竖排。
+        # 「检查通过后不显示」是勾选框、与按钮视觉不一致——保持在行尾靠右独立摆放。
         bar_row = QHBoxLayout(); bar_row.setSpacing(10)
-        bar = FlowLayout(spacing=10)
-        self.route = QComboBox(); self.route.setAccessibleName("安全检查路线"); self.route.addItem("路线 A · 离线", "offline"); self.route.addItem("路线 B · AI", "ai"); bar.addWidget(self.route)
-        self.batch = QPushButton("批量检查需要确认"); self.batch.setObjectName("primary"); self.batch.setToolTip("勾选了条目时优先检查勾选项；未勾选时检查全部需要确认的条目。"); self.batch.clicked.connect(self.batch_scan); bar.addWidget(self.batch)
-        self.trust_checked = QPushButton("信任选中"); self.trust_checked.setToolTip("对勾选的条目做人工信任放行（勾选一条即单独信任，多条即批量信任）；\n信任后状态转为「已通过」并保留放行记录。"); self.trust_checked.clicked.connect(self.batch_trust_checked); bar.addWidget(self.trust_checked)
-        refresh = QPushButton("刷新"); refresh.clicked.connect(self.refresh); bar.addWidget(refresh)
-        bar_row.addLayout(bar); bar_row.addStretch()
+        self.route = QComboBox(); self.route.setAccessibleName("安全检查路线"); self.route.addItem("路线 A · 离线", "offline"); self.route.addItem("路线 B · AI", "ai"); bar_row.addWidget(self.route)
+        self.batch = QPushButton("批量检查需要确认"); self.batch.setObjectName("primary"); self.batch.setToolTip("勾选了条目时优先检查勾选项；未勾选时检查全部需要确认的条目。"); self.batch.clicked.connect(self.batch_scan); bar_row.addWidget(self.batch)
+        self.trust_checked = QPushButton("信任选中"); self.trust_checked.setToolTip("对勾选的条目做人工信任放行（勾选一条即单独信任，多条即批量信任）；\n信任后状态转为「已通过」并保留放行记录。"); self.trust_checked.clicked.connect(self.batch_trust_checked); bar_row.addWidget(self.trust_checked)
+        refresh = QPushButton("刷新"); refresh.clicked.connect(self.refresh); bar_row.addWidget(refresh)
+        bar_row.addStretch()
         # v1.7.4：打开后列表不再显示已通过检查的条目（配置存在 native-ui.ini，重启保留）
         self.hide_passed = QCheckBox("检查通过后不显示"); self.hide_passed.setChecked(self._hide_passed); self.hide_passed.toggled.connect(self._toggle_hide_passed)
         bar_row.addWidget(self.hide_passed)
@@ -746,6 +746,7 @@ class SecurityPage(ShiftRangeCheckMixin, CheckableTableMixin, AdaptivePage):
         return out
 
     def _apply(self, data):
+        self.invalidate_shift_anchor()  # v1.9.1：行号即将重建，旧 Shift 锚点作废（审查 P1-3）
         self.items = list(data.get("items") or {})
         # 先用"旧表 + 旧可见列表"记录勾选与选中项，再重算可见列表（避免索引错位）
         checked = set()

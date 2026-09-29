@@ -33,20 +33,24 @@ def test_parse_version_and_is_newer():
     assert not upgrader.is_newer("v1.8.9", "1.9.0")
 
 
+GOOD_ZIP_URL = "https://github.com/Dunnnwei/123mshub/releases/download/v1.9.1/123mshub-native-v1.9.1-win64.zip"
+
+
 def test_pick_asset_prefers_native_zip():
     release = {"assets": [
-        {"name": "SHA256SUMS.txt", "url": "u0", "size": 100},
-        {"name": "123mshub-native-v1.9.1-win64.zip", "url": "u1", "size": 170},
-        {"name": "other-big.zip", "url": "u2", "size": 500},
+        {"name": "SHA256SUMS.txt", "url": "https://github.com/Dunnnwei/123mshub/releases/download/v1.9.1/SHA256SUMS.txt", "size": 100},
+        {"name": "123mshub-native-v1.9.1-win64.zip", "url": GOOD_ZIP_URL, "size": 170},
     ]}
-    assert upgrader.pick_asset(release)["url"] == "u1"
-    fallback = {"assets": [
-        {"name": "SHA256SUMS.txt", "url": "u0", "size": 100},
-        {"name": "other.zip", "url": "u2", "size": 500},
-    ]}
-    assert upgrader.pick_asset(fallback)["url"] == "u2"
+    assert upgrader.pick_asset(release)["url"] == GOOD_ZIP_URL
+    # v1.9.1（审查 P0-1）：删除"最大 zip 兜底"——资产名不匹配发布惯例即拒绝，
+    # 且下载地址必须是 GitHub 官方域 HTTPS。
     with pytest.raises(FetchError):
-        upgrader.pick_asset({"assets": [{"name": "SHA256SUMS.txt", "url": "u", "size": 1}]})
+        upgrader.pick_asset({"assets": [
+            {"name": "SHA256SUMS.txt", "url": "https://github.com/Dunnnwei/123mshub/releases/download/v1.9.1/SHA256SUMS.txt", "size": 100},
+            {"name": "other.zip", "url": GOOD_ZIP_URL, "size": 500},
+        ]})
+    with pytest.raises(FetchError):
+        upgrader.pick_asset({"assets": [{"name": "SHA256SUMS.txt", "url": "https://github.com/Dunnnwei/123mshub/releases/download/v1.9.1/SHA256SUMS.txt", "size": 1}]})
 
 
 def _build_upgrade_zip(path: Path) -> None:
@@ -241,13 +245,14 @@ def test_security_page_trust_and_layout(qapp, tmp_path: Path):
         assert page.trust_checked.text() == "信任选中"
         assert page.batch_delete.text() == "批量删除"
         assert page.shift_hint.text() == SHIFT_RANGE_HINT
-        # 勾选框移出 FlowLayout 按钮行：直接所属布局必须是水平行（QHBoxLayout），
-        # 与 FlowLayout 里的按钮行分开、可独立右对齐
+        # v1.9.1（需求 B）：按钮行从 FlowLayout 改回 QHBoxLayout 横排靠左——
+        # FlowLayout 挂进 QHBoxLayout 后布局协商异常实际渲染成竖排。
+        # 按钮与「检查通过后不显示」勾选框同属一行，勾选框经 stretch 推到行尾靠右。
         layout = _owning_layout(page.layout(), page.hide_passed)
         assert layout is not None and layout.__class__.__name__ == "QHBoxLayout"
-        flow = _owning_layout(page.layout(), page.batch)
-        assert flow is not None and flow.__class__.__name__ == "FlowLayout"
-        assert flow is not layout, "勾选框不能再留在 FlowLayout 按钮行里"
+        bar = _owning_layout(page.layout(), page.batch)
+        assert bar is layout, "按钮与勾选框应同在横向按钮行里"
+        assert layout.itemAt(layout.count() - 1).widget() is page.hide_passed, "勾选框必须在行尾（靠右）"
         assert hasattr(page, "batch_trust_checked")
         assert page._delete_shortcut.context() == Qt.ShortcutContext.WidgetShortcut
     finally:

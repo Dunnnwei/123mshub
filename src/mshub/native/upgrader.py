@@ -15,6 +15,7 @@
 """
 from __future__ import annotations
 
+import hashlib
 import re
 import shutil
 import tempfile
@@ -22,6 +23,7 @@ import time
 import zipfile
 from pathlib import Path, PurePosixPath
 from typing import Any, Callable
+from urllib.parse import urlparse
 
 import httpx
 
@@ -30,7 +32,18 @@ from ..errors import FetchError
 RELEASES_LATEST = "https://api.github.com/repos/Dunnnwei/123mshub/releases/latest"
 DOWNLOAD_PAGE = "https://github.com/Dunnnwei/123mshub/releases"
 MAX_PACKAGE_BYTES = 1024 * 1024 * 1024  # 完整包上限 1GB（v1.9 约 170MB，留足余量）
+# v1.9.1（审查 P1-5）：解压侧限额——下载上限挡不住高压缩比 zip bomb，
+# 解压后总量与成员数必须单独设卡（完整包解压约 355MB，2GB 留足余量）。
+MAX_EXTRACT_BYTES = 2 * 1024 * 1024 * 1024
+MAX_ARCHIVE_MEMBERS = 20000
 OLD_SUFFIX = ".mshub-old"
+# v1.9.1（审查 P0-1）：升级包只从 GitHub 官方下载域取得；资产名必须匹配
+# 发布惯例（123mshub-native-v<版本>-win64.zip），不再接受任意最大 zip 兜底。
+GITHUB_DOWNLOAD_HOSTS = {
+    "github.com", "api.github.com", "codeload.github.com",
+    "objects.githubusercontent.com", "release-assets.githubusercontent.com",
+}
+ASSET_NAME_PATTERN = re.compile(r"123mshub-native-v\d+(\.\d+)*[\w.-]*-win64\.zip")
 
 
 def fetch_latest_release(proxy: str = "", token: str = "") -> dict[str, Any]:
@@ -79,17 +92,80 @@ def is_newer(remote: str, local: str) -> bool:
     return left > right
 
 
+def _validate_asset_url(url: str) -> str:
+    """v1.9.1（审查 P0-1）：资产直连 URL 必须是 GitHub 官方下载域的 HTTPS 地址。"""
+    parsed = urlparse(str(url or ""))
+    host = (parsed.hostname or "").lower()
+    if parsed.scheme != "https" or host not in GITHUB_DOWNLOAD_HOSTS:
+        raise FetchError(f"升级包下载地址不在允许的 GitHub 域名内：{host or '（空）'}")
+    return url
+
+
+def _asset_basename(name: str) -> str:
+    """v1.9.1（审查 P0-1）：资产名只取 basename 并做发布惯例白名单校验。"""
+    clean = Path(str(name or "")).name
+    if not ASSET_NAME_PATTERN.fullmatch(clean):
+        raise FetchError(f"升级包资产名不符合发布惯例，已拒绝：{clean!r}")
+    return clean
+
+
 def pick_asset(release: dict[str, Any]) -> dict[str, Any]:
-    """从 Release 资产里挑完整包：优先 123mshub-native-*-win64.zip，其次最大 zip。"""
+    """从 Release 资产里挑完整包：只认 123mshub-native-v*.-win64.zip 白名单名。"""
     assets = [asset for asset in release.get("assets") or [] if asset.get("url")]
-    preferred = [asset for asset in assets
-                 if "123mshub-native-" in asset.get("name", "") and asset.get("name", "").lower().endswith(".zip")]
-    if preferred:
-        return preferred[0]
-    zips = [asset for asset in assets if asset.get("name", "").lower().endswith(".zip")]
-    if zips:
-        return max(zips, key=lambda asset: asset.get("size", 0))
-    raise FetchError("最新 Release 里没有可用的 zip 资产。")
+    for asset in assets:
+        name = str(asset.get("name") or "")
+        if ASSET_NAME_PATTERN.fullmatch(Path(name).name):
+            _validate_asset_url(str(asset.get("url")))
+            return asset
+    raise FetchError("最新 Release 里没有符合命名惯例的完整包资产。")
+
+
+def pick_sums_asset(release: dict[str, Any]) -> dict[str, Any] | None:
+    """v1.9.1：找随 Release 发布的 SHA256SUMS*.txt 校验文件；没有则返回 None。"""
+    for asset in release.get("assets") or []:
+        name = str(asset.get("name") or "")
+        if name.upper().startswith("SHA256SUMS") and name.lower().endswith(".txt") and asset.get("url"):
+            return asset
+    return None
+
+
+def parse_sums(text: str, asset_name: str) -> str:
+    """从 SHA256SUMS 文本（"<hash>  <文件名>" 行，与 build-native.ps1 同格式）取指定资产的哈希。"""
+    wanted = Path(str(asset_name or "")).name.lower()
+    for line in str(text or "").splitlines():
+        parts = line.split(None, 1)
+        if len(parts) == 2 and parts[1].strip().lower() == wanted:
+            digest = parts[0].strip().lower()
+            if re.fullmatch(r"[0-9a-f]{64}", digest):
+                return digest
+    raise FetchError("校验文件中找不到升级包对应的 SHA-256 值。")
+
+
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _request_plan(url: str, mirrors: list[str] | None, token: str, *, allow_mirrors: bool = True) -> list[tuple[str, dict[str, str]]]:
+    """v1.9.1（审查 P1-1）：构造 (地址, 请求头) 候选序列。
+
+    GitHub Token 只随直连请求发送——镜像是可配置的第三方加速站，不应看到凭据。
+    allow_mirrors=False 用于校验文件下载：摘要必须与元数据同源（直连 GitHub），
+    不能经镜像转发，否则镜像可同时替换包与校验值，通道分离失效。
+    """
+    from ..urltool import mirror_url
+
+    candidates = ([(mirror_url(url, prefix), False) for prefix in (mirrors or [])] + [(url, True)]) if allow_mirrors else [(url, True)]
+    plan: list[tuple[str, dict[str, str]]] = []
+    for candidate, direct in candidates:
+        headers = {"User-Agent": "mshub-updater"}
+        if token and direct:
+            headers["Authorization"] = f"Bearer {token}"
+        plan.append((candidate, headers))
+    return plan
 
 
 def download_asset(
@@ -100,20 +176,20 @@ def download_asset(
     mirrors: list[str] | None = None,
     token: str = "",
     progress: Callable[[int, int], None] | None = None,
+    allow_mirrors: bool = True,
 ) -> Path:
-    """流式下载升级包到 destination；镜像优先、直连兜底，各重试 2 次。"""
-    from ..urltool import mirror_url
+    """流式下载升级包到 destination；镜像优先、直连兜底，各重试 2 次。
 
-    candidates = [mirror_url(url, prefix) for prefix in (mirrors or [])] + [url]
-    headers = {"User-Agent": "mshub-updater"}
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
+    v1.9.1：镜像请求不再携带 Authorization；allow_mirrors=False 时仅直连（校验文件用）。
+    """
+    _validate_asset_url(url)
+    candidates = _request_plan(url, mirrors, token, allow_mirrors=allow_mirrors)
     client_args: dict[str, Any] = {"follow_redirects": True, "timeout": httpx.Timeout(30, read=300)}
     if proxy:
         client_args["proxy"] = proxy
     errors: list[str] = []
     with httpx.Client(**client_args) as client:
-        for candidate in candidates:
+        for candidate, headers in candidates:
             for attempt in range(1, 3):
                 try:
                     with client.stream("GET", candidate, headers=headers) as response:
@@ -140,22 +216,48 @@ def download_asset(
     raise FetchError("所有镜像与直连地址均下载失败：" + "；".join(errors[-3:]))
 
 
+def _copy_counted(source, output, limit: int) -> int:
+    """v1.9.1（审查 P1-5）：按块复制并累计实写字节，超限即中止。
+
+    zip 头声明的 file_size 可伪造（声明小、实放大），所以累计以实际读到的为准。
+    """
+    written = 0
+    while True:
+        chunk = source.read(1024 * 256)
+        if not chunk:
+            break
+        written += len(chunk)
+        if written > limit:
+            raise FetchError("升级包解压数据超过安全上限，已中止。")
+        output.write(chunk)
+    return written
+
+
 def _extract_zip_safely(archive: Path, destination: Path) -> None:
-    """逐成员解压并做路径安全检查（zip-slip / 绝对路径 / 盘符全拦）。"""
+    """逐成员解压并做路径安全检查（zip-slip / 绝对路径 / 盘符全拦）。
+
+    v1.9.1（审查 P1-5）：新增成员数、单文件、解压总量三重限额，防 zip bomb。
+    """
     with zipfile.ZipFile(archive) as bundle:
-        for member in bundle.infolist():
+        members = bundle.infolist()
+        if len(members) > MAX_ARCHIVE_MEMBERS:
+            raise FetchError(f"升级包文件数超过上限（{MAX_ARCHIVE_MEMBERS}），已拒绝解压。")
+        written_total = 0
+        for member in members:
             if member.is_dir():
                 continue
             parts = PurePosixPath(member.filename).parts
             if not parts or member.filename.startswith(("/", "\\")) or ".." in parts or ":" in parts[0]:
                 raise FetchError("升级包包含不安全路径，已停止解压。")
+            if member.file_size > MAX_EXTRACT_BYTES:
+                raise FetchError("升级包内单文件超出解压安全上限。")
             target = destination.joinpath(*parts)
             resolved = target.resolve()
             if not str(resolved).startswith(str(destination.resolve())):
                 raise FetchError("升级包路径试图跳出目标目录。")
             resolved.parent.mkdir(parents=True, exist_ok=True)
             with bundle.open(member) as source, resolved.open("wb") as output:
-                shutil.copyfileobj(source, output)
+                written_total += _copy_counted(source, output, MAX_EXTRACT_BYTES - written_total)
 
 
 def _copy_over(src: Path, dst: Path) -> bool:

@@ -34,6 +34,8 @@ class AppConfig:
     # v1.8.0（审查 M-2）：密钥实际后端——keyring 不可用时降级为进程内存，
     # 重启即丢。暴露给设置页提示用户，不再静默。
     secrets_backend: str = "keyring"
+    # v1.9.1：启动 8 秒后后台检查新版本（失败静默，发现新版仅轻提示，不自动下载）
+    auto_check_updates: bool = True
 
     def public_dict(self) -> dict[str, Any]:
         return asdict(self)

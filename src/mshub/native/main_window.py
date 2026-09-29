@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QByteArray, QEvent, QObject, QSize, Qt, QSettings, QTimer
@@ -32,12 +33,12 @@ from PySide6.QtWidgets import (
 
 from .memory_facade import MemoryFacade
 from .state import AppState, ui_settings
-from .task_runner import TaskRunner
+from .task_runner import RequestScope, TaskRunner
 from .job_controller import JobController
 from .theme import PALETTES, ThemeController, ensure_brand_fonts
 from .i18n import LanguageController, localize
 from .branding import apply_brand_icon, show_about
-from .ui import label_controls
+from .ui import label_controls, show_toast
 from .. import __version__
 if TYPE_CHECKING:
     from .views.graph_view import GraphView
@@ -159,7 +160,7 @@ class MainWindow(QMainWindow):
             row.setIcon(_nav_icon(key, self.theme.effective_mode))
             self.nav.addItem(row)
         self.nav.currentRowChanged.connect(self._navigate)
-        sidebar_layout.addWidget(self.nav, 1)
+        # v1.9.1（需求 C）：nav 不再直接进侧栏布局，与任务面板组成垂直 QSplitter（见下）
         # v1.6.0：后台任务移到导航栏下半部分（原来在底部 dock 太矮看不清）
         self.job_panel = QFrame()
         self.job_panel.setObjectName("jobPanel")
@@ -206,8 +207,22 @@ class MainWindow(QMainWindow):
         self.job_clear_button.setToolTip("从列表中移除已完成和失败的任务记录（运行中的任务不受影响）。\n失败原因：悬停对应任务的“状态”单元格查看。")
         self.job_clear_button.clicked.connect(self._clear_finished_jobs)
         job_layout.addWidget(self.job_clear_button)
-        self.job_panel.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
-        sidebar_layout.addWidget(self.job_panel, 0)
+        # v1.9.1（需求 C）：任务面板高度可拖——与导航组成垂直 QSplitter。
+        # 垂直方向 Ignored 策略让面板跟随用户拖动而不是回弹到 sizeHint；
+        # 把手细线上色见 theme.py 的 #jobSplitter。收起按钮仍可用（只藏内容）。
+        self.job_panel.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Ignored)
+        self.nav.setMinimumHeight(160)
+        self.job_panel.setMinimumHeight(120)
+        self.job_splitter = QSplitter(Qt.Orientation.Vertical)
+        self.job_splitter.setObjectName("jobSplitter")
+        self.job_splitter.setChildrenCollapsible(False)
+        self.job_splitter.setHandleWidth(8)
+        self.job_splitter.addWidget(self.nav)
+        self.job_splitter.addWidget(self.job_panel)
+        self.job_splitter.setStretchFactor(0, 1)
+        self.job_splitter.setStretchFactor(1, 0)
+        self.job_splitter.setSizes([4000, 800])
+        sidebar_layout.addWidget(self.job_splitter, 1)
         # v1.6.0：删除"数据只保存在本机仓库..."提示，"关于"移到设置页
         # v1.7.2：侧栏与内容区改为 QSplitter——支持鼠标拖动分隔条调整侧栏宽度
         # （查看后台任务长任务名时可以拖宽），不再锁死 176/236。
@@ -251,6 +266,31 @@ class MainWindow(QMainWindow):
         self._verify_fonts()
         self._install_shortcuts()
         label_controls(self)
+        # v1.9.1（需求 A）：启动 8 秒后后台查一次新版本（可在设置页关）。
+        # 延迟挂网是刻意的——不能回退 v1.8.1 的首帧优化；singleShot 排在
+        # QApplication 就绪之后（v1.8.1 教训：排在创建之前会静默不触发）。
+        self.update_scope = RequestScope(self.runner, self)
+        QTimer.singleShot(8000, self._startup_update_check)
+
+    def _startup_update_check(self) -> None:
+        """v1.9.1（需求 A）：启动自动检查更新——失败静默放弃，发现新版仅轻提示。"""
+        from . import upgrader
+        if not getattr(sys, "frozen", False):
+            return  # 源码运行不提示（开发环境不打扰）
+        config = self.facade.config()
+        if not getattr(config, "auto_check_updates", True):
+            return
+
+        def done(release):
+            tag = str(release.get("tag") or "")
+            if tag and upgrader.is_newer(tag, __version__):
+                show_toast(self.nav, f"发现新版本 {tag}：到「设置选项 → 检查更新」升级", 6000)
+
+        def failed(_message):
+            pass  # 静默放弃：自动检查失败不弹窗不写状态栏（用户要求）
+
+        token = self.facade.config_store.get_secret("github_token")
+        self.update_scope.call("startup-update-check", upgrader.fetch_latest_release, done, failed, config.proxy, token)
 
     def _install_shortcuts(self) -> None:
         for index in range(5):

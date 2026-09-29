@@ -151,6 +151,7 @@ class MemoryPage(ShiftRangeCheckMixin, AdaptivePage):
         self._timer.stop(); result = self.facade.list_entries(query=self.search.text().strip(), type_filter=str(self.type_filter.currentData() or ""), sort=str(self.sort.currentData() or "updated")); self._apply_listing(result); return result
 
     def _apply_listing(self, result):
+        self.invalidate_shift_anchor()  # v1.9.1：行号即将重建，旧 Shift 锚点作废（审查 P1-3）
         self._last_result = result
         self._items = list(result.get("items") or [])
         selected = self._current_name

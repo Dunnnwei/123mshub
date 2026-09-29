@@ -5,10 +5,11 @@ from pathlib import Path
 
 from PySide6.QtCore import Signal, QProcess, QUrl
 from PySide6.QtGui import QDesktopServices
-from PySide6.QtWidgets import (QComboBox, QFileDialog, QFormLayout, QHBoxLayout,
+from PySide6.QtWidgets import (QCheckBox, QComboBox, QFileDialog, QFormLayout, QHBoxLayout,
     QLabel, QLineEdit, QMessageBox, QPlainTextEdit, QPushButton, QTabWidget,
     QVBoxLayout, QWidget, QFrame, QApplication)
 
+from ...errors import FetchError
 from .. import NATIVE_VERSION
 from .. import upgrader
 from ..i18n import LanguageController, localize
@@ -204,6 +205,15 @@ class SettingsPage(AdaptivePage):
         version_row = QHBoxLayout()
         version_row.addWidget(QLabel(f"123 MSHub Native {NATIVE_VERSION}", objectName="muted"))
         version_row.addStretch()
+        # v1.9.1：启动自动检查更新开关——失败静默、发现新版仅轻提示，不自动下载
+        self.auto_check = QCheckBox("启动时自动检查更新")
+        self.auto_check.setToolTip(
+            "启动约 8 秒后在后台连接 GitHub 查一次新版本：\n"
+            "· 检查失败静默放弃，不弹任何提示；\n"
+            "· 发现新版本只做轻提示，到「检查更新」里手动确认才升级。"
+        )
+        self.auto_check.toggled.connect(self._auto_check_toggled)
+        version_row.addWidget(self.auto_check)
         self.upgrade_button = button("检查更新", self.check_upgrade)
         self.upgrade_button.setToolTip(
             "连接 GitHub 检查新版本；发现新版本可一键升级：\n"
@@ -244,6 +254,11 @@ class SettingsPage(AdaptivePage):
         self._clear_ai = self._clear_github = False
         self.ai_status.setText(mask_secret(self.facade.config_store.get_secret("ai_key")))
         self.github_status.setText(mask_secret(self.facade.config_store.get_secret("github_token")))
+        # v1.9.1：自动检查开关只随「保存设置」外的一次性配置读取——blockSignals
+        # 防止 load_config 回填时触发 toggled 再写一遍配置。
+        self.auto_check.blockSignals(True)
+        self.auto_check.setChecked(bool(getattr(config, "auto_check_updates", True)))
+        self.auto_check.blockSignals(False)
         backend = str(getattr(config, "secrets_backend", "keyring") or "keyring")
         self.secrets_backend_label.setText(
             "⚠ 系统钥匙串不可用：密钥仅保存在内存，重启后需重新填写" if backend == "memory" else ""
@@ -254,6 +269,15 @@ class SettingsPage(AdaptivePage):
         values = self.mirrors.toPlainText().splitlines()
         if value not in values:
             self.mirrors.setPlainText("\n".join([*values, value]))
+
+    def _auto_check_toggled(self, checked: bool):
+        """v1.9.1：开关即时落盘（单字段部分更新，不触发整套保存校验）。"""
+        try:
+            self.facade.save_config({"auto_check_updates": bool(checked)})
+            self._set_status("已保存启动检查设置", emphasis=True)
+            self.statusMessage.emit("已保存启动检查设置")
+        except Exception as exc:
+            self._set_status(f"保存启动检查设置失败：{exc}")
 
     def choose_repo(self):
         value = QFileDialog.getExistingDirectory(self, "选择 123 MSHub 仓库", self.repo_edit.text())
@@ -474,6 +498,14 @@ class SettingsPage(AdaptivePage):
         notes = str(release.get("body") or "").strip()
         if len(notes) > 600:
             notes = notes[:600] + "…"
+        sums = upgrader.pick_sums_asset(release)
+        # v1.9.1（审查 P0-1）：升级前告知完整性校验状态；无校验文件时明确警示
+        integrity = (
+            f"下载后将按发布校验文件（{sums['name']}）核对 SHA-256，确认无误才会覆盖安装。"
+            if sums else
+            "⚠ 该版本未提供 SHA256SUMS 校验文件：无法验证包完整性，\n"
+            "建议取消并到 GitHub 页面确认发布状态后再升级。"
+        )
         box = QMessageBox(self)
         box.setIcon(QMessageBox.Icon.Question)
         box.setWindowTitle("发现新版本")
@@ -481,30 +513,42 @@ class SettingsPage(AdaptivePage):
             f"新版本 {tag} 已发布（完整包约 {size_mb:.0f} MB）。\n\n"
             f"{notes}\n\n"
             "升级会下载完整包并覆盖安装目录；\n"
-            "配置（%APPDATA%\\mshub）与仓库数据保持不变。"
+            "配置（%APPDATA%\\mshub）与仓库数据保持不变。\n\n"
+            f"{integrity}"
         )
         upgrade = box.addButton("立即升级", QMessageBox.ButtonRole.AcceptRole)
         box.addButton("暂不", QMessageBox.ButtonRole.RejectRole)
         box.setDefaultButton(upgrade)
         box.exec()
         if box.clickedButton() is upgrade:
-            self._start_upgrade(tag, asset, proxy, token)
+            self._start_upgrade(tag, asset, release, proxy, token)
 
-    def _start_upgrade(self, tag: str, asset: dict, proxy: str, token: str):
+    def _start_upgrade(self, tag: str, asset: dict, release: dict, proxy: str, token: str):
         if not self.jobs:
             self._set_status("后台任务面板不可用，无法执行在线升级。")
             return
         config = self.facade.config()
         mirrors = [line.strip() for line in (config.mirrors or []) if line.strip()]
         install_dir = Path(sys.executable).resolve().parent
-        name = str(asset.get("name") or "upgrade.zip")
         url = str(asset.get("url") or "")
         self._set_status(f"开始升级 {tag}：正在后台下载完整包…")
 
         def work(report):
-            report(3, "准备下载")
+            report(1, "准备下载")
             with tempfile.TemporaryDirectory(prefix="mshub-upgrade-") as tmp:
-                archive = Path(tmp) / name
+                # v1.9.1（审查 P0-1）：下载落盘固定名 upgrade.zip——远端资产名不再
+                # 拼进本地路径（资产名含绝对路径/..\ 时会写出临时目录之外）。
+                archive = Path(tmp) / "upgrade.zip"
+                sums = upgrader.pick_sums_asset(release)
+                expected = ""
+                if sums is not None:
+                    report(2, "下载校验文件")
+                    # 校验文件只走直连 GitHub：摘要与元数据同源，镜像无法同时替换包与校验值
+                    sums_path = upgrader.download_asset(
+                        str(sums.get("url") or ""), Path(tmp) / "sums.txt",
+                        proxy=proxy, token=token, allow_mirrors=False,
+                    )
+                    expected = upgrader.parse_sums(sums_path.read_text(encoding="utf-8", errors="replace"), asset.get("name"))
                 upgrader.download_asset(
                     url, archive, proxy=proxy, mirrors=mirrors, token=token,
                     progress=lambda done_bytes, total: report(
@@ -512,6 +556,10 @@ class SettingsPage(AdaptivePage):
                         f"下载 {done_bytes // 1024 // 1024} MB",
                     ),
                 )
+                if expected:
+                    report(82, "校验 SHA-256 完整性")
+                    if upgrader.file_sha256(archive) != expected:
+                        raise FetchError("SHA-256 校验不匹配：下载可能被篡改或损坏，已放弃升级（未改动任何文件）。")
                 report(85, "解压并覆盖安装")
                 stats = upgrader.apply_upgrade(archive, install_dir, progress=lambda percent, phase: report(85 + percent // 7, phase))
             return stats

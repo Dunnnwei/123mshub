@@ -95,10 +95,11 @@ class ArchiveFetcher(Fetcher):
             direct = f"https://api.github.com/repos/{source.owner}/{source.repo}/tarball"
         else:
             direct = f"https://codeload.github.com/{source.owner}/{source.repo}/tar.gz/{ref}"
-        urls = [mirror_url(direct, prefix) for prefix in mirrors] + [direct]
-        headers = {"Accept": "application/vnd.github+json", "User-Agent": "mshub/0.1"}
-        if token:
-            headers["Authorization"] = f"Bearer {token}"
+        # v1.9.1（审查 P1-1）：GitHub Token 只随直连请求发送——镜像站是可配置的
+        # 第三方加速服务，不应看到用户凭据（此前镜像与直连共用同一份带 Authorization
+        # 的请求头，token 会随每个镜像请求外发）。
+        urls = [(mirror_url(direct, prefix), False) for prefix in mirrors] + [(direct, True)]
+        base_headers = {"Accept": "application/vnd.github+json", "User-Agent": "mshub/0.1"}
 
         errors: list[str] = []
         client_args = {"follow_redirects": True, "timeout": httpx.Timeout(30, read=180)}
@@ -108,7 +109,10 @@ class ArchiveFetcher(Fetcher):
         try:
             with httpx.Client(**client_args) as client:
                 downloaded = False
-                for url in urls:
+                for url, is_direct in urls:
+                    headers = dict(base_headers)
+                    if token and is_direct:
+                        headers["Authorization"] = f"Bearer {token}"
                     for attempt in range(1, 4):
                         try:
                             with client.stream("GET", url, headers=headers) as response:

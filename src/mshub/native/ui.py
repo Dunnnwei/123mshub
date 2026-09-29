@@ -153,6 +153,14 @@ class ShiftRangeCheckMixin:
     def _shift_range_applied(self, low: int, high: int) -> None:  # 宿主可覆盖写状态栏
         pass
 
+    def invalidate_shift_anchor(self) -> None:
+        """v1.9.1（审查 P1-3）：列表重建/排序/筛选后旧行号已失效，锚点必须作废。
+
+        宿主在 _apply_listing/_apply_rows 等重建行号的方法开头调用；
+        否则旧锚点行号会对上新数据，Shift 连选勾错条目。
+        """
+        self._shift_anchor = -1
+
     def eventFilter(self, watched, event) -> bool:  # noqa: N802 - Qt virtual method name
         if event.type() == QEvent.Type.MouseButtonPress and isinstance(watched, QCheckBox):
             value = watched.property("mshubShiftRow")

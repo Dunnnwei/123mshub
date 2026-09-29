@@ -905,7 +905,13 @@ class SkillRepository:
         item = database.get_skill(name, library or None)
         if not item:
             raise NotFoundError(f"未找到技能：{name}")
-        target = root / item["local_dir"]
+        target = (root / item["local_dir"]).resolve()
+        # v1.9.1（审查 P0-2）：local_dir 来自数据库历史记录而非本次操作生成，
+        # 删除类操作必须先证明目标仍在仓库根内——绝对路径或 ..\ 会令 Path
+        # 丢弃/跳出 root，直接 rmtree 就删到仓库外。软删除的 move 同受此保护。
+        root_bound = root.resolve()
+        if target == root_bound or not target.is_relative_to(root_bound):
+            raise ValidationError(f"技能目录记录异常（不在仓库内），已拒绝删除：{item['local_dir']}")
         recovery_path = ""
         if target.exists():
             if hard:

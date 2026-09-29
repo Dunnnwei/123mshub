@@ -208,6 +208,8 @@ QCheckBox:focus {{ outline: 2px solid {p['accent']}; }}
 QSplitter::handle {{ background: transparent; }}
 QSplitter::handle:hover {{ background: {p['selection']}; }}
 QSplitter#descSplitter::handle {{ background: {p['line']}; }}
+/* v1.9.1：侧栏内导航/任务面板的垂直分隔条——可见细线提示可拖高度 */
+QSplitter#jobSplitter::handle {{ background: {p['line']}; border-radius: 3px; margin: 1px 2px; }}
 QTableWidget, QTableView {{ alternate-background-color: {p['inset']}; selection-background-color: {p['selection']}; selection-color: {p['ink']}; outline: none; }}
 /* v1.7.4：表格选中行从"左侧 2px 竖条"改为整行皇家蓝底 + 白字（技能仓库/安全中心统一） */
 QTableWidget::item:selected, QTableView::item:selected {{ background: {p['action']}; color: {p['on_action']}; border: none; }}

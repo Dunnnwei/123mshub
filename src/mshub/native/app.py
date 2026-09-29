@@ -89,7 +89,7 @@ def main(argv: list[str] | None = None) -> int:
     except ImportError as exc:  # keep the CLI/service installation usable without native extra
         append_smoke(f"import-error={exc}")
         print("原生界面需要安装可选依赖：python -m pip install 'mshub[native]'", file=sys.stderr)
-        print("打包版若看到此提示，通常是环境包（PySide6）缺失或损坏：请到发布页重新下载环境包", file=sys.stderr)
+        print("打包版若看到此提示，通常是安装包损坏（图形环境缺失）：请到发布页重新下载完整包覆盖安装", file=sys.stderr)
         print(f"详细原因：{exc}", file=sys.stderr)
         return 2
 
