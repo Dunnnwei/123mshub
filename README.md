@@ -28,8 +28,8 @@ Claude Desktop、Cursor 等）管理两类共享资产：
 ## 快速开始（三步）
 
 1. **解压即用**：从 [GitHub Releases](https://github.com/Dunnnwei/123mshub/releases) 下载
-   v1.8.0 起发布物分为两个包：**程序包**（`native-v1.8.0/123mshub/`，约 50MB）与
-   **环境包**（`123mshub-environment-v1.8.0-win-x64.zip`，约 300MB 的 PySide6/Qt 运行库）。
+   v1.8.0 起发布物分为两个包：**程序包**（`123mshub-native-v1.8.1-win64.zip`，约 25MB）与
+   **环境包**（`123mshub-environment-v1.8.1-win-x64.zip`，约 125MB 的 PySide6/Qt 运行库）。
    首次使用：解压程序包，再把环境包里的 `PySide6` 文件夹解压到 `123mshub\_internal\`
    内，双击 `123mshub.exe`；之后更新只需下载新版程序包覆盖（保留 `_internal\PySide6`）。
    已有环境的老用户不用再下环境包；缺环境启动时程序会弹窗给出下载地址，也可自行安装。
