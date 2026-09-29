@@ -8,13 +8,14 @@ import sys
 from pathlib import Path
 
 
-# v1.7.4：程序包/环境包分离后，环境包（_internal\PySide6）缺失时的提示与下载入口
+# v1.7.4 引入程序包/环境包分离，v1.9.0 起取消分离、只发布单一完整包；
+# 此检测保留用于识别"解压不完整/安装损坏"的场景。
 ENV_PACKAGE_URL = "https://github.com/Dunnnwei/123mshub/releases"
-ENV_PACKAGE_NAME = "123mshub-environment"
+ENV_PACKAGE_NAME = "123mshub-native"
 
 
 def missing_environment_text() -> str | None:
-    """打包模式下检测环境包（_internal\\PySide6）是否缺失；缺失返回提示文本。
+    """打包模式下检测图形运行库（_internal\\PySide6）是否缺失；缺失返回提示文本。
 
     非打包（源码运行）始终返回 None。检测标记文件 Qt6Core.dll：它在
     prune-webengine 之后仍保留在 PySide6 目录中，能代表整套 Qt 运行库。
@@ -25,13 +26,10 @@ def missing_environment_text() -> str | None:
     if marker.is_file():
         return None
     return (
-        "缺少运行环境（环境包未安装）。\n\n"
-        "本程序包为「程序包」，不包含图形运行环境。请到发布页下载配套的「环境包」：\n"
-        f"{ENV_PACKAGE_URL}\n"
-        f"下载 {ENV_PACKAGE_NAME} 压缩包后，把其中的 PySide6 文件夹解压到\n"
-        "本程序目录下的 _internal 文件夹里，再重新启动本程序。\n\n"
-        "缺少的环境也可以由你自行安装：环境包就是本程序所用版本的\n"
-        "PySide6 / Qt 运行库，自行准备时需保持版本一致。"
+        "程序文件不完整（缺少图形运行环境 PySide6）。\n\n"
+        "v1.9.0 起只发布单一完整包，本目录应是解压不完整或文件损坏。\n"
+        f"请到发布页重新下载完整程序包并覆盖解压：\n{ENV_PACKAGE_URL}\n"
+        "配置（%APPDATA%\\mshub）与仓库数据不受影响。"
     )
 
 
@@ -79,6 +77,13 @@ def main(argv: list[str] | None = None) -> int:
         print(env_missing, file=sys.stderr)
         _show_env_missing_dialog(env_missing)
         return 2
+    # v1.9.0：清理上次在线升级留下的 *.mshub-old 残留（被占用的下次再清）
+    if getattr(sys, "frozen", False):
+        try:
+            from .upgrader import cleanup_old
+            cleanup_old(Path(sys.executable).resolve().parent)
+        except Exception:
+            pass
     try:
         from PySide6.QtWidgets import QApplication
     except ImportError as exc:  # keep the CLI/service installation usable without native extra

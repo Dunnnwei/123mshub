@@ -63,6 +63,13 @@ EN = {
     "清除已完成": "Clear finished", "选择导入目录": "Choose import directory", "导入记忆": "Import memories",
     "导入技能": "Import skills", "确认导入": "Confirm import", "导入记忆技能库": "Import memories & skills",
     "关闭窗口后任务继续，可在后台任务查看进度和报告。": "Tasks continue after closing this window. Open Background tasks for progress and reports.",
+    # v1.9.0：批量删除/信任、彻底删除、Shift 连选提示、在线升级
+    "批量删除": "Delete selected", "删除": "Delete", "信任选中": "Trust selected",
+    "彻底删除": "Delete permanently", "取消": "Cancel", "立即升级": "Upgrade now", "暂不": "Not now",
+    "检查更新": "Check for updates", "可使用 Shift 连选": "Shift-click to select a range",
+    "设置已保存": "Settings saved", "发现新版本": "New version available", "升级完成": "Upgrade complete",
+    "彻底删除技能": "Delete skill permanently", "彻底删除记忆": "Delete memory permanently",
+    "已提交后台任务，完成后自动刷新列表。": "Submitted as a background task; lists refresh on completion.",
 }
 
 

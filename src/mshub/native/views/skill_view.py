@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from PySide6.QtCore import QSettings, Qt, QTimer
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication, QComboBox, QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout, QLabel,
     QLineEdit, QListWidget, QListWidgetItem, QMessageBox, QPlainTextEdit,
@@ -19,8 +19,9 @@ from ..theme import current_palette as _current_palette
 from ..task_runner import TaskRunner, RequestScope
 from ..job_controller import JobController
 from ..i18n import tr
-from ..ui import (AdaptivePage, CheckableTableMixin, DataTable, FlowLayout, copy_agent_prompt,
-                  make_agent_prompt_button, open_singleton_dialog, prepare_dialog, label_controls)
+from ..ui import (SHIFT_RANGE_HINT, AdaptivePage, CheckableTableMixin, DataTable, FlowLayout,
+                  ShiftRangeCheckMixin, copy_agent_prompt, make_agent_prompt_button,
+                  open_singleton_dialog, prepare_dialog, label_controls)
 
 
 def _error(payload: object) -> str:
@@ -84,7 +85,7 @@ class _SkillTable(QTableWidget):
         self.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
 
 
-class SkillsPage(CheckableTableMixin, AdaptivePage):
+class SkillsPage(ShiftRangeCheckMixin, CheckableTableMixin, AdaptivePage):
     def __init__(self, facade: MemoryFacade, runner: TaskRunner, jobs: JobController, parent=None):
         super().__init__(parent)
         self.facade, self.runner, self.jobs = facade, runner, jobs
@@ -151,10 +152,15 @@ class SkillsPage(CheckableTableMixin, AdaptivePage):
         prompt = QHBoxLayout(); self.prompt_button = QPushButton("复制指定技能提示词"); self.prompt_button.clicked.connect(self.copy_skill_prompt); prompt.addWidget(self.prompt_button); self.install_prompt_button = QPushButton("复制安装提示词"); self.install_prompt_button.clicked.connect(self.copy_install_prompt); prompt.addWidget(self.install_prompt_button); detail_layout.addLayout(prompt)
         splitter.addWidget(detail); detail.setVisible(False); splitter.setHandleWidth(0); splitter.setChildrenCollapsible(True); splitter.setSizes([720, 0]); self.content_splitter = splitter  # Detail opens in a dialog; no draggable splitter handle.
         empty = QFrame(objectName="emptyCard"); empty_layout = QVBoxLayout(empty); empty_layout.addWidget(QLabel("还没有技能或程序", objectName="title"), alignment=Qt.AlignmentFlag.AlignHCenter); empty_layout.addWidget(QLabel("从 GitHub URL、owner/repo 或本地目录添加第一项资产。", objectName="muted"), alignment=Qt.AlignmentFlag.AlignHCenter); empty_add = QPushButton("添加技能 / 程序"); empty_add.setObjectName("primary"); empty_add.clicked.connect(self.open_add); empty_layout.addWidget(empty_add, alignment=Qt.AlignmentFlag.AlignHCenter); self.empty_card = empty; root.addWidget(empty); root.addWidget(splitter, 1); empty.hide()
-        batch = FlowLayout(spacing=8); batch.addWidget(QLabel("已勾选条目：")); self.batch_check = QPushButton("批量离线检查"); self.batch_check.clicked.connect(lambda: self.batch_scan("offline")); batch.addWidget(self.batch_check); self.batch_ai_check = QPushButton("批量 AI 检查"); self.batch_ai_check.clicked.connect(lambda: self.batch_scan("ai")); batch.addWidget(self.batch_ai_check); self.batch_update = QPushButton("批量更新 GitHub"); self.batch_update.clicked.connect(self.batch_update_github); batch.addWidget(self.batch_update); self.batch_trust = QPushButton("批量信任"); self.batch_trust.clicked.connect(self.batch_trust_items); batch.addWidget(self.batch_trust); self.batch_translate = QPushButton("批量中文翻译"); self.batch_translate.clicked.connect(self.batch_translate_items); batch.addWidget(self.batch_translate); root.addLayout(batch)
-        self.status = QLabel(""); self.status.setObjectName("status"); root.addWidget(self.status)
+        batch = FlowLayout(spacing=8); batch.addWidget(QLabel("已勾选条目：")); self.batch_check = QPushButton("批量离线检查"); self.batch_check.clicked.connect(lambda: self.batch_scan("offline")); batch.addWidget(self.batch_check); self.batch_ai_check = QPushButton("批量 AI 检查"); self.batch_ai_check.clicked.connect(lambda: self.batch_scan("ai")); batch.addWidget(self.batch_ai_check); self.batch_update = QPushButton("批量更新 GitHub"); self.batch_update.clicked.connect(self.batch_update_github); batch.addWidget(self.batch_update); self.batch_trust = QPushButton("批量信任"); self.batch_trust.clicked.connect(self.batch_trust_items); batch.addWidget(self.batch_trust); self.batch_translate = QPushButton("批量中文翻译"); self.batch_translate.clicked.connect(self.batch_translate_items); batch.addWidget(self.batch_translate); self.batch_delete = QPushButton("批量删除"); self.batch_delete.setObjectName("danger"); self.batch_delete.setToolTip("删除勾选的技能/程序（软删除：移入仓库回收目录 .meta\\trash，可找回；\n也可在列表聚焦时按 Delete 键触发）。"); self.batch_delete.clicked.connect(self.batch_delete_items); batch.addWidget(self.batch_delete); root.addLayout(batch)
+        # v1.9.0：底部状态行 + Shift 连选提示（右对齐贴表格右边线）
+        bottom = QHBoxLayout(); self.status = QLabel(""); self.status.setObjectName("status"); bottom.addWidget(self.status, 1); self.shift_hint = QLabel(SHIFT_RANGE_HINT); self.shift_hint.setObjectName("helper"); bottom.addWidget(self.shift_hint); root.addLayout(bottom)
         self._timer = QTimer(self); self._timer.setSingleShot(True); self._timer.setInterval(300); self._timer.timeout.connect(self._refresh_now); self.metadata_dialog = None
         label_controls(self)
+        # v1.9.0：列表聚焦时按 Delete 键 = 删除勾选项（WidgetShortcut 不抢输入框的 Delete）
+        self._delete_shortcut = QShortcut(QKeySequence(Qt.Key_Delete), self.table)
+        self._delete_shortcut.setContext(Qt.ShortcutContext.WidgetShortcut)
+        self._delete_shortcut.activated.connect(self.batch_delete_items)
 
     def _debounced(self): self._timer.start()
 
@@ -188,6 +194,7 @@ class SkillsPage(CheckableTableMixin, AdaptivePage):
             if (str(item.get("name") or ""), str(item.get("library") or "")) in checked:
                 check.setChecked(True)
             self.table.setCellWidget(row, 0, check)
+            self._hook_shift_checkbox(check, row)  # v1.9.0：Shift 连选
             name = QTableWidgetItem(str(item.get("name") or "")); name.setData(Qt.ItemDataRole.UserRole, item.get("name", "")); name.setData(Qt.ItemDataRole.UserRole + 1, item.get("library", "")); self.table.setItem(row, 1, name)
             name.setToolTip(str(item.get("name") or ""))
             provider = item.get("provider") or "github"; source = tr("GitHub 源") if provider == "github" else tr("本地自研")
@@ -251,6 +258,13 @@ class SkillsPage(CheckableTableMixin, AdaptivePage):
 
     def _after_select_all(self, target: bool, count: int):
         self._set_status(f"已{'全选' if target else '全部取消选择'} {count} 项")
+
+    def _checkbox_at_row(self, row: int):
+        """v1.9.0：ShiftRangeCheckMixin 宿主接口——第 row 行的多选框。"""
+        return self.table.cellWidget(row, 0)
+
+    def _shift_range_applied(self, low: int, high: int) -> None:
+        self._set_status(f"已连选第 {low + 1}–{high + 1} 行（共 {high - low + 1} 项）")
 
     def _toggle_select_all(self):
         rows = range(self.table.rowCount())
@@ -322,6 +336,8 @@ class SkillsPage(CheckableTableMixin, AdaptivePage):
             trust_btn = QPushButton("信任放行"); trust_btn.clicked.connect(lambda: (self.trust(), dialog.close())); actions.addWidget(trust_btn)
             update_btn = QPushButton("更新"); update_btn.clicked.connect(lambda: (self.update(), dialog.close())); update_btn.setEnabled(item.get("provider") != "local"); actions.addWidget(update_btn)
             delete_btn = QPushButton("软删除"); delete_btn.setObjectName("danger"); delete_btn.setToolTip(SOFT_DELETE_SKILL_TIP); delete_btn.clicked.connect(lambda: (self.delete(), dialog.close())); actions.addWidget(delete_btn)
+            # v1.9.0：软删除旁的「删除」= 彻底删除（不可恢复）
+            hard_btn = QPushButton("删除"); hard_btn.setObjectName("danger"); hard_btn.setToolTip("彻底删除：直接移除磁盘上的技能目录，不进回收目录 .meta\\trash，删除后无法恢复。"); hard_btn.clicked.connect(lambda: (self.hard_delete(), dialog.close())); actions.addWidget(hard_btn)
             edit_btn = QPushButton("编辑信息"); edit_btn.clicked.connect(lambda: (self.edit_metadata(), dialog.close())); actions.addWidget(edit_btn)
             layout.addLayout(actions)
             close_btn = QPushButton("关闭"); close_btn.clicked.connect(dialog.close); layout.addWidget(close_btn)
@@ -352,6 +368,21 @@ class SkillsPage(CheckableTableMixin, AdaptivePage):
         if not item: return
         if QMessageBox.question(self, "软删除技能", f"将「{item['name']}」移入回收区？") != QMessageBox.StandardButton.Yes: return
         self.jobs.submit("delete", f"删除 {item['name']}", lambda: self.facade.skill_delete(item["name"], item.get("library", "")))
+
+    def hard_delete(self):
+        """v1.9.0：彻底删除——直接从磁盘移除技能目录，不进回收区、不可恢复。"""
+        item = self._selected()
+        if not item: return
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Warning)
+        box.setWindowTitle("彻底删除技能")
+        box.setText(f"将「{item['name']}」从磁盘彻底删除？\n\n不进入回收目录 .meta\\trash，删除后无法恢复。")
+        confirm = box.addButton("彻底删除", QMessageBox.ButtonRole.DestructiveRole)
+        cancel = box.addButton("取消", QMessageBox.ButtonRole.RejectRole)
+        box.setDefaultButton(cancel)
+        box.exec()
+        if box.clickedButton() is not confirm: return
+        self.jobs.submit("delete", f"删除 {item['name']}", lambda: self.facade.skill_delete(item["name"], item.get("library", ""), hard=True))
 
     def edit_metadata(self):
         item = self._selected()
@@ -385,6 +416,18 @@ class SkillsPage(CheckableTableMixin, AdaptivePage):
     def batch_translate_items(self):
         names = [name for name, _library in self._checked()]
         if names: self.jobs.submit("translate", f"翻译（{len(names)} 项）", lambda report: self.facade.skill_translate_batch(names, progress=report), progress=True)
+
+    def batch_delete_items(self):
+        """v1.9.0：批量删除勾选项（软删除入 .meta\\trash，可找回）。"""
+        selected = self._checked()
+        if not selected:
+            self._set_status("先勾选要删除的技能/程序（支持 Shift 连选）")
+            return
+        if QMessageBox.question(self, "批量删除", f"确认删除勾选的 {len(selected)} 项？（移入回收目录 .meta\\trash，可找回）") != QMessageBox.StandardButton.Yes:
+            return
+        for name, library in selected:
+            self.jobs.submit("delete", f"删除 {name}", lambda name=name, library=library: self.facade.skill_delete(name, library))
+        self._set_status(f"已提交 {len(selected)} 条删除任务（软删除，回收目录 .meta\\trash 可找回）")
 
     def copy_prompt(self):
         # v1.7.5：与全站统一——右上角「Agent连接提示词」复制注入提示词并弹「已复制」
@@ -589,7 +632,7 @@ class AddSkillDialog(QDialog):
         self.accept()
 
 
-class SecurityPage(CheckableTableMixin, AdaptivePage):
+class SecurityPage(ShiftRangeCheckMixin, CheckableTableMixin, AdaptivePage):
     def __init__(self, facade, runner, jobs, parent=None):
         super().__init__(parent); self.facade, self.runner, self.jobs = facade, runner, jobs; self.scope = RequestScope(runner, self); self.items = []
         # v1.7.4：表头排序 +「检查通过后不显示」开关 + 多选列
@@ -611,10 +654,20 @@ class SecurityPage(CheckableTableMixin, AdaptivePage):
         self.agent_button = make_agent_prompt_button(self, self.copy_prompt); head.addWidget(self.agent_button)
         root.addLayout(head)
         route_hint = QLabel("推荐先用路线 A · 离线；路线 B · AI 会把摘要发送到已配置接口。"); route_hint.setObjectName("helper"); route_hint.setWordWrap(True); root.addWidget(route_hint)
-        bar = FlowLayout(spacing=10); self.route = QComboBox(); self.route.setAccessibleName("安全检查路线"); self.route.addItem("路线 A · 离线", "offline"); self.route.addItem("路线 B · AI", "ai"); bar.addWidget(self.route); self.batch = QPushButton("批量检查需要确认"); self.batch.setObjectName("primary"); self.batch.setToolTip("勾选了条目时优先检查勾选项；未勾选时检查全部需要确认的条目。"); self.batch.clicked.connect(self.batch_scan); bar.addWidget(self.batch)
+        # v1.9.0（需求 4/5）：功能按钮行统一 FlowLayout + 增加信任按钮；
+        # 「检查通过后不显示」是勾选框、与按钮视觉不一致——移出按钮行，
+        # 右对齐靠表格右边线独立摆放。
+        bar_row = QHBoxLayout(); bar_row.setSpacing(10)
+        bar = FlowLayout(spacing=10)
+        self.route = QComboBox(); self.route.setAccessibleName("安全检查路线"); self.route.addItem("路线 A · 离线", "offline"); self.route.addItem("路线 B · AI", "ai"); bar.addWidget(self.route)
+        self.batch = QPushButton("批量检查需要确认"); self.batch.setObjectName("primary"); self.batch.setToolTip("勾选了条目时优先检查勾选项；未勾选时检查全部需要确认的条目。"); self.batch.clicked.connect(self.batch_scan); bar.addWidget(self.batch)
+        self.trust_checked = QPushButton("信任选中"); self.trust_checked.setToolTip("对勾选的条目做人工信任放行（勾选一条即单独信任，多条即批量信任）；\n信任后状态转为「已通过」并保留放行记录。"); self.trust_checked.clicked.connect(self.batch_trust_checked); bar.addWidget(self.trust_checked)
+        refresh = QPushButton("刷新"); refresh.clicked.connect(self.refresh); bar.addWidget(refresh)
+        bar_row.addLayout(bar); bar_row.addStretch()
         # v1.7.4：打开后列表不再显示已通过检查的条目（配置存在 native-ui.ini，重启保留）
-        self.hide_passed = QCheckBox("检查通过后不显示"); self.hide_passed.setChecked(self._hide_passed); self.hide_passed.toggled.connect(self._toggle_hide_passed); bar.addWidget(self.hide_passed)
-        refresh = QPushButton("刷新"); refresh.clicked.connect(self.refresh); bar.addWidget(refresh); root.addLayout(bar)
+        self.hide_passed = QCheckBox("检查通过后不显示"); self.hide_passed.setChecked(self._hide_passed); self.hide_passed.toggled.connect(self._toggle_hide_passed)
+        bar_row.addWidget(self.hide_passed)
+        root.addLayout(bar_row)
         # v1.7.4：补"多选"列（与技能仓库一致），表头点击排序
         self.table = DataTable(["多选", "名称", "来源", "状态", "最近检查", "摘要"], "security"); self.table.setAccessibleDescription("使用方向键选择，Enter 或双击查看完整检查报告；点击表头按该列排序"); self.table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeMode.Stretch); self.table.setWordWrap(False)
         self.table.horizontalHeader().sectionClicked.connect(self._header_clicked)
@@ -624,9 +677,22 @@ class SecurityPage(CheckableTableMixin, AdaptivePage):
         self.table.itemDoubleClicked.connect(lambda _item: self.show_report_dialog())
         root.addWidget(self.table, 1)
         # v1.6.0：报告面板默认隐藏（改为双击弹窗），保留 widget 便于回退
-        self.report = QPlainTextEdit(); self.report.setReadOnly(True); self.report.setPlaceholderText("选择条目查看检查报告"); self.report.setVisible(False); root.addWidget(self.report, 0); self.status = QLabel(""); self.status.setObjectName("status"); root.addWidget(self.status)
+        self.report = QPlainTextEdit(); self.report.setReadOnly(True); self.report.setPlaceholderText("选择条目查看检查报告"); self.report.setVisible(False); root.addWidget(self.report, 0)
+        # v1.9.0（需求 2）：列表下方批量删除入口（软删除入 .meta\trash 可找回）
+        bottom_bar = FlowLayout(spacing=8)
+        self.batch_delete = QPushButton("批量删除"); self.batch_delete.setObjectName("danger")
+        self.batch_delete.setToolTip("删除勾选的条目（软删除：移入仓库回收目录 .meta\\trash，可找回；\n也可在列表聚焦时按 Delete 键触发）。")
+        self.batch_delete.clicked.connect(self.batch_delete_items); bottom_bar.addWidget(self.batch_delete)
+        root.addLayout(bottom_bar)
+        bottom = QHBoxLayout(); self.status = QLabel(""); self.status.setObjectName("status"); bottom.addWidget(self.status, 1)
+        self.shift_hint = QLabel(SHIFT_RANGE_HINT); self.shift_hint.setObjectName("helper"); bottom.addWidget(self.shift_hint)
+        root.addLayout(bottom)
         self.refresh()
         label_controls(self)
+        # v1.9.0：列表聚焦时按 Delete 键 = 删除勾选项
+        self._delete_shortcut = QShortcut(QKeySequence(Qt.Key_Delete), self.table)
+        self._delete_shortcut.setContext(Qt.ShortcutContext.WidgetShortcut)
+        self._delete_shortcut.activated.connect(self.batch_delete_items)
 
     def _toggle_hide_passed(self, checked: bool):
         self._hide_passed = bool(checked)
@@ -664,6 +730,13 @@ class SecurityPage(CheckableTableMixin, AdaptivePage):
     def _after_select_all(self, target: bool, count: int):
         self.status.setText(f"已{'全选' if target else '全部取消选择'} {count} 项")
 
+    def _checkbox_at_row(self, row: int):
+        """v1.9.0：ShiftRangeCheckMixin 宿主接口——第 row 行的多选框。"""
+        return self.table.cellWidget(row, 0)
+
+    def _shift_range_applied(self, low: int, high: int) -> None:
+        self.status.setText(f"已连选第 {low + 1}–{high + 1} 行（共 {high - low + 1} 项）")
+
     def _checked_items(self):
         out = []
         for row in range(self.table.rowCount()):
@@ -690,6 +763,7 @@ class SecurityPage(CheckableTableMixin, AdaptivePage):
             if str(item.get("name") or "") in checked:
                 check.setChecked(True)
             self.table.setCellWidget(row, 0, check)
+            self._hook_shift_checkbox(check, row)  # v1.9.0：Shift 连选
             provider = tr("GitHub 源") if item.get("provider") == "github" else tr("本地自研")
             values = (item.get("name", ""), provider, _security_label(item.get("security_status", "unchecked")), str(item.get("updated_at", ""))[:19], self._security_summary(item))
             for col, value in enumerate(values):
@@ -795,6 +869,30 @@ class SecurityPage(CheckableTableMixin, AdaptivePage):
         pending = checked or [i for i in self.items if i.get("security_status") in {"unchecked", "warning", "error"}]
         for item in pending:
             self.jobs.submit("scan", f"检查 {item['name']}", lambda report, item=item: self.facade.skill_scan(item["name"], item.get("library", ""), route=route, progress=report), progress=True)
+
+    def batch_trust_checked(self):
+        """v1.9.0（需求 4）：信任勾选条目——一条即单独信任，多条即批量信任。"""
+        checked = self._checked_items()
+        if not checked:
+            self.status.setText("先勾选要信任的条目（支持 Shift 连选）")
+            return
+        if QMessageBox.question(self, "信任选中", f"确认人工放行勾选的 {len(checked)} 项？") != QMessageBox.StandardButton.Yes:
+            return
+        for item in checked:
+            self.jobs.submit("trust", f"信任 {item['name']}", lambda item=item: self.facade.skill_trust(item["name"], item.get("library", "")))
+        self.status.setText(f"已提交 {len(checked)} 条信任任务")
+
+    def batch_delete_items(self):
+        """v1.9.0（需求 2）：批量删除勾选项（软删除入 .meta\\trash，可找回）。"""
+        checked = self._checked_items()
+        if not checked:
+            self.status.setText("先勾选要删除的条目（支持 Shift 连选）")
+            return
+        if QMessageBox.question(self, "批量删除", f"确认删除勾选的 {len(checked)} 项？（移入回收目录 .meta\\trash，可找回）") != QMessageBox.StandardButton.Yes:
+            return
+        for item in checked:
+            self.jobs.submit("delete", f"删除 {item['name']}", lambda item=item: self.facade.skill_delete(item["name"], item.get("library", "")))
+        self.status.setText(f"已提交 {len(checked)} 条删除任务（软删除，回收目录 .meta\\trash 可找回）")
 
     def copy_prompt(self):
         """v1.7.5：安全中心右上角「Agent连接提示词」。"""

@@ -17,7 +17,9 @@ from ..state import ui_settings
 from ..task_runner import TaskRunner, RequestScope
 from ..widgets import MarkdownView
 from ..i18n import tr
-from ..ui import AdaptivePage, ElideLabel, FlowLayout, GuardedDialog, copy_agent_prompt, flow_bar, label_controls, make_agent_prompt_button, prepare_dialog
+from ..ui import (SHIFT_RANGE_HINT, AdaptivePage, ElideLabel, FlowLayout, GuardedDialog,
+                  ShiftRangeCheckMixin, copy_agent_prompt, flow_bar, label_controls,
+                  make_agent_prompt_button, prepare_dialog)
 from ..theme import MUTED_TEXT_ON_SELECTION, PALETTES, ROW_TEXT_ON_SELECTION, current_palette as _current_palette
 
 TYPE_OPTIONS = [("用户", "user"), ("项目", "project"), ("参考", "reference"), ("反馈", "feedback")]
@@ -50,7 +52,7 @@ def _error(payload: object) -> str:
     return str(payload.get("error") if isinstance(payload, dict) else payload)
 
 
-class MemoryPage(AdaptivePage):
+class MemoryPage(ShiftRangeCheckMixin, AdaptivePage):
     openGraphRequested = Signal()
     statusMessage = Signal(str)
     promptCopied = Signal()
@@ -75,8 +77,10 @@ class MemoryPage(AdaptivePage):
         self.agent_button = make_agent_prompt_button(self, self.copy_prompt); head.addWidget(self.agent_button); root.addLayout(head)
         stats_widget = QWidget(); self.stats_row = FlowLayout(stats_widget, spacing=8); self.stat_buttons: dict[str, QPushButton] = {}
         for key, label in (("total", "总数"), ("user", "用户"), ("project", "项目"), ("reference", "参考"), ("feedback", "反馈"), ("this_week", "本周新增"), ("inbox_pending", "待收编")):
-            button = QPushButton(f"{label} 0"); button.setObjectName("stat"); button.setMinimumHeight(40); button.setProperty("i18n_stat", label); button.setProperty("i18n_count", "0")
-            button.setFlat(True); button.clicked.connect(lambda _checked=False, key=key: self._stat_filter(key)); self.stat_buttons[key] = button; self.stats_row.addWidget(button)
+            # v1.9.0（需求 5）：统计筛选行与技能仓库/安全中心统一为普通功能按钮视觉
+            # （去掉 #stat 描边浅底胶囊样式与 flat），点击行为不变。
+            button = QPushButton(f"{label} 0"); button.setMinimumHeight(40); button.setProperty("i18n_stat", label); button.setProperty("i18n_count", "0")
+            button.clicked.connect(lambda _checked=False, key=key: self._stat_filter(key)); self.stat_buttons[key] = button; self.stats_row.addWidget(button)
         # Keep the chips readable in their own compact line. The batch bar is
         # folded until a row is checked, so this still removes one full row.
         root.addWidget(stats_widget)
@@ -84,7 +88,7 @@ class MemoryPage(AdaptivePage):
         self.type_filter = QComboBox(); self.type_filter.addItem("全部类型", ""); [self.type_filter.addItem(label, value) for label, value in TYPE_OPTIONS]; self.type_filter.currentIndexChanged.connect(self.refresh); toolbar.addWidget(self.type_filter)
         self.sort = QComboBox(); self.sort.addItem("最近更新", "updated"); self.sort.addItem("创建时间", "created"); self.sort.addItem("名称", "name"); self.sort.currentIndexChanged.connect(self.refresh); toolbar.addWidget(self.sort)
         self.inbox_button = QPushButton("投递箱"); self.inbox_button.clicked.connect(self.open_inbox); toolbar.addWidget(self.inbox_button); root.addLayout(toolbar)
-        self.batch_bar = QWidget(); batch = FlowLayout(self.batch_bar, spacing=8); self.batch_hint = QLabel("勾选列表中的条目进行批量操作"); self.batch_hint.setObjectName("muted"); batch.addWidget(self.batch_hint); self.batch_type = QComboBox(); self.batch_type.addItem("批量改分类…", ""); [self.batch_type.addItem(label, value) for label, value in TYPE_OPTIONS]; batch.addWidget(self.batch_type); self.batch_type.activated.connect(self.batch_update_type); self.batch_tags = QLineEdit(); self.batch_tags.setPlaceholderText("批量标签（逗号）"); self.batch_tags.setMaximumWidth(180); batch.addWidget(self.batch_tags); bt = QPushButton("应用标签"); bt.clicked.connect(self.batch_update_tags); batch.addWidget(bt); ai = QPushButton("AI 补全主题"); ai.clicked.connect(self.batch_ai); batch.addWidget(ai); bd = QPushButton("批量软删除"); bd.setObjectName("danger"); bd.setToolTip(SOFT_DELETE_MEMORY_TIP + "\n（批量操作对勾选的每一条执行同样的软删除。）"); bd.clicked.connect(self.batch_delete); batch.addWidget(bd); root.addWidget(self.batch_bar); self.batch_bar.hide()
+        self.batch_bar = QWidget(); batch = FlowLayout(self.batch_bar, spacing=8); self.batch_hint = QLabel("勾选列表中的条目进行批量操作"); self.batch_hint.setObjectName("muted"); batch.addWidget(self.batch_hint); self.batch_type = QComboBox(); self.batch_type.addItem("批量改分类…", ""); [self.batch_type.addItem(label, value) for label, value in TYPE_OPTIONS]; batch.addWidget(self.batch_type); self.batch_type.activated.connect(self.batch_update_type); self.batch_tags = QLineEdit(); self.batch_tags.setPlaceholderText("批量标签（逗号）"); self.batch_tags.setMaximumWidth(180); batch.addWidget(self.batch_tags); bt = QPushButton("应用标签"); bt.clicked.connect(self.batch_update_tags); batch.addWidget(bt); ai = QPushButton("AI 补全主题"); ai.clicked.connect(self.batch_ai); batch.addWidget(ai); bd = QPushButton("批量删除"); bd.setObjectName("danger"); bd.setToolTip(SOFT_DELETE_MEMORY_TIP + "\n（批量操作对勾选的每一条执行同样的软删除；列表聚焦时也可按 Delete 键触发。）"); bd.clicked.connect(self.batch_delete); batch.addWidget(bd); root.addWidget(self.batch_bar); self.batch_bar.hide()
         splitter = QSplitter(Qt.Orientation.Horizontal); splitter.setChildrenCollapsible(False)
         self.entry_list = QListWidget(); self.entry_list.setObjectName("memoryList"); self.entry_list.setAccessibleName("记忆条目列表"); self.entry_list.setAccessibleDescription("使用方向键选择，Enter 或双击编辑"); self.entry_list.setMinimumWidth(340); self.entry_list.currentItemChanged.connect(self._selection_changed); self.entry_list.itemDoubleClicked.connect(lambda _item: self.edit_selected())
         # v1.7.4：选中行整行皇家蓝高亮（QSS 画底色），行内自绘文字色随之切换
@@ -101,9 +105,15 @@ class MemoryPage(AdaptivePage):
         mode = QHBoxLayout(); self.edit_mode = QPushButton("编辑"); self.preview_mode = QPushButton("预览"); self.edit_mode.clicked.connect(lambda: self.body_stack.setCurrentIndex(0)); self.preview_mode.clicked.connect(self._show_preview); mode.addWidget(QLabel("正文")); mode.addStretch(); mode.addWidget(self.edit_mode); mode.addWidget(self.preview_mode); dl.addLayout(mode)
         self.body_stack = QStackedWidget(); self.body_edit = QPlainTextEdit(); self.body_edit.setFont(QFont("Cascadia Mono", 10)); self.body_edit.setPlaceholderText("正文支持 [[双链]]；显式保存，不自动保存。"); self.preview = MarkdownView(); self.body_stack.addWidget(self.body_edit); self.body_stack.addWidget(self.preview); dl.addWidget(self.body_stack, 1)
         links_row = QHBoxLayout(); links_row.addWidget(QLabel("双链")); self.links_box = links_row; links_row.addStretch(); dl.addLayout(links_row)
-        actions = QHBoxLayout(); self.status = QLabel(""); self.status.setObjectName("status"); actions.addWidget(self.status, 1); self.delete_button = QPushButton("软删除"); self.delete_button.setObjectName("danger"); self.delete_button.setToolTip(SOFT_DELETE_MEMORY_TIP); self.delete_button.clicked.connect(self.delete_current); actions.addWidget(self.delete_button); self.save_button = QPushButton("保存"); self.save_button.setObjectName("primary"); self.save_button.clicked.connect(self.save_current); actions.addWidget(self.save_button); dl.addLayout(actions)
+        actions = QHBoxLayout(); self.status = QLabel(""); self.status.setObjectName("status"); actions.addWidget(self.status, 1); self.delete_button = QPushButton("软删除"); self.delete_button.setObjectName("danger"); self.delete_button.setToolTip(SOFT_DELETE_MEMORY_TIP); self.delete_button.clicked.connect(self.delete_current); actions.addWidget(self.delete_button); self.hard_delete_button = QPushButton("删除"); self.hard_delete_button.setObjectName("danger"); self.hard_delete_button.setToolTip("彻底删除：直接删除条目文件，不进入 memory-trash 回收目录，删除后无法恢复。"); self.hard_delete_button.clicked.connect(self.hard_delete_current); actions.addWidget(self.hard_delete_button); self.save_button = QPushButton("保存"); self.save_button.setObjectName("primary"); self.save_button.clicked.connect(self.save_current); actions.addWidget(self.save_button); dl.addLayout(actions)
         self.editor_dialog = GuardedDialog(self, self.can_close_editor); self.editor_dialog.setWindowTitle("记忆编辑"); self.editor_dialog.setModal(False); self.editor_dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, False); editor_layout = QVBoxLayout(self.editor_dialog); editor_layout.setContentsMargins(0, 0, 0, 0); editor_layout.addWidget(detail); prepare_dialog(self.editor_dialog); self._restore_editor_geometry(); self.editor_dialog.finished.connect(lambda _code: self._save_editor_geometry()); self.editor_dialog.hide(); self.editor_save_shortcut = QShortcut(QKeySequence("Ctrl+S"), self.editor_dialog); self.editor_save_shortcut.activated.connect(self.save_current); self.edit_window_button.setEnabled(False); self.content_splitter = splitter; splitter.setSizes([1100, 0]); root.addWidget(splitter, 1)
         tidy_widget, tidy = flow_bar(self); tidy_button = QPushButton("归纳整理"); tidy_button.clicked.connect(self.tidy); reports = QPushButton("整理日报"); reports.clicked.connect(self.show_reports); duty = QPushButton("复制值守提示词"); duty.clicked.connect(self.copy_duty); index = QPushButton("查看索引源文件"); index.clicked.connect(self.show_index); tidy.addWidget(tidy_button); tidy.addWidget(reports); tidy.addWidget(duty); tidy.addWidget(index); root.addWidget(tidy_widget)
+        # v1.9.0（需求 6）：底部 Shift 连选提示小字（右对齐贴列表右边线）
+        hint_row = QHBoxLayout(); hint_row.addStretch(); self.shift_hint = QLabel(SHIFT_RANGE_HINT); self.shift_hint.setObjectName("helper"); hint_row.addWidget(self.shift_hint); root.addLayout(hint_row)
+        # v1.9.0（需求 2）：列表聚焦时按 Delete 键 = 批量删除勾选项
+        self._delete_shortcut = QShortcut(QKeySequence(Qt.Key_Delete), self.entry_list)
+        self._delete_shortcut.setContext(Qt.ShortcutContext.WidgetShortcut)
+        self._delete_shortcut.activated.connect(self.batch_delete)
         for widget in (self.name_edit, self.title_edit, self.description_edit, self.tags_edit, self.body_edit): widget.textChanged.connect(self._mark_dirty)
         self.name_edit.textChanged.connect(lambda _text: (self.name_preview.setText(self._name_preview(self.name_edit.text())), self._name_timer.start()))
         self.type_edit.currentIndexChanged.connect(self._mark_dirty)
@@ -118,7 +128,7 @@ class MemoryPage(AdaptivePage):
             self._dirty = True
 
     def _set_editor_enabled(self, enabled):
-        for widget in (self.name_edit, self.title_edit, self.description_edit, self.type_edit, self.tags_edit, self.body_edit, self.save_button, self.delete_button): widget.setEnabled(enabled)
+        for widget in (self.name_edit, self.title_edit, self.description_edit, self.type_edit, self.tags_edit, self.body_edit, self.save_button, self.delete_button, self.hard_delete_button): widget.setEnabled(enabled)
 
     def _set_status(self, text): self.status.setText(text); self.statusMessage.emit(text)
 
@@ -148,6 +158,7 @@ class MemoryPage(AdaptivePage):
         auto_load_name = ""
         self._refreshing_listing = True
         self._row_meta = []
+        self._row_checks: list[QCheckBox] = []  # v1.9.0：Shift 连选的行号→复选框映射
         type_colors = _type_colors_cached()  # ocr 审查修复：循环外算一次，行内查表
         was_blocked = self.entry_list.blockSignals(True)
         try:
@@ -170,6 +181,8 @@ class MemoryPage(AdaptivePage):
                 check.setProperty("memory_name", item.get("name", ""))
                 check.stateChanged.connect(lambda _state: self._update_batch_bar())
                 lay.addWidget(check)
+                self._hook_shift_checkbox(check, len(self._row_checks))  # v1.9.0：Shift 连选
+                self._row_checks.append(check)
                 text = QVBoxLayout()
                 text.setContentsMargins(0, 0, 0, 0)
                 text.setSpacing(1)
@@ -259,6 +272,14 @@ class MemoryPage(AdaptivePage):
             widget = self.entry_list.itemWidget(self.entry_list.item(index)); check = widget.findChild(QCheckBox) if widget else None
             if check and check.isChecked(): names.append(str(check.property("memory_name")))
         return names
+
+    def _checkbox_at_row(self, row: int):
+        """v1.9.0：ShiftRangeCheckMixin 宿主接口——第 row 行的多选框。"""
+        return self._row_checks[row] if 0 <= row < len(self._row_checks) else None
+
+    def _shift_range_applied(self, low: int, high: int) -> None:
+        self._set_status(f"已连选第 {low + 1}–{high + 1} 条（共 {high - low + 1} 条）")
+        self._update_batch_bar()
 
     def _update_batch_bar(self):
         if hasattr(self, "batch_bar"):
@@ -421,6 +442,28 @@ class MemoryPage(AdaptivePage):
         if QMessageBox.question(self, "确认软删除", f"将「{self.detail_title.text()}」移入 memory-trash？") != QMessageBox.StandardButton.Yes: return
         self.scope.call("delete", self.facade.delete_entry, lambda _result: (self._set_editor_enabled(False), self.refresh(), self._set_status("已移入 memory-trash")), lambda msg: self._set_status(f"删除失败：{msg}"), self._current_name)
 
+    def hard_delete_current(self):
+        """v1.9.0（需求 3）：彻底删除——直接删除条目文件，不进回收目录、不可恢复。"""
+        if not self._current_name: return
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Warning)
+        box.setWindowTitle("彻底删除记忆")
+        box.setText(f"将「{self.detail_title.text()}」彻底删除？\n\n文件将直接从磁盘移除，不进入 memory-trash 回收目录，删除后无法恢复。")
+        confirm = box.addButton("彻底删除", QMessageBox.ButtonRole.DestructiveRole)
+        cancel = box.addButton("取消", QMessageBox.ButtonRole.RejectRole)
+        box.setDefaultButton(cancel)
+        box.exec()
+        if box.clickedButton() is not confirm: return
+        name = self._current_name
+
+        def done(_result):
+            self._set_editor_enabled(False); self.refresh(); self._set_status(f"已彻底删除「{name}」（不可恢复）")
+
+        def failed(msg):
+            self._set_status(f"彻底删除失败：{msg}")
+
+        self.scope.call("delete", lambda: self.facade.delete_entry(name, hard=True), done, failed)
+
     def delete_current_sync(self, name=None):
         result = self.facade.delete_entry(name or self._current_name); self._current_name = ""; self._set_editor_enabled(False); self.refresh_sync(); return result
 
@@ -455,7 +498,7 @@ class MemoryPage(AdaptivePage):
 
     def batch_delete(self):
         names = self._selected_names();
-        if names and QMessageBox.question(self, "批量软删除", f"确认删除 {len(names)} 条？") == QMessageBox.StandardButton.Yes: self._batch(self.facade.bulk_delete, names)
+        if names and QMessageBox.question(self, "批量删除", f"确认删除 {len(names)} 条？（软删除：移入 memory-trash，可找回）") == QMessageBox.StandardButton.Yes: self._batch(self.facade.bulk_delete, names)
 
     def batch_ai(self):
         """v1.8.0（审查 P0-2）：AI 补全改后台任务——每条最长 60s 的网络调用

@@ -401,19 +401,25 @@ class MemoryService:
         self.rebuild_index(root)
         return self.get_entry(new_name)
 
-    def delete_entry(self, name: str) -> dict[str, Any]:
+    def delete_entry(self, name: str, hard: bool = False) -> dict[str, Any]:
+        """删除条目；hard=False 软删除（移入 memory-trash 可找回），True 彻底删除。"""
         root = self._ensure_layout()
         name = validate_name(name)
         path = self._notes_dir(root) / f"{name}.md"
         if not path.is_file():
             raise NotFoundError(f"未找到记忆条目：{name}")
-        trash = self._trash_dir(root) / datetime_stamp()
-        trash.mkdir(parents=True, exist_ok=True)
-        robust_rename(path, trash / path.name)
+        recovery_path = ""
+        if hard:
+            robust_unlink(path)
+        else:
+            trash = self._trash_dir(root) / datetime_stamp()
+            trash.mkdir(parents=True, exist_ok=True)
+            robust_rename(path, trash / path.name)
+            recovery_path = str(trash / path.name)
         cache = self._cache(root)
         cache.delete(name)
         self.rebuild_index(root)
-        return {"deleted": True, "name": name, "recovery_path": str(trash / path.name)}
+        return {"deleted": True, "name": name, "hard": bool(hard), "recovery_path": recovery_path}
 
     def bulk_update(self, names: list[str], *, type_name: str | None = None, tags: list[str] | None = None) -> dict[str, Any]:
         done: list[str] = []; failed: list[str] = []
@@ -429,11 +435,11 @@ class MemoryService:
                 failed.append(f"{raw_name}: {exc}")
         return {"updated": done, "failed": failed}
 
-    def bulk_delete(self, names: list[str]) -> dict[str, Any]:
+    def bulk_delete(self, names: list[str], hard: bool = False) -> dict[str, Any]:
         deleted: list[str] = []; failed: list[str] = []
         for raw_name in dict.fromkeys(names):
             try:
-                deleted.append(self.delete_entry(validate_name(raw_name))["name"])
+                deleted.append(self.delete_entry(validate_name(raw_name), hard=hard)["name"])
             except Exception as exc:
                 failed.append(f"{raw_name}: {exc}")
         return {"deleted": deleted, "failed": failed}

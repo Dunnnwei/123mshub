@@ -28,11 +28,10 @@ Claude Desktop、Cursor 等）管理两类共享资产：
 ## 快速开始（三步）
 
 1. **解压即用**：从 [GitHub Releases](https://github.com/Dunnnwei/123mshub/releases) 下载
-   v1.8.0 起发布物分为两个包：**程序包**（`123mshub-native-v1.8.1-win64.zip`，约 25MB）与
-   **环境包**（`123mshub-environment-v1.8.1-win-x64.zip`，约 125MB 的 PySide6/Qt 运行库）。
-   首次使用：解压程序包，再把环境包里的 `PySide6` 文件夹解压到 `123mshub\_internal\`
-   内，双击 `123mshub.exe`；之后更新只需下载新版程序包覆盖（保留 `_internal\PySide6`）。
-   已有环境的老用户不用再下环境包；缺环境启动时程序会弹窗给出下载地址，也可自行安装。
+   **完整包** `123mshub-native-vX.Y.Z-win64.zip`（v1.9.0 起单一包，约 170MB，含 PySide6/Qt
+   图形运行环境），解压到任意目录，双击 `123mshub\123mshub.exe` 即可，无需另下环境包。
+   更新方式一（推荐）：程序内「设置选项 → 检查更新」一键从 GitHub 升级，配置与仓库数据
+   全保留；更新方式二：下载新版完整包解压覆盖旧目录。
    主 EXE 已内置 Python、FastAPI、前端静态资源和 Sigma 图谱，不需要另装
    Python、Node.js、npm 或 pip；图谱页使用 QtWebEngine 本地资源，不启动 localhost 服务；
 2. **首启三件事**：
@@ -44,9 +43,10 @@ Claude Desktop、Cursor 等）管理两类共享资产：
 
 ### Windows 系统依赖
 
-v1.8.0 起 native 版的图形运行时（PySide6/Qt，含 QtWebEngine）放在独立的**环境包**
-`123mshub-environment-vX.Y.Z-win-x64.zip` 里（见上文"快速开始"），程序包本体保持小巧；
-环境包与程序版本对应，除非发布页注明环境包升级，更新程序时无需重新下载。
+v1.9.0 起 native 版只发布**单一完整包**（含 PySide6/Qt 图形运行环境），解压即用，
+没有单独的环境包；v1.7.4~v1.8.1 的程序包/环境包拆分已取消（历史 Release 里的旧分离包
+仍可下载）。若目录中 `_internal\PySide6` 缺失（解压不完整），启动时会弹窗引导重新下载
+完整包。
 Git for Windows 只在选择 Git 拉取、项目更新或 Git bundle 自愈时需要，默认
 archive 模式不强制依赖 Git。旧版（≤ v1.3.3 的 web 线）另有 WebView2 / .NET 4.8
 系统依赖与环境安装包，见历史版本说明。

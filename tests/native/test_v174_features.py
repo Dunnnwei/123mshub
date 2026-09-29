@@ -216,7 +216,8 @@ def test_missing_environment_detects_absent_pyside6(tmp_path, monkeypatch):
     monkeypatch.setattr(sys, "frozen", True, raising=False)
     monkeypatch.setattr(sys, "executable", str(tmp_path / "123mshub.exe"))
     text = native_app.missing_environment_text()
-    assert text is not None and "环境包" in text and native_app.ENV_PACKAGE_URL in text
+    # v1.9.0 起单一完整包：文案指向"重新下载完整包"，不再引导下载环境包
+    assert text is not None and "完整" in text and native_app.ENV_PACKAGE_URL in text
     (tmp_path / "_internal" / "PySide6").mkdir(parents=True)
     (tmp_path / "_internal" / "PySide6" / "Qt6Core.dll").write_bytes(b"x")
     assert native_app.missing_environment_text() is None

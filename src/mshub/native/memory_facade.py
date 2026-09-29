@@ -38,8 +38,8 @@ class MemoryFacade:
     def update_entry(self, name: str, payload: dict[str, Any]) -> dict[str, Any]:
         return self.service.update_entry(name, payload)
 
-    def delete_entry(self, name: str) -> dict[str, Any]:
-        return self.service.delete_entry(name)
+    def delete_entry(self, name: str, hard: bool = False) -> dict[str, Any]:
+        return self.service.delete_entry(name, hard=hard)
 
     def list_inbox(self) -> dict[str, Any]:
         return self.service.list_inbox()
@@ -62,8 +62,8 @@ class MemoryFacade:
     def bulk_update(self, names: list[str], *, type_name: str | None = None, tags: list[str] | None = None):
         return self.service.bulk_update(names, type_name=type_name, tags=tags)
 
-    def bulk_delete(self, names: list[str]):
-        return self.service.bulk_delete(names)
+    def bulk_delete(self, names: list[str], hard: bool = False):
+        return self.service.bulk_delete(names, hard=hard)
 
     def ai_draft(self, body: str):
         return self.service.ai_draft(body)
@@ -110,8 +110,8 @@ class MemoryFacade:
     def skill_trust(self, name: str, library: str = ""):
         return self.repository.trust(name, library)
 
-    def skill_delete(self, name: str, library: str = ""):
-        return self.repository.delete(name, library)
+    def skill_delete(self, name: str, library: str = "", hard: bool = False):
+        return self.repository.delete(name, library, hard=hard)
 
     def skill_set_tags(self, name: str, tags: list[str], library: str = ""):
         return self.repository.set_tags(name, tags, library)

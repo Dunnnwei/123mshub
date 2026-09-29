@@ -899,7 +899,8 @@ class SkillRepository:
             raise NotFoundError(f"未找到技能：{name}")
         return detect_local_changes(root / item["local_dir"])
 
-    def delete(self, name: str, library: str = "") -> dict[str, Any]:
+    def delete(self, name: str, library: str = "", hard: bool = False) -> dict[str, Any]:
+        """删除技能；hard=False 移入 .meta\\trash 可找回，True 直接从磁盘移除。"""
         root, database = self._storage()
         item = database.get_skill(name, library or None)
         if not item:
@@ -907,14 +908,17 @@ class SkillRepository:
         target = root / item["local_dir"]
         recovery_path = ""
         if target.exists():
-            trash = root / ".meta" / "trash" / safe_dir_name(item["author"], item["repo"])
-            trash = trash / datetime.now().strftime("%Y%m%d-%H%M%S-%f")
-            trash.parent.mkdir(parents=True, exist_ok=True)
-            shutil.move(str(target), str(trash))
-            recovery_path = str(trash)
+            if hard:
+                shutil.rmtree(target)
+            else:
+                trash = root / ".meta" / "trash" / safe_dir_name(item["author"], item["repo"])
+                trash = trash / datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+                trash.parent.mkdir(parents=True, exist_ok=True)
+                shutil.move(str(target), str(trash))
+                recovery_path = str(trash)
         database.delete_skill(item["name"], item.get("library"))
         rebuild_index(root, database)
-        return {"deleted": True, "name": name, "recovery_path": recovery_path}
+        return {"deleted": True, "name": name, "hard": bool(hard), "recovery_path": recovery_path}
 
     def install_prompt(self, name: str, library: str = "") -> str:
         root, database = self._storage()

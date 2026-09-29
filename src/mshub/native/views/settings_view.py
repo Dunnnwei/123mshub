@@ -1,13 +1,16 @@
 """Draft settings; probes run off-thread and credentials stay in ConfigStore."""
+import sys
+import tempfile
 from pathlib import Path
 
-from PySide6.QtCore import Signal, QUrl
+from PySide6.QtCore import Signal, QProcess, QUrl
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (QComboBox, QFileDialog, QFormLayout, QHBoxLayout,
     QLabel, QLineEdit, QMessageBox, QPlainTextEdit, QPushButton, QTabWidget,
-    QVBoxLayout, QWidget, QFrame)
+    QVBoxLayout, QWidget, QFrame, QApplication)
 
 from .. import NATIVE_VERSION
+from .. import upgrader
 from ..i18n import LanguageController, localize
 from ..settings_service import detect_proxy, list_models, mask_secret, test_connection, validate_endpoint
 from ..task_runner import RequestScope, TaskRunner
@@ -197,8 +200,27 @@ class SettingsPage(AdaptivePage):
         self.save_button = button("保存设置", self.save_config, primary=True)
         actions.addWidget(self.save_button)
         root.addLayout(actions)
-        root.addWidget(QLabel(f"123 MSHub Native {NATIVE_VERSION}", objectName="muted"))
+        # v1.9.0：版本行加「检查更新」——GitHub 直升、保留配置（需求 8）
+        version_row = QHBoxLayout()
+        version_row.addWidget(QLabel(f"123 MSHub Native {NATIVE_VERSION}", objectName="muted"))
+        version_row.addStretch()
+        self.upgrade_button = button("检查更新", self.check_upgrade)
+        self.upgrade_button.setToolTip(
+            "连接 GitHub 检查新版本；发现新版本可一键升级：\n"
+            "下载完整包并覆盖安装目录，配置（%APPDATA%\\mshub）与仓库数据不受影响。\n"
+            "升级完成后重启程序生效。"
+        )
+        version_row.addWidget(self.upgrade_button)
+        root.addLayout(version_row)
         label_controls(self)
+
+    def _set_status(self, text: str, *, emphasis: bool = False) -> None:
+        """v1.9.0：设置页状态行统一入口——emphasis=True 时切「保存成功」皇家蓝强调样式。"""
+        self.status.setText(text)
+        self.status.setObjectName("statusSaved" if emphasis else "status")
+        # objectName 动态切换不会自动重算 QSS，必须手动重抛样式
+        self.status.style().unpolish(self.status)
+        self.status.style().polish(self.status)
 
     def _show_about(self):
         """v1.6.0：显示"关于"对话框（从导航栏移到设置页）"""
@@ -277,10 +299,10 @@ class SettingsPage(AdaptivePage):
 
     def test_ai(self):
         self.test_button.setEnabled(False)
-        self.status.setText("正在测试草稿中的接口与模型…")
+        self._set_status("正在测试草稿中的接口与模型…")
         def done(message):
             self.test_button.setEnabled(True)
-            self.status.setText(message)
+            self._set_status(message)
         self.scope.call("probe", test_connection, done, done, self.ai_base_url.text().strip(),
                         self._draft_key(), self.ai_model.currentText().strip())
 
@@ -292,16 +314,16 @@ class SettingsPage(AdaptivePage):
             self.ai_model.addItems(models)
             self.ai_model.setCurrentText(current)
             self.models_button.setEnabled(True)
-            self.status.setText(f"读取到 {len(models)} 个模型，可下拉选择或手动填写。")
+            self._set_status(f"读取到 {len(models)} 个模型，可下拉选择或手动填写。")
         def failed(message):
             self.models_button.setEnabled(True)
-            self.status.setText(message)
+            self._set_status(message)
         self.scope.call("models", list_models, done, failed, self.ai_base_url.text().strip(), self._draft_key())
 
     def heal(self):
         if self.jobs:
             self.jobs.submit("reconcile", "识别条目", self.facade.rebuild)
-            self.status.setText("已提交后台任务，完成后自动刷新列表。")
+            self._set_status("已提交后台任务，完成后自动刷新列表。")
 
     def choose_import(self):
         path = QFileDialog.getExistingDirectory(self, "选择要导入的 Agent 工作目录", str(Path.home()))
@@ -310,7 +332,7 @@ class SettingsPage(AdaptivePage):
 
     def save_config(self):
         if self.jobs and any(j["status"] == "running" for j in self.jobs.list()):
-            self.status.setText("请等待后台任务完成后保存设置，防止任务写入另一个仓库。")
+            self._set_status("请等待后台任务完成后保存设置，防止任务写入另一个仓库。")
             return
         try:
             base = self.ai_base_url.text().strip()
@@ -334,11 +356,11 @@ class SettingsPage(AdaptivePage):
             self.theme.apply(self.theme_combo.currentData())
             self.language_controller.apply(config.language)
             self.load_config()
-            self.status.setText("设置已保存")
+            self._set_status("设置已保存", emphasis=True)
             self.saved.emit(config)
             self.statusMessage.emit("设置已保存")
         except Exception as exc:
-            self.status.setText(f"保存失败：{exc}")
+            self._set_status(f"保存失败：{exc}")
 
     def open_repo(self):
         if self.repo_edit.text().strip():
@@ -359,7 +381,7 @@ class SettingsPage(AdaptivePage):
         文件一个不动。再次使用时重新指定仓库路径或重新导入即可。
         """
         if self._jobs_running():
-            self.status.setText("请等待后台任务完成后再清除仓库数据。")
+            self._set_status("请等待后台任务完成后再清除仓库数据。")
             return
         asked = QMessageBox.question(self, "清除仓库数据", (
             "解除当前仓库的关联？\n\n"
@@ -373,11 +395,11 @@ class SettingsPage(AdaptivePage):
         try:
             config = self.facade.save_config({"repo_root": "", "memory_root_override": ""})
             self.load_config()
-            self.status.setText("已解除仓库关联：请重新指定仓库路径或重新导入新仓库。")
+            self._set_status("已解除仓库关联：请重新指定仓库路径或重新导入新仓库。")
             self.statusMessage.emit("已清除仓库数据（配置保留）")
             self.saved.emit(config)
         except Exception as exc:
-            self.status.setText(f"清除仓库数据失败：{exc}")
+            self._set_status(f"清除仓库数据失败：{exc}")
 
     def clear_all_settings(self):
         """v1.7.4：清除所有配置——恢复出厂状态，仓库文件与数据不删。
@@ -386,7 +408,7 @@ class SettingsPage(AdaptivePage):
         Token）和 native-ui.ini 界面偏好（主题/侧栏宽/编辑器几何/引导抑制）。
         """
         if self._jobs_running():
-            self.status.setText("请等待后台任务完成后再清除配置。")
+            self._set_status("请等待后台任务完成后再清除配置。")
             return
         asked = QMessageBox.question(self, "清除所有配置", (
             "确认清除全部配置？\n\n"
@@ -407,8 +429,108 @@ class SettingsPage(AdaptivePage):
             self.theme.apply("system")
             self.language_controller.apply("system")
             self.load_config()
-            self.status.setText("已清除所有配置：请重新指定仓库路径并配置 AI 接口。")
+            self._set_status("已清除所有配置：请重新指定仓库路径并配置 AI 接口。")
             self.statusMessage.emit("已清除所有配置")
             self.saved.emit(config)
         except Exception as exc:
-            self.status.setText(f"清除配置失败：{exc}")
+            self._set_status(f"清除配置失败：{exc}")
+
+    # ---------------------------------------------------------- v1.9.0 在线升级
+    def check_upgrade(self):
+        """连接 GitHub 检查新版本；发现新版本时弹窗确认后走后台升级任务。"""
+        if not getattr(sys, "frozen", False):
+            self._set_status("在线升级仅适用于打包安装版；源码运行请用 git 更新。")
+            return
+        self.upgrade_button.setEnabled(False)
+        self._set_status("正在连接 GitHub 检查最新版本…")
+        config = self.facade.config()
+        token = self.facade.config_store.get_secret("github_token")
+
+        def done(release):
+            self.upgrade_button.setEnabled(True)
+            tag = str(release.get("tag") or "")
+            if not tag:
+                self._set_status("未能读取最新版本号。")
+                return
+            if not upgrader.is_newer(tag, NATIVE_VERSION):
+                self._set_status(f"已是最新版本（v{NATIVE_VERSION}）。")
+                return
+            self._offer_upgrade(release, config.proxy, token)
+
+        def failed(message):
+            self.upgrade_button.setEnabled(True)
+            self._set_status(f"检查更新失败：{message}")
+
+        self.scope.call("upgrade-check", upgrader.fetch_latest_release, done, failed, config.proxy, token)
+
+    def _offer_upgrade(self, release: dict, proxy: str, token: str):
+        tag = str(release.get("tag") or "")
+        try:
+            asset = upgrader.pick_asset(release)
+        except Exception as exc:
+            self._set_status(str(exc))
+            return
+        size_mb = asset.get("size", 0) / 1024 / 1024
+        notes = str(release.get("body") or "").strip()
+        if len(notes) > 600:
+            notes = notes[:600] + "…"
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Question)
+        box.setWindowTitle("发现新版本")
+        box.setText(
+            f"新版本 {tag} 已发布（完整包约 {size_mb:.0f} MB）。\n\n"
+            f"{notes}\n\n"
+            "升级会下载完整包并覆盖安装目录；\n"
+            "配置（%APPDATA%\\mshub）与仓库数据保持不变。"
+        )
+        upgrade = box.addButton("立即升级", QMessageBox.ButtonRole.AcceptRole)
+        box.addButton("暂不", QMessageBox.ButtonRole.RejectRole)
+        box.setDefaultButton(upgrade)
+        box.exec()
+        if box.clickedButton() is upgrade:
+            self._start_upgrade(tag, asset, proxy, token)
+
+    def _start_upgrade(self, tag: str, asset: dict, proxy: str, token: str):
+        if not self.jobs:
+            self._set_status("后台任务面板不可用，无法执行在线升级。")
+            return
+        config = self.facade.config()
+        mirrors = [line.strip() for line in (config.mirrors or []) if line.strip()]
+        install_dir = Path(sys.executable).resolve().parent
+        name = str(asset.get("name") or "upgrade.zip")
+        url = str(asset.get("url") or "")
+        self._set_status(f"开始升级 {tag}：正在后台下载完整包…")
+
+        def work(report):
+            report(3, "准备下载")
+            with tempfile.TemporaryDirectory(prefix="mshub-upgrade-") as tmp:
+                archive = Path(tmp) / name
+                upgrader.download_asset(
+                    url, archive, proxy=proxy, mirrors=mirrors, token=token,
+                    progress=lambda done_bytes, total: report(
+                        max(3, min(80, int(done_bytes * 80 / max(total, 1)))),
+                        f"下载 {done_bytes // 1024 // 1024} MB",
+                    ),
+                )
+                report(85, "解压并覆盖安装")
+                stats = upgrader.apply_upgrade(archive, install_dir, progress=lambda percent, phase: report(85 + percent // 7, phase))
+            return stats
+
+        def done(job):
+            if job.get("status") == "error":
+                QMessageBox.critical(self, "升级失败", str(job.get("error") or "未知错误"))
+                self._set_status(f"升级失败：{job.get('error') or '未知错误'}")
+                return
+            stats = job.get("result") or {}
+            self._set_status(f"升级到 {tag} 完成（更新 {stats.get('files', '?')} 个文件），重启后生效。")
+            restart = QMessageBox.question(
+                self, "升级完成",
+                f"已更新 {stats.get('files', '?')} 个文件。\n\n"
+                "需要重启 123 MSHub 生效，现在重启吗？\n（配置与仓库数据保持原样）",
+            )
+            if restart == QMessageBox.StandardButton.Yes:
+                QProcess.startDetached(sys.executable, [])
+                QApplication.instance().quit()
+
+        self.jobs.submit("upgrade", f"升级 {tag}", work, progress=True, changed=False, callback=done)
+        self._set_status(f"升级 {tag} 已提交后台任务（下载+覆盖安装），完成后提示重启。")

@@ -1,7 +1,7 @@
 """Shared presentation controls for the MASTER design system; no service policy."""
 from __future__ import annotations
 
-from PySide6.QtCore import QPoint, QRect, QSize, Qt, QTimer
+from PySide6.QtCore import QEvent, QPoint, QRect, QSize, Qt, QTimer
 from PySide6.QtGui import QPainter, QPalette
 from PySide6.QtWidgets import (
     QAbstractButton, QAbstractItemView, QBoxLayout, QComboBox, QDialog, QFormLayout, QFrame,
@@ -127,6 +127,48 @@ class CheckableTableMixin:
             self._sort_order = Qt.SortOrder.AscendingOrder
         self.table.horizontalHeader().setSortIndicator(col, self._sort_order)
         self._apply_sort(col, self._sort_order)
+
+
+SHIFT_RANGE_HINT = "可使用 Shift 连选"
+
+
+class ShiftRangeCheckMixin:
+    """v1.9.0：多选复选框的 Shift 连选——三个列表页共用。
+
+    普通（不带 Shift）点击某行复选框时把它记为锚点；此后 Shift+点击另一行
+    的复选框，锚点与目标之间（含两端）所有行的复选框全部勾上。连选不改变
+    锚点，便于以同一锚点继续分段选择。宿主需实现::
+
+        _checkbox_at_row(row) -> QCheckBox | None
+
+    并在创建每行复选框时调用 ``_hook_shift_checkbox(check, row)``。
+    """
+
+    _shift_anchor: int = -1
+
+    def _hook_shift_checkbox(self, check: QCheckBox, row: int) -> None:
+        check.setProperty("mshubShiftRow", row)
+        check.installEventFilter(self)
+
+    def _shift_range_applied(self, low: int, high: int) -> None:  # 宿主可覆盖写状态栏
+        pass
+
+    def eventFilter(self, watched, event) -> bool:  # noqa: N802 - Qt virtual method name
+        if event.type() == QEvent.Type.MouseButtonPress and isinstance(watched, QCheckBox):
+            value = watched.property("mshubShiftRow")
+            row = int(value) if isinstance(value, int) else -1  # 行号 0 是合法值，不能用 or 兜底
+            if row >= 0:
+                if (event.modifiers() & Qt.KeyboardModifier.ShiftModifier
+                        and self._shift_anchor >= 0 and row != self._shift_anchor):
+                    low, high = sorted((self._shift_anchor, row))
+                    for index in range(low, high + 1):
+                        box = self._checkbox_at_row(index)
+                        if box is not None and not box.isChecked():
+                            box.setChecked(True)
+                    self._shift_range_applied(low, high)
+                    return True  # 拦下本次点击：目标行由区间逻辑统一置勾，避免双态跳变
+                self._shift_anchor = row
+        return super().eventFilter(watched, event)
 
 def make_agent_prompt_button(parent: QWidget, clicked_slot) -> QPushButton:
     """v1.7.5：构造右上角皇家蓝「Agent连接提示词」按钮，保证五页样式文案一致。"""

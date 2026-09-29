@@ -183,6 +183,8 @@ QTableView::item {{ padding: 12px 10px; }}
 QHeaderView::section {{ background: {p['raised']}; color: {p['muted']}; padding: 10px; border: none; border-bottom: 1px solid {p['line']}; font-size: 12px; font-weight: 700; }}
 QLabel#eyebrow {{ color: {p['accent']}; font-size: 12px; font-weight: 800; }}
 QLabel#muted, QLabel#status {{ color: {p['muted']}; font-size: 13px; font-weight: 450; }}
+/* v1.9.0（需求 1）：设置保存成功反馈——皇家蓝加粗强调，与主按钮同色系 */
+QLabel#statusSaved {{ color: {p['action']}; font-size: 13px; font-weight: 700; }}
 QLabel#faint {{ color: {p['faint']}; font-size: 12px; font-weight: 450; }}
 QLabel#title {{ color: {p['ink']}; font-family: '{family}', 'Segoe UI', 'Microsoft YaHei'; font-size: 30px; font-weight: 760; }}
 QTabWidget::pane {{ border: 1px solid {p['line']}; border-radius: 16px; padding: 16px; background: {p['surface']}; }}
