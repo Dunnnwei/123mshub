@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import QByteArray, QSize, Qt, QSettings, QTimer
+from PySide6.QtCore import QByteArray, QEvent, QObject, QSize, Qt, QSettings, QTimer
 from PySide6.QtGui import QColor, QFont, QFontInfo, QIcon, QPainter, QPixmap, QKeySequence, QShortcut
 from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import (
@@ -388,18 +388,64 @@ class MainWindow(QMainWindow):
         handle.signals.finished.connect(healed)
         handle.signals.failed.connect(failed)
         # v1.6.0：预热 GraphView，消除首次点击"记忆图示"时的 QWebEngine 冷启动闪屏。
-        # 500ms 后后台静默创建（此时主窗口已显示，用户无感知），点击时立即切换。
+        # v1.8.1：预热整体提前到 show 之前（见 show_after_graph_prewarm），这里保留
+        # 幂等兜底——万一预热被跳过（异常路径），启动 500ms 后仍会补一次。
         QTimer.singleShot(500, self._prewarm_graph_page)
         # v1.7.2：未配置仓库路径 / AI 密钥时弹窗说明哪些功能不可用 + 三步上手流程。
         QTimer.singleShot(600, self._maybe_show_setup_hint)
+
+    def show_after_graph_prewarm(self, timeout_ms: int = 2800) -> None:
+        """v1.8.1：显示前预创建图谱页，把 Chromium 冷启动引起的顶层窗口原生重建
+        挪到用户视野之外。
+
+        根因：QWebEngineView 首次初始化渲染表面时，Qt 会销毁并重建已显示顶层窗口的
+        原生窗口（Hide→WinIdChange→Show 三连）——用户看到"窗口打开后 1 秒内闪烁
+        一次重新弹开"。在 show() 之前创建图谱页，重建发生在窗口显示前，无感。
+        显示时机 = 首次 WinIdChange 后 150ms（布局稳定）或超时兜底（默认 2.8s，
+        offscreen 测试注入短超时）。
+        """
+        class _RevealOnRecreate(QObject):
+            def __init__(self, on_recreate: object) -> None:
+                super().__init__()
+                self._on_recreate = on_recreate
+
+            def eventFilter(self, obj, ev) -> bool:  # noqa: N803 - Qt virtual method name
+                if ev.type() == QEvent.Type.WinIdChange:
+                    QTimer.singleShot(150, self._on_recreate)
+                return False
+
+        revealed = {"done": False}
+
+        def reveal() -> None:
+            if revealed["done"]:
+                return
+            revealed["done"] = True
+            self.removeEventFilter(self._reveal_spy)
+            self.show()
+            QTimer.singleShot(0, self.startup)
+
+        # Spy 实例必须挂在 self 上保活：局部实例被 GC 时过滤器会被静默卸载。
+        self._reveal_spy = _RevealOnRecreate(reveal)
+        self._reveal_spy.setParent(self)
+        self.installEventFilter(self._reveal_spy)
+        QTimer.singleShot(timeout_ms, reveal)
+        try:
+            self._ensure_graph_page()
+        except Exception:
+            reveal()
 
     def _maybe_show_setup_hint(self) -> None:
         """初始配置提醒：仓库根目录或 AI 密钥缺失时引导用户按顺序完成配置。"""
         box = self._build_setup_hint_box()
         if box is None:
             return
+        # v1.8.1：exec 前先取 checkbox 引用。无 parent 的 QCheckBox 经 setCheckBox
+        # 挂进弹窗后，Python 局部变量消失时 PySide6 会连 C++ 对象一起回收，
+        # exec() 之后再访问 box.checkBox() 就是悬空指针（未配置新用户 100% 段错误，
+        # 程序随弹窗一起退出）。构造处已补 parent，这里持引用是第二道保险。
+        checkbox = box.checkBox()
         box.exec()
-        if box.checkBox().isChecked():
+        if checkbox.isChecked():
             self._ui_settings().setValue("setupHint/suppressed", True)
 
     def _build_setup_hint_box(self):
@@ -446,7 +492,7 @@ class MainWindow(QMainWindow):
             "完成第 1、2 步即可正常使用；第 3 步可以之后再补。",
         ]
         box.setText("\n".join(lines))
-        checkbox = QCheckBox("以后启动不再显示此提醒（完成配置后会自动停止提醒）")
+        checkbox = QCheckBox("以后启动不再显示此提醒（完成配置后会自动停止提醒）", box)
         box.setCheckBox(checkbox)
         box.setStandardButtons(QMessageBox.StandardButton.Ok)
         box.setDefaultButton(QMessageBox.StandardButton.Ok)

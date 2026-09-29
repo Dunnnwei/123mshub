@@ -260,8 +260,9 @@ def main(argv: list[str] | None = None) -> int:
     from .main_window import MainWindow
 
     window = MainWindow(facade)
-    window.show()
-    QTimer.singleShot(0, window.startup)
+    # v1.8.1：显示前预热图谱页——Chromium 首次初始化会重建已显示窗口的原生表面
+    # （用户看到的"启动 1 秒内窗口闪烁一次"），预热挪到 show 之前重建即无感。
+    window.show_after_graph_prewarm()
     try:
         return int(app.exec())
     finally:
