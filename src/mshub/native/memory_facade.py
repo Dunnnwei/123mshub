@@ -84,7 +84,23 @@ class MemoryFacade:
         return self.tidy.read_report(file_name)
 
     def skills(self):
-        return {"items": self.repository.list()}
+        # A failed install may leave a recoverable index row without its
+        # committed directory.  Keep the core repository's historical list
+        # contract intact, but never expose that ghost through the native UI.
+        root = self.config_store.require_repo_root().resolve()
+        visible = []
+        for item in self.repository.list():
+            raw_dir = str(item.get("local_dir") or "").strip()
+            if not raw_dir:
+                continue
+            target = (root / Path(raw_dir)).resolve()
+            try:
+                target.relative_to(root)
+            except ValueError:
+                continue
+            if target != root and target.is_dir():
+                visible.append(item)
+        return {"items": visible}
 
     def skill(self, name: str, library: str = ""):
         return self.repository.get(name, library)
@@ -134,7 +150,17 @@ class MemoryFacade:
         return self.repository.translate_descriptions(names, progress=progress)
 
     def skill_update_metadata(self, name: str, updates: dict[str, Any], library: str = ""):
-        return self.repository.update_metadata(name, updates, library)
+        # Tags already have a stable public core entry point.  Keep metadata
+        # edits in that contract and apply tags through set_tags so the native
+        # adapter does not widen the repository method's write semantics.
+        payload = dict(updates)
+        tags = payload.pop("tags", None)
+        result = self.repository.update_metadata(name, payload, library)
+        if tags is not None:
+            updated_name = str(result.get("name") or name)
+            updated_library = str(result.get("library") or library)
+            result = self.repository.set_tags(updated_name, list(tags), updated_library)
+        return result
 
     def skill_install_prompt(self, name: str, library: str = ""):
         return self.repository.install_prompt(name, library)

@@ -143,7 +143,8 @@ def test_real_double_click_opens_skill_detail(qapp, native_facade: MemoryFacade)
     window.show()
     window.nav.setCurrentRow(2)  # 技能页（QStackedWidget 隐藏页收不到鼠标事件，必须切页）
     page = window.skills_page
-    page.items = [_skill_row("demo-skill")]
+    (native_facade.repo_root() / "skills" / "demo-skill").mkdir(parents=True, exist_ok=True)
+    page.items = [_skill_row("demo-skill", local_dir="skills/demo-skill")]
     page._apply_rows()
     page.table.selectRow(0)
     qapp.processEvents()

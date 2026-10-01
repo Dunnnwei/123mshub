@@ -19,13 +19,25 @@ from ..task_runner import TaskRunner, RequestScope
 from ..widgets import MarkdownView
 from ..i18n import tr
 from ..ui import (SHIFT_RANGE_HINT, AdaptivePage, ElideLabel, FlowLayout, GuardedDialog,
-                  HeaderBand, ShiftRangeCheckMixin, copy_agent_prompt, flow_bar, label_controls,
+                  HeaderBand, RichHoverToolTip, ShiftRangeCheckMixin, copy_agent_prompt, flow_bar, label_controls,
                   make_agent_prompt_button, prepare_dialog)
 from ..theme import PALETTES, current_palette as _current_palette, system_font_family
 
 TYPE_OPTIONS = [("用户", "user"), ("项目", "project"), ("参考", "reference"), ("反馈", "feedback")]
 # v1.10.0C 修复：分类标签映射统一用核心层 mshub.memory.TYPE_LABELS（token键→中文），
 # 原本地 TYPE_LABELS = dict(TYPE_OPTIONS) 方向写反（中文→token），胶囊文字恒为"参考"。
+
+
+def _memory_source_label(source: object) -> str:
+    """Stable source vocabulary for the Chinese/English native UI."""
+    key = str(source or "").casefold()
+    if key == "imported":
+        return tr("导入")
+    if key == "manual":
+        return tr("存储")
+    if key == "agent":
+        return tr("Agent投递")
+    return str(source or "—")
 
 # v1.7.2：软删除的真实语义（用户问"删除之后保存备份原件备查吗"）——移入回收目录、原件保留
 SOFT_DELETE_MEMORY_TIP = (
@@ -118,9 +130,10 @@ class MemoryPage(ShiftRangeCheckMixin, AdaptivePage):
         # 列宽常量与数据行严格一致（行内同名列用 setFixedWidth 对齐）
         self._col_tags, self._col_type, self._col_source, self._col_time = 116, 62, 104, 86
         for text, width in (("关联标签", self._col_tags), ("分类", self._col_type), ("来源渠道", self._col_source), ("同步时间", self._col_time)):
-            col = QLabel(text); col.setFixedWidth(width); col.setAlignment(Qt.AlignmentFlag.AlignRight); hlay.addWidget(col)
+            col = QLabel(text); col.setFixedWidth(width); col.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter); hlay.addWidget(col)
         card_layout.addWidget(header_row)
         self.entry_list = QListWidget(); self.entry_list.setObjectName("memoryList"); self.entry_list.setAccessibleName("记忆条目列表"); self.entry_list.setAccessibleDescription("使用方向键选择，Enter 或双击编辑"); self.entry_list.setMinimumWidth(340); self.entry_list.currentItemChanged.connect(self._selection_changed); self.entry_list.itemDoubleClicked.connect(lambda _item: self.edit_selected())
+        self._rich_tooltip = RichHoverToolTip(self.entry_list, self._memory_tooltip_text)
         # 行选中/刷新后统一复位行内文字样式（v1.10.0C 起选中为主题色浅染，不再反白）
         self.entry_list.itemSelectionChanged.connect(self._paint_selected_rows)
         card_layout.addWidget(self.entry_list, 1)
@@ -205,6 +218,7 @@ class MemoryPage(ShiftRangeCheckMixin, AdaptivePage):
                 box.setAccessibleName(str(item.get("title") or item.get("name") or "记忆条目"))
                 box.setAccessibleDescription("双击编辑；使用复选框加入批量操作")
                 box.setFixedHeight(52)
+                self._rich_tooltip.attach(box)
                 lay = QHBoxLayout(box)
                 lay.setContentsMargins(14, 4, 14, 4)
                 lay.setSpacing(10)
@@ -235,7 +249,7 @@ class MemoryPage(ShiftRangeCheckMixin, AdaptivePage):
                 # （固定列不被布局计入、右侧列重叠越界），固定列必须改回 Fixed
                 tags.setFixedWidth(self._col_tags)
                 tags.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
-                tags.setAlignment(Qt.AlignmentFlag.AlignRight)
+                tags.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
                 tags.setToolTip("、".join(item.get("tags") or []))
                 lay.addWidget(tags)
                 type_color = type_colors.get(type_key, type_colors.get("reference", "#4F46E5"))
@@ -247,19 +261,21 @@ class MemoryPage(ShiftRangeCheckMixin, AdaptivePage):
                 pill.setFixedHeight(22)
                 pill.setStyleSheet(_type_pill_style(type_color))
                 lay.addWidget(pill, alignment=Qt.AlignmentFlag.AlignCenter)
-                source_label = tr("手工") if item.get("source") == "manual" else str(item.get("source") or "—")
+                source_label = _memory_source_label(item.get("source"))
                 source = ElideLabel(source_label)
                 source.setObjectName("rowCol")
                 source.setFixedWidth(self._col_source)
                 source.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
-                source.setAlignment(Qt.AlignmentFlag.AlignRight)
+                source.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
                 lay.addWidget(source)
                 updated = ElideLabel(str(item.get("updated", ""))[:10])
                 updated.setObjectName("rowTime")
                 updated.setFixedWidth(self._col_time)
                 updated.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
-                updated.setAlignment(Qt.AlignmentFlag.AlignRight)
+                updated.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
                 lay.addWidget(updated)
+                for child in (title, desc, tags, pill, source, updated):
+                    self._rich_tooltip.attach(child)
                 row.setSizeHint(QSize(0, 52))
                 self.entry_list.addItem(row)
                 self.entry_list.setItemWidget(row, box)
@@ -360,6 +376,22 @@ class MemoryPage(ShiftRangeCheckMixin, AdaptivePage):
             meta["source"].setStyleSheet("")
             meta["time"].setStyleSheet("")
             meta["pill"].setStyleSheet(_type_pill_style(meta["color"]))
+
+    def _memory_tooltip_text(self, pos) -> str:
+        row = self.entry_list.itemAt(pos)
+        if row is None:
+            return ""
+        name = str(row.data(Qt.ItemDataRole.UserRole) or "")
+        item = next((candidate for candidate in self._items if str(candidate.get("name") or "") == name), None)
+        if not item:
+            return ""
+        title = str(item.get("title") or item.get("name") or "记忆条目")
+        description = str(item.get("description") or "（无语义摘要）")
+        tags = "、".join(str(tag) for tag in (item.get("tags") or [])) or "（无标签）"
+        type_label = tr(TYPE_LABELS.get(str(item.get("type") or "reference"), "参考"))
+        source = _memory_source_label(item.get("source"))
+        updated = str(item.get("updated") or "—")
+        return f"{title}\n摘要：{description}\n标签：{tags}\n分类：{type_label}\n来源：{source}\n同步时间：{updated}"
 
     def _selection_changed(self, current, _previous):
         if not current: return

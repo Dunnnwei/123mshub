@@ -255,11 +255,14 @@ QTableWidget#jobTable QHeaderView::section {{ background: transparent; border: n
 QPushButton#jobClear {{ background: transparent; border: none; color: {p['muted']}; font-size: 11px; font-weight: 500; min-height: 22px; padding: 0 2px; text-align: left; }}
 QPushButton#jobClear:hover {{ color: {p['accent']}; }}
 QPushButton#jobClear:pressed {{ color: {p['action']}; }}
+QPushButton#jobAction {{ background: transparent; border: none; color: {p['accent']}; font-size: 11px; font-weight: 650; min-height: 22px; padding: 0 4px; }}
+QPushButton#jobAction:hover {{ color: {p['action']}; }}
 QTableWidget#jobTable QHeaderView::section {{ padding: 4px 6px; }}
 QTableView {{ background: {p['surface']}; alternate-background-color: {p['inset']}; gridline-color: {p['line']}; border: 1px solid {p['line']}; border-radius: 12px; selection-background-color: {p['selection']}; selection-color: {p['ink']}; }}
 /* v1.6.0：技能库/安全中心加行高（原来压得太紧难以操作） */
 QTableView::item {{ padding: 8px 10px; font-size: {TYPOGRAPHY['body']}px; }}
-QHeaderView::section {{ background: {p['raised']}; color: {p['muted']}; padding: 7px 10px; border: none; border-bottom: 1px solid {p['line']}; font-size: {TYPOGRAPHY['meta']}px; font-weight: 600; }}
+QHeaderView::section {{ background: {p['raised']}; color: #6366F1; padding: 7px 10px; border: none; border-bottom: 1px solid {p['line']}; font-size: {TYPOGRAPHY['meta']}px; font-weight: 700; }}
+QWidget#listHeader QLabel {{ color: #6366F1; font-weight: 700; }}
 /* v1.10.0（Stitch）：页头 eyebrow 从纯文字改为发光胶囊（含色点由文本自带） */
 QLabel#eyebrow {{ color: {p['accent']}; background: {eyebrow_bg}; border: 1px solid {eyebrow_line}; border-radius: 9px; padding: 2px 10px; font-size: {TYPOGRAPHY['micro']}px; font-weight: 700; }}
 QLabel#muted, QLabel#status {{ color: {p['muted']}; font-size: {TYPOGRAPHY['meta']}px; font-weight: 400; }}

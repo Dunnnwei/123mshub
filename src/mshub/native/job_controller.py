@@ -13,19 +13,22 @@ class JobController(QObject):
         self.manager = JobManager()
         self._observed = set()
         self._callbacks = {}
+        self._retry_callbacks = {}
         self._mutations = set()
         self.timer = QTimer(self)
         self.timer.setInterval(200)
         self.timer.timeout.connect(self.poll)
         self.timer.start()
 
-    def submit(self, kind, label, fn, *, progress=False, changed=True, callback=None):
+    def submit(self, kind, label, fn, *, progress=False, changed=True, callback=None, retry=None):
         def run(report):
             report(None, label)
             return fn(report) if progress else fn()
         job = self.manager.submit(kind, label, run)
         if callback:
             self._callbacks[job.id] = callback
+        if retry:
+            self._retry_callbacks[job.id] = retry
         if changed:
             self._mutations.add(job.id)
         self.changed.emit()
@@ -51,8 +54,17 @@ class JobController(QObject):
     def dismiss(self, identifier):
         removed = self.manager.dismiss(identifier)
         self._observed.discard(identifier)
+        self._retry_callbacks.pop(identifier, None)
         self.changed.emit()
         return removed
+
+    def retry(self, identifier):
+        """Re-submit a failed/unfinished task when its owner supplied a retry action."""
+        job = next((row for row in self.manager.list_jobs() if row["id"] == identifier), None)
+        callback = self._retry_callbacks.get(identifier)
+        if not job or not callback or job["status"] == "running":
+            return None
+        return callback()
 
     def clear_finished(self) -> int:
         """v1.7.3：一键清除全部已结束任务（运行中保留），供侧栏任务面板使用。
@@ -74,6 +86,9 @@ class JobController(QObject):
                 self._mutations.discard(identifier)
                 self.repositoryChanged.emit()
         removed = self.manager.clear_finished()
+        for identifier in list(self._retry_callbacks):
+            if not any(row["id"] == identifier for row in self.manager.list_jobs()):
+                self._retry_callbacks.pop(identifier, None)
         self.changed.emit()
         return removed
 

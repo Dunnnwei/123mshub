@@ -1,10 +1,10 @@
 """Shared presentation controls for the MASTER design system; no service policy."""
 from __future__ import annotations
 
-from PySide6.QtCore import QEvent, QPoint, QRect, QSize, Qt, QTimer
+from PySide6.QtCore import QEvent, QPoint, QRect, QSize, Qt, QTimer, QObject
 from PySide6.QtGui import QPainter, QPalette
 from PySide6.QtWidgets import (
-    QAbstractButton, QAbstractItemView, QBoxLayout, QComboBox, QDialog, QFormLayout, QFrame,
+    QApplication, QAbstractButton, QAbstractItemView, QBoxLayout, QComboBox, QDialog, QFormLayout, QFrame,
     QHBoxLayout, QHeaderView, QLabel, QLayout, QLineEdit, QPlainTextEdit,
     QCheckBox, QPushButton, QScrollArea, QSizePolicy, QTableWidget, QTextEdit,
     QVBoxLayout, QWidget,
@@ -37,6 +37,85 @@ def show_toast(anchor: QWidget, text: str, duration_ms: int = 1500) -> None:
     toast.show()
     toast.raise_()
     QTimer.singleShot(duration_ms, toast.close)
+
+
+class RichHoverToolTip(QObject):
+    """A wrapped, rounded hover summary for dense native lists.
+
+    Qt's item tooltip is deliberately single-line in several Windows styles.
+    Lists in MSHub contain real descriptions and tags, so a small owned frame
+    gives the user a readable summary without changing the row geometry.
+    """
+
+    def __init__(self, watched: QWidget, text_for_position, *, max_width: int = 420):
+        super().__init__(watched)
+        self.watched = watched
+        self._watched_widgets = {watched}
+        self.text_for_position = text_for_position
+        self.max_width = max_width
+        self._tip: QFrame | None = None
+        self._hide_timer = QTimer(self)
+        self._hide_timer.setSingleShot(True)
+        self._hide_timer.timeout.connect(self.hide)
+        watched.installEventFilter(self)
+
+    def attach(self, widget: QWidget) -> None:
+        """Also watch a row child that covers the list viewport."""
+        self._watched_widgets.add(widget)
+        widget.installEventFilter(self)
+
+    def eventFilter(self, obj, event):
+        if obj in self._watched_widgets and event.type() == QEvent.Type.ToolTip:
+            pos = event.pos()
+            if obj is not self.watched:
+                pos = self.watched.mapFromGlobal(obj.mapToGlobal(pos))
+            text = str(self.text_for_position(pos) or "").strip()
+            if text:
+                self.show(text, obj.mapToGlobal(event.pos()))
+                return True
+            self.hide()
+            return True
+        if obj in self._watched_widgets and event.type() in (QEvent.Type.Leave, QEvent.Type.Hide):
+            self.hide()
+        return super().eventFilter(obj, event)
+
+    def show(self, text: str, global_pos: QPoint) -> None:
+        self.hide()
+        tip = QFrame(self.watched.window(), Qt.WindowType.ToolTip | Qt.WindowType.FramelessWindowHint)
+        tip.setObjectName("richHoverTooltip")
+        tip.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        tip.setStyleSheet(
+            "QFrame#richHoverTooltip { background: palette(base); color: palette(text); "
+            "border: 1px solid #6366F1; border-radius: 10px; padding: 8px; }"
+        )
+        label = QLabel(text, tip)
+        label.setWordWrap(True)
+        label.setMaximumWidth(self.max_width)
+        label.setTextInteractionFlags(Qt.TextInteractionFlag.NoTextInteraction)
+        label.setStyleSheet("background: transparent; border: 0; padding: 0; line-height: 1.35;")
+        layout = QVBoxLayout(tip)
+        layout.setContentsMargins(10, 8, 10, 8)
+        layout.addWidget(label)
+        tip.adjustSize()
+        screen = tip.screen() or QApplication.primaryScreen()
+        if screen is not None:
+            available = screen.availableGeometry()
+            x = min(global_pos.x() + 14, available.right() - tip.width() - 8)
+            y = min(global_pos.y() + 18, available.bottom() - tip.height() - 8)
+            tip.move(max(available.left() + 8, x), max(available.top() + 8, y))
+        else:
+            tip.move(global_pos + QPoint(14, 18))
+        tip.show()
+        tip.raise_()
+        self._tip = tip
+        self._hide_timer.start(8000)
+
+    def hide(self) -> None:
+        self._hide_timer.stop()
+        if self._tip is not None:
+            self._tip.close()
+            self._tip.deleteLater()
+            self._tip = None
 
 
 def copy_agent_prompt(facade, button: QWidget, runner) -> None:
@@ -395,11 +474,12 @@ class DataTable(QTableWidget):
                 self.setColumnWidth(col, width)
             self.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
         else:
-            # v1.7.4：安全中心补"多选"列后整体右移——多选/名称/来源/状态/最近检查/摘要
-            self.setColumnHidden(4, compact)
-            for col, width in ((0, 56), (1, max(190, min(300, int(self.width() * .29)))), (2, 96), (3, 104), (4, 170)):
+            # v1.10.3：安全中心与技能仓库共享“标签/说明/来源”信息层级。
+            # 窄窗口保留语义列并允许横向滚动，避免把标签/说明静默藏掉。
+            self.setColumnHidden(6, compact)
+            for col, width in ((0, 56), (1, max(190, min(300, int(self.width() * .25)))), (2, 116), (4, 94), (5, 98), (6, 168)):
                 self.setColumnWidth(col, width)
-            self.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeMode.Stretch)
+            self.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
 
 
 def scroll_form(widget):

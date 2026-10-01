@@ -70,8 +70,12 @@ class _ColumnHandle(QWidget):
         palette = current_palette()
         painter = QPainter(self)
         active = self.hovered or self.dragging
-        painter.setPen(QPen(QColor(palette["accent"] if active else palette["line"]), 2 if active else 1))
-        painter.drawLine(self.HIT_WIDTH // 2, 0, self.HIT_WIDTH // 2, self.height())
+        # Handles remain full-height hit targets, but an idle handle is
+        # invisible.  Drawing every boundary through a selected row made the
+        # row look striped and confused the selection tint with a column cue.
+        if active:
+            painter.setPen(QPen(QColor(palette["accent"]), 2))
+            painter.drawLine(self.HIT_WIDTH // 2, 0, self.HIT_WIDTH // 2, self.height())
 
 
 class ResizableColumnsTable(QTableWidget):

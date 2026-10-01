@@ -1,0 +1,198 @@
+{
+  "scope": "source Qt render; synthetic skills; isolated temporary config",
+  "themes": {
+    "light": {
+      "navigation_paint": [
+        {
+          "item": 0,
+          "selected": false,
+          "changed_pixels": 379
+        },
+        {
+          "item": 1,
+          "selected": false,
+          "changed_pixels": 412
+        },
+        {
+          "item": 2,
+          "selected": false,
+          "changed_pixels": 264
+        },
+        {
+          "item": 3,
+          "selected": false,
+          "changed_pixels": 228
+        },
+        {
+          "item": 4,
+          "selected": false,
+          "changed_pixels": 408
+        },
+        {
+          "item": 0,
+          "selected": true,
+          "changed_pixels": 379
+        },
+        {
+          "item": 1,
+          "selected": true,
+          "changed_pixels": 412
+        },
+        {
+          "item": 2,
+          "selected": true,
+          "changed_pixels": 264
+        },
+        {
+          "item": 3,
+          "selected": true,
+          "changed_pixels": 228
+        },
+        {
+          "item": 4,
+          "selected": true,
+          "changed_pixels": 408
+        }
+      ],
+      "header_height": 32
+    },
+    "dark": {
+      "navigation_paint": [
+        {
+          "item": 0,
+          "selected": false,
+          "changed_pixels": 379
+        },
+        {
+          "item": 1,
+          "selected": false,
+          "changed_pixels": 412
+        },
+        {
+          "item": 2,
+          "selected": false,
+          "changed_pixels": 264
+        },
+        {
+          "item": 3,
+          "selected": false,
+          "changed_pixels": 228
+        },
+        {
+          "item": 4,
+          "selected": false,
+          "changed_pixels": 408
+        },
+        {
+          "item": 0,
+          "selected": true,
+          "changed_pixels": 379
+        },
+        {
+          "item": 1,
+          "selected": true,
+          "changed_pixels": 412
+        },
+        {
+          "item": 2,
+          "selected": true,
+          "changed_pixels": 264
+        },
+        {
+          "item": 3,
+          "selected": true,
+          "changed_pixels": 228
+        },
+        {
+          "item": 4,
+          "selected": true,
+          "changed_pixels": 408
+        }
+      ],
+      "header_height": 32
+    }
+  },
+  "column_drags": [
+    {
+      "column": 0,
+      "y": 24,
+      "before": 56,
+      "after": 88,
+      "viewport_width": 1112,
+      "section_end": 55,
+      "handle_x": 55,
+      "scroll": 0,
+      "scroll_max": 0
+    },
+    {
+      "column": 1,
+      "y": 100,
+      "before": 245,
+      "after": 277,
+      "viewport_width": 1112,
+      "section_end": 332,
+      "handle_x": 332,
+      "scroll": 0,
+      "scroll_max": 32
+    },
+    {
+      "column": 2,
+      "y": 565,
+      "before": 116,
+      "after": 148,
+      "viewport_width": 1112,
+      "section_end": 480,
+      "handle_x": 480,
+      "scroll": 0,
+      "scroll_max": 64
+    },
+    {
+      "column": 3,
+      "y": 24,
+      "before": 383,
+      "after": 415,
+      "viewport_width": 1112,
+      "section_end": 799,
+      "handle_x": 799,
+      "scroll": 96,
+      "scroll_max": 96
+    },
+    {
+      "column": 4,
+      "y": 100,
+      "before": 94,
+      "after": 126,
+      "viewport_width": 1112,
+      "section_end": 893,
+      "handle_x": 893,
+      "scroll": 128,
+      "scroll_max": 128
+    },
+    {
+      "column": 5,
+      "y": 565,
+      "before": 120,
+      "after": 152,
+      "viewport_width": 1112,
+      "section_end": 1013,
+      "handle_x": 1013,
+      "scroll": 160,
+      "scroll_max": 160
+    },
+    {
+      "column": 6,
+      "y": 24,
+      "before": 98,
+      "after": 130,
+      "viewport_width": 1112,
+      "section_end": 1111,
+      "handle_x": 1111,
+      "scroll": 192,
+      "scroll_max": 192
+    }
+  ],
+  "preserves_widths_after_refresh_resize_theme_sort": true,
+  "selected_row_and_checkbox_unchanged_by_drag": true,
+  "device_pixel_ratio": 1.5,
+  "platform": "offscreen"
+}

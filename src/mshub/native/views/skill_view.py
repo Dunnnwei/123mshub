@@ -21,8 +21,8 @@ from ..job_controller import JobController
 from ..column_resize import ResizableColumnsTable
 from ..i18n import tr
 from ..ui import (SHIFT_RANGE_HINT, AdaptivePage, CheckableTableMixin, DataTable, FlowLayout,
-                  HeaderBand, ShiftRangeCheckMixin, copy_agent_prompt, make_agent_prompt_button,
-                  open_singleton_dialog, prepare_dialog, label_controls)
+                  HeaderBand, RichHoverToolTip, ShiftRangeCheckMixin, copy_agent_prompt,
+                  make_agent_prompt_button, open_singleton_dialog, prepare_dialog, label_controls)
 
 
 def _error(payload: object) -> str:
@@ -61,6 +61,43 @@ def _security_label(status) -> str:
     return _SECURITY_LABELS.get(str(status).casefold(), str(status or "未检查"))
 
 
+def _display_description(item) -> str:
+    """Return the description in the active UI language with a safe fallback."""
+    zh = str(item.get("description_zh") or "")
+    en = str(item.get("description") or "")
+    return (en or zh) if _interface_language_is_english() else (zh or en)
+
+
+def _skill_tooltip_summary(item) -> str:
+    tags = "、".join(str(tag) for tag in (item.get("tags") or [])) or "（无标签）"
+    description = _display_description(item) or "（无技能说明）"
+    return f"标签：{tags}\n说明：{description}"
+
+
+def _skill_sort_key(item, col: int):
+    keys = {
+        1: lambda value: str(value.get("name") or "").casefold(),
+        2: lambda value: ", ".join(value.get("tags") or []).casefold(),
+        3: lambda value: _display_description(value).casefold(),
+        4: lambda value: str(value.get("provider") or "").casefold(),
+        5: lambda value: str(value.get("updated_at") or ""),
+        6: lambda value: _security_rank(value.get("security_status")),
+    }
+    return keys.get(col, lambda value: "")(item)
+
+
+def _security_sort_key(item, col: int):
+    keys = {
+        1: lambda value: str(value.get("name") or "").casefold(),
+        2: lambda value: ", ".join(value.get("tags") or []).casefold(),
+        3: lambda value: _display_description(value).casefold(),
+        4: lambda value: str(value.get("provider") or "").casefold(),
+        5: lambda value: _security_rank(value.get("security_status")),
+        6: lambda value: str(value.get("updated_at") or ""),
+    }
+    return keys.get(col, lambda value: "")(item)
+
+
 class _SkillTable(ResizableColumnsTable):
     def selected_names(self) -> list[tuple[str, str]]:
         out = []
@@ -76,7 +113,7 @@ class _SkillTable(ResizableColumnsTable):
             return
         # Initial layout fills a wide viewport. Every column stays interactive;
         # narrow windows scroll instead of hiding fields or shrinking headers.
-        widths = [56, max(190, min(300, int(self.width() * .22))), 96, 200, 94, 120, 168]
+        widths = [56, max(190, min(300, int(self.width() * .22))), 116, 200, 94, 120, 98]
         widths[3] = max(200, self.viewport().width() - sum(widths) + widths[3])
         for col, width in enumerate(widths):
             self.setColumnWidth(col, width)
@@ -107,7 +144,7 @@ class SkillsPage(ShiftRangeCheckMixin, CheckableTableMixin, AdaptivePage):
         self.agent_button = make_agent_prompt_button(self, self.copy_prompt); band.actions.addWidget(self.agent_button)
         root.addWidget(band)
         filters = FlowLayout(spacing=8)
-        self.search = QLineEdit(); self.search.setPlaceholderText("搜索名称、说明、来源地址或标签"); self.search.setAccessibleName("搜索技能或程序"); self.search.setAccessibleDescription("搜索名称、说明、来源地址或标签"); self.search.textChanged.connect(self._debounced)
+        self.search = QLineEdit(); self.search.setPlaceholderText("搜索名称、说明、来源地址或标签"); self.search.setAccessibleName("搜索技能或程序"); self.search.setAccessibleDescription("搜索名称、说明、来源地址或标签"); self.search.setClearButtonEnabled(True); self.search.textChanged.connect(self._debounced)
         self.search.setMinimumWidth(220); filters.addWidget(self.search)
         self.provider = QComboBox(); self.provider.addItem("全部来源", ""); self.provider.addItem("GitHub 源", "github"); self.provider.addItem("本地自研", "local"); self.provider.currentIndexChanged.connect(self.refresh); filters.addWidget(self.provider)
         self.category = QComboBox(); self.category.addItem("全部资产", ""); self.category.addItem("技能", "skill"); self.category.addItem("程序", "project"); self.category.currentIndexChanged.connect(self.refresh); filters.addWidget(self.category)
@@ -118,7 +155,8 @@ class SkillsPage(ShiftRangeCheckMixin, CheckableTableMixin, AdaptivePage):
         splitter = QSplitter(Qt.Orientation.Horizontal)
         # v1.7.4：表头"选"改"多选"；各列表头点击排序（正/反序切换），
         # "多选"表头点击 = 全选 / 全取消（见 _header_clicked）
-        self.table = _SkillTable(0, 7); self.table.setAccessibleName("技能与程序列表"); self.table.setAccessibleDescription("使用方向键选择，Enter 或双击查看详情；点击表头排序；拖动任意竖向分隔线调整列宽"); self.table.setHorizontalHeaderLabels(["多选", "名称", "来源", "说明", "安全", "标签", "更新时间"]); self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows); self.table.verticalHeader().setDefaultSectionSize(44); self.table.verticalHeader().setMinimumSectionSize(44); self.table.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Fixed); self.table.setWordWrap(False); self.table.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded); self.table.itemSelectionChanged.connect(self._selection_changed); self.table.itemActivated.connect(lambda _item: self.show_detail_dialog()); self.table.itemDoubleClicked.connect(lambda _item: self.show_detail_dialog())
+        self.table = _SkillTable(0, 7); self.table.setAccessibleName("技能与程序列表"); self.table.setAccessibleDescription("使用方向键选择，Enter 或双击查看详情；点击表头排序；拖动任意竖向分隔线调整列宽"); self.table.setHorizontalHeaderLabels(["多选", "名称", "标签", "说明", "来源", "时间", "安全"]); self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows); self.table.verticalHeader().setDefaultSectionSize(44); self.table.verticalHeader().setMinimumSectionSize(44); self.table.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Fixed); self.table.setWordWrap(False); self.table.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded); self.table.itemSelectionChanged.connect(self._selection_changed); self.table.itemActivated.connect(self.show_detail_dialog); self.table.itemDoubleClicked.connect(self.show_detail_dialog)
+        self._rich_tooltip = RichHoverToolTip(self.table.viewport(), self._skill_tooltip_text)
         # v1.7.5 修复（推翻 v1.7.4 的判断）：v1.7.4 只留 itemActivated（以为 Windows
         # 双击必触发它），实测打包版双击无反应 → 详情打不开、编辑无入口。现恢复
         # itemDoubleClicked 为主路径 + itemActivated（Enter 键）备用；show_detail_dialog
@@ -174,7 +212,7 @@ class SkillsPage(ShiftRangeCheckMixin, CheckableTableMixin, AdaptivePage):
         def done(data):
             rows = list(data.get("items") or {}) if isinstance(data, dict) else []
             self.totalChanged.emit(len(rows))
-            self.items = [row for row in rows if (not provider or row.get("provider") == provider) and (not category or row.get("item_type") == category) and (not query or query in str(row).casefold())]
+            self.items = [row for row in rows if (not provider or row.get("provider") == provider) and (not category or row.get("item_type") == category) and (not query or self._matches_query(row, query))]
             self._apply_rows()
         self.scope.call("list", self.facade.skills, done, lambda msg: self._set_status(f"技能列表读取失败：{msg}"))
 
@@ -195,16 +233,16 @@ class SkillsPage(ShiftRangeCheckMixin, CheckableTableMixin, AdaptivePage):
             self._hook_shift_checkbox(check, row)  # v1.9.0：Shift 连选
             name = QTableWidgetItem(str(item.get("name") or "")); name.setData(Qt.ItemDataRole.UserRole, item.get("name", "")); name.setData(Qt.ItemDataRole.UserRole + 1, item.get("library", "")); self.table.setItem(row, 1, name)
             name.setToolTip(str(item.get("name") or ""))
+            self.table.setItem(row, 2, QTableWidgetItem(", ".join(item.get("tags") or [])))
+            self.table.setItem(row, 3, QTableWidgetItem(self._display_description(item)))
             provider = item.get("provider") or "github"; source = tr("GitHub 源") if provider == "github" else tr("本地自研")
             source_item = QTableWidgetItem(source); source_item.setToolTip("本地自研技能无在线源头，版本请在编辑信息中手动维护。" if provider == "local" else "可检查版本、更新")
-            self.table.setItem(row, 2, source_item)
-            self.table.setItem(row, 3, QTableWidgetItem(self._display_description(item)))
+            self.table.setItem(row, 4, source_item)
+            self.table.setItem(row, 5, QTableWidgetItem(str(item.get("updated_at") or "")[:19].replace("T", " ")))
             security = _security_label(item.get("security_status", "unchecked"))
             security_item = QTableWidgetItem(security)
             security_item.setToolTip(f"{security}（原始状态：{str(item.get('security_status') or 'unchecked')}）")
-            self.table.setItem(row, 4, security_item)
-            self.table.setItem(row, 5, QTableWidgetItem(", ".join(item.get("tags") or [])))
-            self.table.setItem(row, 6, QTableWidgetItem(str(item.get("updated_at") or "")[:19].replace("T", " ")))
+            self.table.setItem(row, 6, security_item)
             for col in range(self.table.columnCount()):
                 cell = self.table.item(row, col)
                 if cell is not None:
@@ -237,16 +275,10 @@ class SkillsPage(ShiftRangeCheckMixin, CheckableTableMixin, AdaptivePage):
         """按表头排序状态原地排序；未点过表头时保持服务层顺序（纯排序，不重建行）。"""
         if self._sort_col is None:
             return
-        col = self._sort_col
-        def key(item):
-            if col == 1: return str(item.get("name") or "").casefold()
-            if col == 2: return str(item.get("provider") or "")
-            if col == 3: return self._display_description(item).casefold()
-            if col == 4: return _security_rank(item.get("security_status"))
-            if col == 5: return ", ".join(item.get("tags") or []).casefold()
-            if col == 6: return str(item.get("updated_at") or "")
-            return ""
-        self.items.sort(key=key, reverse=self._sort_order == Qt.SortOrder.DescendingOrder)
+        self.items.sort(
+            key=lambda item: _skill_sort_key(item, self._sort_col),
+            reverse=self._sort_order == Qt.SortOrder.DescendingOrder,
+        )
 
     def _apply_sort(self, col: int, order: Qt.SortOrder):
         """v1.8.0（审查 P2-4）：表头点击分派进 CheckableTableMixin——排序并重建行。"""
@@ -288,27 +320,63 @@ class SkillsPage(ShiftRangeCheckMixin, CheckableTableMixin, AdaptivePage):
         self.update_button.setEnabled(not local); self.trust_button.setEnabled(True); self.check_button.setEnabled(True); self.ai_check_button.setEnabled(True)
 
     @staticmethod
+    def _matches_query(item, query: str) -> bool:
+        fields = (
+            item.get("name"), item.get("description"), item.get("description_zh"),
+            item.get("source_url"), item.get("provider"), item.get("library"),
+            *(item.get("tags") or []),
+        )
+        return any(query in str(value or "").casefold() for value in fields)
+
+    def _skill_tooltip_text(self, pos) -> str:
+        row = self.table.rowAt(pos.y())
+        col = self.table.columnAt(pos.x())
+        if row < 0 or col not in (2, 3) or row >= len(self.items):
+            return ""
+        item = self.items[row]
+        return _skill_tooltip_summary(item)
+
+    @staticmethod
     def _display_description(item) -> str:
         """v1.7.2：说明列跟随界面语言——中文界面优先中文说明，英文界面优先英文说明；缺失回退另一语言。"""
-        zh = str(item.get("description_zh") or "")
-        en = str(item.get("description") or "")
-        return (en or zh) if _interface_language_is_english() else (zh or en)
+        return _display_description(item)
 
     @staticmethod
     def _format_detail(item):
         lines = [f"来源: {item.get('source_url') or '本地自研'}", f"目录: {item.get('local_dir') or ''}", f"库: {item.get('library') or ''}", f"版本: {item.get('version') or '未知'}", f"安全: {item.get('security_status') or 'unchecked'}", "", f"中文说明: {item.get('description_zh') or '（未填写，可在编辑信息中补全或自动翻译）'}", f"英文说明: {item.get('description') or '（未填写，可在编辑信息中补全或自动翻译）'}"]
         return "\n".join(lines)
 
-    def _selected(self):
+    def _selected(self, activated_item=None):
+        if activated_item is not None:
+            row = activated_item.row()
+            if 0 <= row < len(self.items):
+                self.current = self.items[row]
+                return self.current
+        rows = self.table.selectionModel().selectedRows()
+        if rows and 0 <= rows[0].row() < len(self.items):
+            self.current = self.items[rows[0].row()]
         return self.current or {}
 
-    def show_detail_dialog(self):
+    def show_detail_dialog(self, activated_item=None):
         """v1.6.0：双击行弹出详情窗口（和记忆库的双击编辑逻辑一致）；
         v1.7.4：单实例——已有窗口时关旧开新，不再叠出多个要关多次的窗口；
         v1.7.5：0.35s 防重入（itemActivated 与 itemDoubleClicked 双绑定时同一双击
         可能两个信号都到，防重入保证只开一个窗）。"""
-        item = self._selected()
+        item = self._selected(activated_item)
         if not item:
+            return
+        try:
+            root = self.facade.repo_root().resolve()
+            raw_dir = str(item.get("local_dir") or "").strip()
+            if not raw_dir:
+                raise FileNotFoundError("missing local_dir")
+            target = (root / Path(raw_dir)).resolve()
+            target.relative_to(root)
+            if target == root or not target.is_dir():
+                raise FileNotFoundError(target)
+        except Exception:
+            QMessageBox.information(self, "未能打开该项目", "未能打开该项目")
+            self.refresh()
             return
 
         # v1.8.0（审查 P2-4）：单实例/防重入/销毁身份判断统一进 open_singleton_dialog
@@ -456,6 +524,7 @@ class MetadataDialog(QDialog):
         self.source_hint = QLabel(""); self.source_hint.setObjectName("muted"); form.addRow("解析预览", self.source_hint)
         self.library = QComboBox(); self.library.addItem("共享技能库", "skills"); self.library.addItem("程序库", "github"); form.addRow("所属库", self.library)
         self.version = QLineEdit(); form.addRow("版本", self.version)
+        self.tags = QLineEdit(); self.tags.setPlaceholderText("多个标签用逗号分隔"); form.addRow("标签", self.tags)
         root.addLayout(form)
         # v1.7.2：中英说明从单行输入改为多行双栏，平分编辑窗口的剩余空间（原来各 1 行难以预读/编辑）
         # v1.7.4：objectName 让这条可拖把手在"分隔条透明化"全局样式下保持可见
@@ -507,7 +576,7 @@ class MetadataDialog(QDialog):
         self.item = item
         # ocr 审查修复：切换条目时复位按钮（上一条的翻译任务可能还在跑/已过期）
         self.translate_button.setEnabled(True)
-        self.name.setText(str(item.get("name") or "")); self.directory.setText(Path(str(item.get("local_dir") or "")).name); self.provider.setCurrentIndex(max(0, self.provider.findData(item.get("provider", "github")))); self.source.setText(str(item.get("source_url") or "")); self.library.setCurrentIndex(max(0, self.library.findData(item.get("library", "skills")))); self.version.setText(str(item.get("version") or "")); self.description.setPlainText(str(item.get("description") or "")); self.description_zh.setPlainText(str(item.get("description_zh") or "")); self.translate_status.clear(); self._directory_hint(); self._source_hint(); self.setWindowTitle(f"编辑技能信息 · {item.get('name', '')}")
+        self.name.setText(str(item.get("name") or "")); self.directory.setText(Path(str(item.get("local_dir") or "")).name); self.provider.setCurrentIndex(max(0, self.provider.findData(item.get("provider", "github")))); self.source.setText(str(item.get("source_url") or "")); self.library.setCurrentIndex(max(0, self.library.findData(item.get("library", "skills")))); self.version.setText(str(item.get("version") or "")); self.tags.setText(", ".join(item.get("tags") or [])); self.description.setPlainText(str(item.get("description") or "")); self.description_zh.setPlainText(str(item.get("description_zh") or "")); self.translate_status.clear(); self._directory_hint(); self._source_hint(); self.setWindowTitle(f"编辑技能信息 · {item.get('name', '')}")
 
     def _directory_hint(self):
         value = self.directory.text().strip(); self.directory.setStyleSheet(f"color:{_current_palette().get('error', '#B42318')}" if "/" in value or "\\" in value or value.startswith(".") else "")
@@ -590,7 +659,7 @@ class MetadataDialog(QDialog):
         self.page.jobs.submit("translate", f"翻译 {name}", lambda: self.page.facade.skill_translate_text(text, target), changed=False, callback=done)
 
     def save(self):
-        updates = {"name": self.name.text().strip(), "dir_name": self.directory.text().strip(), "provider": self.provider.currentData(), "source_url": self.source.text().strip(), "target_library": self.library.currentData(), "version": self.version.text().strip(), "description": self.description.toPlainText().strip(), "description_zh": self.description_zh.toPlainText().strip()}
+        updates = {"name": self.name.text().strip(), "dir_name": self.directory.text().strip(), "provider": self.provider.currentData(), "source_url": self.source.text().strip(), "target_library": self.library.currentData(), "version": self.version.text().strip(), "tags": [tag.strip() for tag in self.tags.text().replace("，", ",").split(",") if tag.strip()], "description": self.description.toPlainText().strip(), "description_zh": self.description_zh.toPlainText().strip()}
         # v1.7.4：登记保存后的回跳目标（含改名后的新条目名），列表刷新时滚回该行
         self.page._pending_focus = (updates["name"] or str(self.item.get("name") or ""), updates["target_library"] or self.item.get("library", ""))
         self.page.jobs.submit("metadata", f"保存 {self.item['name']}", lambda: self.page.facade.skill_update_metadata(self.item["name"], updates, self.item.get("library", "")))
@@ -602,6 +671,7 @@ class AddSkillDialog(QDialog):
         super().__init__(page); self.page = page; self.setWindowTitle("添加技能 / 程序"); self.resize(780, 560)
         root = QVBoxLayout(self); form = QFormLayout()
         self.source = QLineEdit(); self.source.setPlaceholderText("GitHub URL、owner/repo 或本地目录"); source_row = QHBoxLayout(); source_row.addWidget(self.source, 1); browse = QPushButton("选择本地目录…"); browse.clicked.connect(self.browse_local); source_row.addWidget(browse); form.addRow("来源", source_row)
+        self.tags = QLineEdit(); self.tags.setPlaceholderText("多个标签用逗号分隔"); form.addRow("标签", self.tags)
         self.item_type = QComboBox(); self.item_type.addItem("技能", "skill"); self.item_type.addItem("程序", "project"); form.addRow("类型", self.item_type)
         self.mode = QComboBox(); self.mode.addItem("标准（按说明文件）", "standard"); self.mode.addItem("全仓（完整 Git）", "full"); form.addRow("安装模式", self.mode)
         # v1.7.2：与设置页一致——中文可读选项 + 悬停注解（数据值仍为 archive/git）
@@ -614,7 +684,7 @@ class AddSkillDialog(QDialog):
         actions = QDialogButtonBox(); preview = actions.addButton("扫描预览", QDialogButtonBox.ButtonRole.ActionRole); install = actions.addButton("后台入库", QDialogButtonBox.ButtonRole.AcceptRole); close = actions.addButton("关闭", QDialogButtonBox.ButtonRole.RejectRole); root.addWidget(actions)
         preview.clicked.connect(self.do_preview); install.clicked.connect(self.do_install); close.clicked.connect(self.reject); prepare_dialog(self); label_controls(self)
 
-    def options(self): return {"item_type": self.item_type.currentData(), "mode": self.mode.currentData(), "fetcher_name": self.fetcher.currentData()}
+    def options(self): return {"item_type": self.item_type.currentData(), "mode": self.mode.currentData(), "fetcher_name": self.fetcher.currentData(), "tags": [tag.strip() for tag in self.tags.text().replace("，", ",").split(",") if tag.strip()]}
 
     def browse_local(self):
         selected = QFileDialog.getExistingDirectory(self, "选择本地技能或程序目录")
@@ -622,18 +692,23 @@ class AddSkillDialog(QDialog):
 
     def do_preview(self):
         try:
-            result = self.page.facade.skill_preview(self.source.text().strip(), **self.options()); self.preview.setPlainText(str(result)); self.page._set_status("预览完成：已识别来源与目标库")
+            preview_options = {key: value for key, value in self.options().items() if key != "tags"}
+            result = self.page.facade.skill_preview(self.source.text().strip(), **preview_options); self.preview.setPlainText(str(result)); self.page._set_status("预览完成：已识别来源与目标库")
         except Exception as exc: self.preview.setPlainText(f"预览失败：{exc}")
 
     def do_install(self):
         source = self.source.text().strip()
         if not source: return
-        self.page.jobs.submit("install", f"入库 {source}", lambda report: self.page.facade.skill_install(source, **self.options(), progress=report), progress=True)
+        options = self.options()
+        def submit_install():
+            return self.page.jobs.submit("install", f"入库 {source}", lambda report: self.page.facade.skill_install(source, **options, progress=report), progress=True, retry=submit_install)
+        submit_install()
         self.accept()
 
 
 class SecurityPage(ShiftRangeCheckMixin, CheckableTableMixin, AdaptivePage):
     totalChanged = Signal(int)
+    pendingChanged = Signal(int)
 
     def __init__(self, facade, runner, jobs, parent=None):
         super().__init__(parent); self.facade, self.runner, self.jobs = facade, runner, jobs; self.scope = RequestScope(runner, self); self.items = []
@@ -667,7 +742,8 @@ class SecurityPage(ShiftRangeCheckMixin, CheckableTableMixin, AdaptivePage):
         bar_row.addWidget(self.hide_passed)
         root.addLayout(bar_row)
         # v1.7.4：补"多选"列（与技能仓库一致），表头点击排序
-        self.table = DataTable(["多选", "名称", "来源", "状态", "最近检查", "摘要"], "security"); self.table.setAccessibleDescription("使用方向键选择，Enter 或双击查看完整检查报告；点击表头按该列排序"); self.table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeMode.Stretch); self.table.setWordWrap(False)
+        self.table = DataTable(["多选", "名称", "标签", "说明", "来源", "状态", "最近检查"], "security"); self.table.setAccessibleDescription("使用方向键选择，Enter 或双击查看完整检查报告；点击表头按该列排序"); self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch); self.table.setWordWrap(False)
+        self._rich_tooltip = RichHoverToolTip(self.table.viewport(), self._security_tooltip_text)
         self.table.horizontalHeader().sectionClicked.connect(self._header_clicked)
         # v1.7.5 修复：与技能仓库同因——v1.7.4 只留 itemActivated，实测双击不触发。
         # 恢复双绑 + show_report_dialog 内防重入，双击/Enter 都能开且只开一个窗。
@@ -710,15 +786,11 @@ class SecurityPage(ShiftRangeCheckMixin, CheckableTableMixin, AdaptivePage):
     def _sort_visible(self, items):
         if self._sort_col is None:
             return items
-        col = self._sort_col
-        def key(item):
-            if col == 1: return str(item.get("name") or "").casefold()
-            if col == 2: return str(item.get("provider") or "")
-            if col == 3: return _security_rank(item.get("security_status"))
-            if col == 4: return str(item.get("updated_at") or "")
-            if col == 5: return self._security_summary(item)
-            return ""
-        return sorted(items, key=key, reverse=self._sort_order == Qt.SortOrder.DescendingOrder)
+        return sorted(
+            items,
+            key=lambda item: _security_sort_key(item, self._sort_col),
+            reverse=self._sort_order == Qt.SortOrder.DescendingOrder,
+        )
 
     def _apply_sort(self, col: int, order: Qt.SortOrder):
         """v1.8.0（审查 P2-4）：表头点击分派进 CheckableTableMixin——安全中心按列重排并重建。"""
@@ -747,6 +819,7 @@ class SecurityPage(ShiftRangeCheckMixin, CheckableTableMixin, AdaptivePage):
         self.invalidate_shift_anchor()  # v1.9.1：行号即将重建，旧 Shift 锚点作废（审查 P1-3）
         self.items = list(data.get("items") or {})
         self.totalChanged.emit(len(self.items))
+        self.pendingChanged.emit(sum(str(item.get("security_status") or "unchecked").casefold() != "safe" for item in self.items))
         # 先用"旧表 + 旧可见列表"记录勾选与选中项，再重算可见列表（避免索引错位）
         checked = set()
         previous = ""
@@ -764,12 +837,13 @@ class SecurityPage(ShiftRangeCheckMixin, CheckableTableMixin, AdaptivePage):
                 check.setChecked(True)
             self.table.setCellWidget(row, 0, check)
             self._hook_shift_checkbox(check, row)  # v1.9.0：Shift 连选
+            tags = ", ".join(item.get("tags") or [])
+            description = _display_description(item)
             provider = tr("GitHub 源") if item.get("provider") == "github" else tr("本地自研")
-            values = (item.get("name", ""), provider, _security_label(item.get("security_status", "unchecked")), str(item.get("updated_at", ""))[:19], self._security_summary(item))
+            values = (item.get("name", ""), tags, description, provider, _security_label(item.get("security_status", "unchecked")), str(item.get("updated_at", ""))[:19])
             for col, value in enumerate(values):
                 cell = QTableWidgetItem(str(value))
-                if col == 4:
-                    # ocr 审查修复：values 是 5 元组（0-4），原判断 col == 5 永假
+                if col == 5:
                     cell.setToolTip("双击查看完整检查报告")
                 self.table.setItem(row, col + 1, cell)
             for col in range(self.table.columnCount()):
@@ -795,6 +869,14 @@ class SecurityPage(ShiftRangeCheckMixin, CheckableTableMixin, AdaptivePage):
             anchor = self.table.item(target, 1)
             if anchor is not None:
                 self.table.scrollToItem(anchor, QTableWidget.ScrollHint.PositionAtCenter)
+
+    def _security_tooltip_text(self, pos) -> str:
+        row = self.table.rowAt(pos.y())
+        col = self.table.columnAt(pos.x())
+        if row < 0 or col not in (1, 2, 3) or row >= len(self._visible):
+            return ""
+        item = self._visible[row]
+        return _skill_tooltip_summary(item)
 
     @staticmethod
     def _security_label(status):
@@ -822,7 +904,7 @@ class SecurityPage(ShiftRangeCheckMixin, CheckableTableMixin, AdaptivePage):
         selected = self.table.selectionModel().selectedRows()
         if not selected:
             self.report.clear(); return
-        findings = self.items[selected[0].row()].get("security_findings") or []
+        findings = self._visible[selected[0].row()].get("security_findings") or []
         import json
         self.report.setPlainText(json.dumps(findings, ensure_ascii=False, indent=2, default=str) if findings else "暂无命中项；状态由最近一次路线检查或人工放行记录提供。")
 

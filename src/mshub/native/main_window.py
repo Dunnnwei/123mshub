@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
     QTableWidgetItem,
     QPushButton,
     QSizePolicy,
+    QMessageBox,
 )
 
 from .memory_facade import MemoryFacade
@@ -226,13 +227,29 @@ class MainWindow(QMainWindow):
         self.job_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         self.job_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
         self.job_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        self.job_table.itemSelectionChanged.connect(self._job_selection_changed)
+        self._selected_job_id: str | None = None
         job_layout.addWidget(self.job_table)
-        # v1.7.3：补"清除已完成"入口（v1.6 精简列时被去掉，完成任务会一直堆到重启）
+        # v1.10.3：失败/未完成任务需要可追溯、可重试；动作行贴右侧与
+        # 「清除已完成」并排，避免把错误原因藏在单行 tooltip 里。
+        job_actions = QHBoxLayout()
+        job_actions.addStretch(1)
         self.job_clear_button = QPushButton("清除已完成")
         self.job_clear_button.setObjectName("jobClear")
-        self.job_clear_button.setToolTip("从列表中移除已完成和失败的任务记录（运行中的任务不受影响）。\n失败原因：悬停对应任务的“状态”单元格查看。")
+        self.job_clear_button.setToolTip("从列表中移除已完成和失败的任务记录（运行中的任务不受影响）。")
         self.job_clear_button.clicked.connect(self._clear_finished_jobs)
-        job_layout.addWidget(self.job_clear_button)
+        job_actions.addWidget(self.job_clear_button)
+        self.job_detail_button = QPushButton("详情")
+        self.job_detail_button.setObjectName("jobAction")
+        self.job_detail_button.setEnabled(False)
+        self.job_detail_button.clicked.connect(self._show_selected_job_detail)
+        job_actions.addWidget(self.job_detail_button)
+        self.job_retry_button = QPushButton("重试")
+        self.job_retry_button.setObjectName("jobAction")
+        self.job_retry_button.setEnabled(False)
+        self.job_retry_button.clicked.connect(self._retry_selected_job)
+        job_actions.addWidget(self.job_retry_button)
+        job_layout.addLayout(job_actions)
         # v1.9.1（需求 C）：任务面板高度可拖——与导航组成垂直 QSplitter。
         # 垂直方向 Ignored 策略让面板跟随用户拖动而不是回弹到 sizeHint；
         # 把手细线上色见 theme.py 的 #jobSplitter。收起按钮仍可用（只藏内容）。
@@ -270,7 +287,7 @@ class MainWindow(QMainWindow):
         self.settings_page = SettingsPage(self.facade, self.theme, self.runner, self.jobs, self.language)
         self.memory_page.totalChanged.connect(lambda total: self._set_nav_count("memory", total))
         self.skills_page.totalChanged.connect(self._set_asset_counts)
-        self.security_page.totalChanged.connect(self._set_asset_counts)
+        self.security_page.pendingChanged.connect(lambda pending: self._set_nav_count("security", pending))
         for page in (self.memory_page, self.graph_placeholder, self.skills_page, self.security_page, self.settings_page):
             self.pages.addWidget(page)
         # v1.10.0（Stitch）：内容区整体坐在半透明页板上浮于点阵背景
@@ -459,7 +476,7 @@ class MainWindow(QMainWindow):
             if isinstance(result, dict) and result.get("summary"):
                 label_item.setToolTip(f"{job['label']}\n{result['summary']}")
             self.job_table.setItem(row, 0, label_item)
-            state = {"running": "运行中", "done": "完成", "error": "失败"}.get(job["status"], str(job["status"]))
+            state = {"running": "未完成", "done": "完成", "error": "失败"}.get(job["status"], str(job["status"]))
             state_item = QTableWidgetItem(state)
             # v1.7.3：失败原因原来完全不可见，现在悬停"状态"单元格可看错误详情
             if job["status"] == "error":
@@ -471,10 +488,63 @@ class MainWindow(QMainWindow):
             progress_item = QTableWidgetItem(str(progress if progress != "未知" else phase[:10]))
             progress_item.setToolTip(f"{progress} · {phase}" if phase else str(progress))
             self.job_table.setItem(row, 2, progress_item)
+            if job["status"] != "done":
+                error_color = QColor(current_palette()["error"])
+                for cell in (label_item, state_item, progress_item):
+                    cell.setForeground(error_color)
+        restore_row = next((index for index, job in enumerate(rows) if job["id"] == self._selected_job_id), -1)
+        if restore_row >= 0:
+            self.job_table.selectRow(restore_row)
+        else:
+            self._selected_job_id = None
+        self._job_selection_changed()
+
+    def _job_selection_changed(self) -> None:
+        selected = self.job_table.selectionModel().selectedRows() if hasattr(self, "job_table") else []
+        row = selected[0].row() if selected else -1
+        rows = self.jobs.list() if hasattr(self, "jobs") else []
+        job = rows[row] if 0 <= row < len(rows) else None
+        self._selected_job_id = job["id"] if job else None
+        if hasattr(self, "job_detail_button"):
+            self.job_detail_button.setEnabled(job is not None)
+            self.job_retry_button.setEnabled(bool(job and job["status"] != "done" and job.get("kind") == "install"))
+
+    def _selected_job(self):
+        if not self._selected_job_id:
+            return None
+        return next((job for job in self.jobs.list() if job["id"] == self._selected_job_id), None)
+
+    def _show_selected_job_detail(self) -> None:
+        job = self._selected_job()
+        if not job:
+            return
+        result = job.get("result")
+        summary = result.get("summary") if isinstance(result, dict) else ""
+        detail = str(job.get("error") or job.get("detail") or summary or "暂无更多错误信息")
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Warning if job["status"] != "done" else QMessageBox.Icon.Information)
+        box.setWindowTitle(f"任务详情 · {job.get('label', '')}")
+        box.setText(detail)
+        box.setInformativeText(f"状态：{job.get('status')}\n阶段：{job.get('phase') or '—'}")
+        box.setStandardButtons(QMessageBox.StandardButton.Ok)
+        box.exec()
+
+    def _retry_selected_job(self) -> None:
+        job = self._selected_job()
+        if not job or job.get("kind") != "install":
+            return
+        retried = self.jobs.retry(job["id"])
+        if retried is None:
+            self.statusBar().showMessage("该任务当前不可重试")
+        else:
+            self._selected_job_id = retried.id
+            self.statusBar().showMessage("已重新提交安装任务")
+            self._refresh_jobs()
 
     def _clear_finished_jobs(self) -> None:
         """v1.7.3：一键清除已完成/失败的任务记录，运行中的保留。"""
         self.jobs.clear_finished()
+        self._selected_job_id = None
 
     def _job_completed(self, job) -> None:
         result = job.get("result")
@@ -512,10 +582,9 @@ class MainWindow(QMainWindow):
                 break
 
     def _set_asset_counts(self, total: int) -> None:
-        # Safety covers the same full asset inventory; hiding passed items or
-        # filtering a skills page must not change the sidebar's total.
+        # The skills badge is the full installed inventory.  Safety has its
+        # own pendingChanged signal and deliberately does not mirror this.
         self._set_nav_count("skills", total)
-        self._set_nav_count("security", total)
 
     def _repository_changed(self) -> None:
         self.memory_page.refresh()

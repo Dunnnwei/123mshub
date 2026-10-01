@@ -79,7 +79,7 @@ def test_skills_sorts_by_security_rank(qapp, native_facade: MemoryFacade):
     page = window.skills_page
     page.items = [_skill("a", security_status="warning"), _skill("b", security_status="safe"), _skill("c", security_status="unchecked")]
     page._apply_rows()
-    page._header_clicked(4)  # 安全列升序：未检查 → 已通过 → 需复核
+    page._header_clicked(6)  # 安全列升序：未检查 → 已通过 → 需复核
     assert [page.table.item(row, 1).text() for row in range(3)] == ["c", "b", "a"]
     window.close()
 
@@ -133,9 +133,9 @@ def test_security_table_has_multi_column_and_sorts(qapp, native_facade: MemoryFa
     page._apply({"items": page.items})
     assert page.table.rowCount() == 3
     assert isinstance(page.table.cellWidget(0, 0), QCheckBox)
-    page._header_clicked(4)  # 最近检查升序
+    page._header_clicked(6)  # 最近检查升序
     assert [page.table.item(row, 1).text() for row in range(3)] == ["a", "c", "b"]
-    page._header_clicked(3)  # 状态升序
+    page._header_clicked(5)  # 状态升序
     assert [page.table.item(row, 1).text() for row in range(3)] == ["c", "a", "b"]
     window.close()
 
@@ -160,7 +160,8 @@ def test_security_hide_passed_toggle(qapp, native_facade: MemoryFacade):
 def test_skill_detail_dialog_is_single_instance(qapp, native_facade: MemoryFacade):
     window = MainWindow(native_facade)
     page = window.skills_page
-    page.items = [_skill("demo")]
+    page.items = [_skill("demo", local_dir="skills/demo")]
+    (native_facade.repo_root() / "skills" / "demo").mkdir(parents=True, exist_ok=True)
     page._apply_rows()
     page.table.selectRow(0)
     page.show_detail_dialog()
