@@ -44,12 +44,13 @@ Claude Desktop、Cursor 等）管理两类共享资产：
 ### Windows 系统依赖
 
 v1.9.0 起 native 版只发布**单一完整包**（含 PySide6/Qt 图形运行环境），解压即用，
-没有单独的环境包；v1.7.4~v1.8.1 的程序包/环境包拆分已取消（历史 Release 里的旧分离包
-仍可下载）。若目录中 `_internal\PySide6` 缺失（解压不完整），启动时会弹窗引导重新下载
+没有单独的环境包；v1.7.4~v1.8.1 的程序包/环境包拆分已取消（旧分离包已随 2026-10-01
+的历史版本清理下线，Releases 页只保留最新版）。若目录中 `_internal\PySide6` 缺失（解压
+不完整），启动时会弹窗引导重新下载
 完整包。
 Git for Windows 只在选择 Git 拉取、项目更新或 Git bundle 自愈时需要，默认
 archive 模式不强制依赖 Git。旧版（≤ v1.3.3 的 web 线）另有 WebView2 / .NET 4.8
-系统依赖与环境安装包，见历史版本说明。
+系统依赖与环境安装包，历史说明见 RELEASE_NOTES.md（各版本文字记录永久保留）。
 
 ### 把提示词装进 agent 常驻配置
 
@@ -68,7 +69,7 @@ archive 模式不强制依赖 Git。旧版（≤ v1.3.3 的 web 线）另有 Web
 v1.0.0–v1.3.3 的 pywebview + Vue 桌面线（`web/src/`、`src/mshub/api.py`、
 `src/mshub/gui.py`）自 v1.8.0 起正式退役、冻结维护：文件头已标注 DEPRECATED，
 不再接收缺陷修复与功能演进。现行唯一交付物为 **PySide6 native 壳**；
-旧版发布物在 GitHub Releases 历史版本中仍可下载。
+旧版源码仍可从 git tag 检出（发布物已随 2026-10-01 历史版本清理下线）。
 
 ### 连通暗号
 
