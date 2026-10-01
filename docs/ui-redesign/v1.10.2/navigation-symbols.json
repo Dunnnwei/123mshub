@@ -1,0 +1,27 @@
+{
+  "memory": {
+    "symbol": "neurology",
+    "url": "https://raw.githubusercontent.com/google/material-design-icons/master/symbols/web/neurology/materialsymbolsoutlined/neurology_24px.svg",
+    "sha256": "9663e0aa324af205461319aa59657c408dd83148a618d226690f801013a92929"
+  },
+  "graph": {
+    "symbol": "hub",
+    "url": "https://raw.githubusercontent.com/google/material-design-icons/master/symbols/web/hub/materialsymbolsoutlined/hub_24px.svg",
+    "sha256": "2943c260885f3777145671f4d5f449bdb5fc791996943276a23392d460e91175"
+  },
+  "skills": {
+    "symbol": "auto_awesome",
+    "url": "https://raw.githubusercontent.com/google/material-design-icons/master/symbols/web/auto_awesome/materialsymbolsoutlined/auto_awesome_24px.svg",
+    "sha256": "01c07860c7fcbee8cb2c5731ae219d72e3ebe28d4475741b29f5566d109a50b5"
+  },
+  "security": {
+    "symbol": "shield",
+    "url": "https://raw.githubusercontent.com/google/material-design-icons/master/symbols/web/shield/materialsymbolsoutlined/shield_24px.svg",
+    "sha256": "06e04825326fb2bfa5ca911f8d9379da8b09bc36b3f04b371ddaebee71bd3f8f"
+  },
+  "settings": {
+    "symbol": "settings",
+    "url": "https://raw.githubusercontent.com/google/material-design-icons/master/symbols/web/settings/materialsymbolsoutlined/settings_24px.svg",
+    "sha256": "6aebb4a88b40a5bf1ce378ca532e4a885aedc402a0574562c6ed4ded03360fd2"
+  }
+}

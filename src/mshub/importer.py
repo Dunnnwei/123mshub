@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import re
 import shutil
 from datetime import UTC, datetime
@@ -78,6 +79,40 @@ def _source_label(source: Path) -> str:
 
 _INDEX_LINE_RE = re.compile(r"^[-*]\s+\[([^\]]+)\]\(([^)]+\.md)\)", re.I)
 _TITLE_NORM_RE = re.compile(r"[\s，。：:；;！!？?\-_/\\]+")
+
+
+def _canonical_identity(value: Any) -> str:
+    """Normalize an imported identity for deterministic duplicate checks."""
+    text = str(value or "").strip().replace("\\", "/")
+    while "//" in text:
+        text = text.replace("//", "/")
+    return text.casefold()
+
+
+def _memory_content_key(body: str, type_name: str) -> str:
+    """Exact normalized body+type, never a fuzzy title/semantic comparison."""
+    normalized = "\n".join(line.rstrip() for line in body.replace("\r\n", "\n").splitlines()).strip()
+    return hashlib.sha256(f"{normalize_type(type_name)}\n{normalized}".encode("utf-8")).hexdigest() if normalized else ""
+
+
+def _skill_duplicate_keys(directory: Path, library: str, name_hint: str = "") -> set[tuple[str, str, str]]:
+    """Names, source identity and target directory; no fuzzy/partial matching."""
+    manifest = read_manifest(directory)
+    scope = _canonical_identity(library or LIBRARY_DSH)
+    keys = {
+        ("name", scope, _canonical_identity(manifest.get("name") or name_hint or directory.name)),
+        ("directory", scope, _canonical_identity(directory.name)),
+    }
+    skill_file = directory / "SKILL.md"
+    if skill_file.is_file() and skill_file.stat().st_size <= MAX_ENTRY_BYTES:
+        fields, _body = split_frontmatter(skill_file.read_text(encoding="utf-8-sig", errors="replace"))
+        if fields.get("name"):
+            keys.add(("name", scope, _canonical_identity(fields["name"])))
+    source_url = _canonical_identity(manifest.get("source_url")).rstrip("/").removesuffix(".git")
+    if source_url:
+        subdir = _canonical_identity(manifest.get("subdir")).strip("/")
+        keys.add(("source", scope, f"{source_url}|{subdir}"))
+    return keys
 
 
 @dataclass(slots=True)
@@ -334,7 +369,7 @@ class ImportService:
                 report.notes.append(f"跳过非法目录名：{path.name}")
                 return
             resolved_library = library if library in (LIBRARY_DSH, LIBRARY_GITHUB) else LIBRARY_DSH
-            target = (resolved_library, dir_name)
+            target = (resolved_library, _canonical_identity(dir_name))
             if target in claimed_targets:
                 # 不同来源路径指向同一目标（库+目录名）：只留先认领的一个，
                 # 预览数与导入结果对齐，避免「260 个候选装出 255 个」的口径差
@@ -425,9 +460,12 @@ class ImportService:
             "memory_imported": 0,
             "memory_renamed": [],
             "memory_skipped_same": [],
+            "memory_skipped_duplicate": [],
+            "memory_duplicate_details": [],
             "memory_failed": [],
             "skills_imported": [],
             "skills_skipped": [],
+            "skills_skipped_duplicate": [],
             "skills_failed": [],
             "reconcile": {},
             "duplicate_groups": [],
@@ -442,6 +480,16 @@ class ImportService:
         if include_memory and report.memory_items:
             memory_root = self.memory._ensure_layout()
             notes_dir = self.memory._notes_dir(memory_root)
+            existing_memory_names = {_canonical_identity(path.stem) for path in notes_dir.glob("*.md")}
+            existing_memory_contents: set[str] = set()
+            for path in notes_dir.glob("*.md"):
+                try:
+                    entry = parse_entry_file(path)
+                    content_key = _memory_content_key(entry.body, entry.type)
+                    if content_key:
+                        existing_memory_contents.add(content_key)
+                except (OSError, ValueError):
+                    continue
             total = len(report.memory_items)
             for index, candidate in enumerate(report.memory_items):
                 report_progress(
@@ -450,7 +498,11 @@ class ImportService:
                     f"{candidate.path.name}（{index + 1}/{total}）",
                 )
                 try:
-                    self._import_memory_entry(notes_dir, candidate, result)
+                    self._import_memory_entry(
+                        notes_dir, candidate, result,
+                        existing_names=existing_memory_names,
+                        existing_contents=existing_memory_contents,
+                    )
                 except Exception as exc:  # 单条失败（含非法名）不断整批
                     result["memory_failed"].append(f"{candidate.path.name}: {exc}")
             self.memory._reconcile_cache(memory_root)
@@ -460,6 +512,24 @@ class ImportService:
         # ---------------- 技能导入
         if include_skills and report.skill_items:
             total = len(report.skill_items)
+            existing_skill_keys: set[tuple[str, str, str]] = set()
+            for item in self.repository.list():
+                library = str(item.get("library") or LIBRARY_DSH)
+                existing_skill_keys.add(("name", _canonical_identity(library), _canonical_identity(item.get("name"))))
+                local_dir = Path(str(item.get("local_dir") or ""))
+                if not local_dir.is_absolute():
+                    local_dir = repo_root / local_dir
+                if local_dir.is_dir() and local_dir != repo_root:
+                    existing_skill_keys.update(_skill_duplicate_keys(local_dir, library, str(item.get("name") or "")))
+            # Include synced but not yet indexed assets without a mutating
+            # reconcile pass before duplicate checks.
+            for library in (LIBRARY_DSH, LIBRARY_GITHUB):
+                base = repo_root / library
+                if base.is_dir():
+                    for directory in base.iterdir():
+                        if directory.is_dir() and not directory.is_symlink() and not directory.name.startswith("."):
+                            if (directory / "SKILL.md").is_file() or any((directory / name).is_file() for name in MANIFEST_NAMES):
+                                existing_skill_keys.update(_skill_duplicate_keys(directory, library))
             for index, candidate in enumerate(report.skill_items):
                 report_progress(
                     46 + int(29 * (index + 1) / total),
@@ -468,8 +538,14 @@ class ImportService:
                 )
                 target_base = repo_root / candidate.library
                 target = target_base / candidate.dir_name
+                identities = _skill_duplicate_keys(candidate.path, candidate.library, candidate.name_hint)
+                if identities & existing_skill_keys:
+                    result["skills_skipped"].append(f"{candidate.dir_name}：已有相同名称、来源或目录的技能（{candidate.library}）")
+                    result["skills_skipped_duplicate"].append(f"{candidate.dir_name}（{candidate.library}）")
+                    continue
                 if target.exists():
                     result["skills_skipped"].append(f"{candidate.dir_name}：目标目录已存在")
+                    result["skills_skipped_duplicate"].append(f"{candidate.dir_name}（{candidate.library}）")
                     continue
                 try:
                     if self._dir_size(candidate.path) > MAX_SKILL_DIR_BYTES:
@@ -515,6 +591,7 @@ class ImportService:
                             "imported_at": datetime.now(UTC).isoformat(),
                         })
                     result["skills_imported"].append(f"{candidate.dir_name}（{candidate.library}）")
+                    existing_skill_keys.update(identities)
                 except OSError as exc:
                     # 复制中途失败必须清掉半成品目录：否则残留目录会让后续导入永远走「已存在跳过」
                     shutil.rmtree(target, ignore_errors=True)
@@ -550,14 +627,43 @@ class ImportService:
 
         result["memory_count"] = self.memory.stats()["total"]
         result["skill_count"] = len(self.repository.list())
-        report_progress(100, "导入完成")
+        result["summary"] = (
+            f"记忆新增 {result['memory_imported']}，跳过重复 {len(result['memory_skipped_duplicate'])}；"
+            f"技能新增 {len(result['skills_imported'])}，跳过重复 {len(result['skills_skipped_duplicate'])}；"
+            f"失败 {len(result['memory_failed']) + len(result['skills_failed']) + len(result['errors'])}"
+        )
+        report_progress(100, "导入完成", result["summary"])
         return result
 
     # ------------------------------------------------------------- 内部
 
-    def _import_memory_entry(self, notes_dir: Path, candidate: MemoryCandidate, result: dict[str, Any]) -> None:
+    def _import_memory_entry(
+        self,
+        notes_dir: Path,
+        candidate: MemoryCandidate,
+        result: dict[str, Any],
+        *,
+        existing_names: set[str] | None = None,
+        existing_contents: set[str] | None = None,
+    ) -> None:
         raw_name = str(candidate.fields.get("name") or "").strip() or candidate.path.stem
         name = sanitize_name(raw_name)
+        existing_names = existing_names if existing_names is not None else {
+            _canonical_identity(path.stem) for path in notes_dir.glob("*.md")
+        }
+        existing_contents = existing_contents if existing_contents is not None else set()
+        identity = _canonical_identity(name)
+        content_key = _memory_content_key(candidate.body, candidate.fields.get("type"))
+        reason = "已有同名记忆" if identity in existing_names else (
+            "同类型正文内容相同" if content_key and content_key in existing_contents else ""
+        )
+        if reason:
+            # Keep the original response field for API clients; the new field
+            # and details describe all deterministic duplicate skips precisely.
+            result["memory_skipped_same"].append(name)
+            result["memory_skipped_duplicate"].append(name)
+            result["memory_duplicate_details"].append({"name": name, "reason": reason, "file": str(candidate.path)})
+            return
         tags_field = candidate.fields.get("tags")
         title = (
             str(candidate.fields.get("title") or "").strip()
@@ -586,47 +692,18 @@ class ImportService:
             body=candidate.body,
         )
         target = notes_dir / f"{entry.name}.md"
+        # Another process may have added this name while title generation was
+        # running; preserve that file too.
         if target.exists():
-            if self._same_entry(target, entry):
-                result["memory_skipped_same"].append(entry.name)
-                return
-            # 内容不同：自动避让改名导入（尽量做到，不丢数据）；
-            # 避让候选也做内容比对——重复导入同一来源时幂等识别，不无限累积 -3/-4
-            for suffix in range(2, 100):
-                alternative = f"{entry.name}-{suffix}"
-                alternative_path = notes_dir / f"{alternative}.md"
-                if not alternative_path.exists():
-                    result["memory_renamed"].append(f"{entry.name} → {alternative}")
-                    entry.name = alternative
-                    target = alternative_path
-                    break
-                if self._same_entry(alternative_path, entry):
-                    result["memory_skipped_same"].append(alternative)
-                    return
-            else:
-                result["memory_failed"].append(f"{entry.name}: 重名避让失败")
-                return
+            result["memory_skipped_same"].append(name)
+            result["memory_skipped_duplicate"].append(name)
+            result["memory_duplicate_details"].append({"name": name, "reason": "目标文件已存在", "file": str(candidate.path)})
+            return
         _write_text_atomic(target, entry.full_text())
+        existing_names.add(identity)
+        if content_key:
+            existing_contents.add(content_key)
         result["memory_imported"] += 1
-
-    @staticmethod
-    def _same_entry(path: Path, entry: MemoryEntry) -> bool:
-        """实质内容比对：忽略 name（避让改名会改变它）与 updated，其余字段+正文一致即视为同一条。
-
-        只捕获 IO/解析类异常；编程错误（NameError 等）要大声失败，不许静默吞掉。
-        """
-        try:
-            existing = parse_entry_file(path)
-        except (OSError, ValueError):
-            return False
-        return (
-            existing.title == entry.title
-            and existing.description == entry.description
-            and existing.type == entry.type
-            and existing.tags == entry.tags
-            and existing.created == entry.created
-            and existing.body.rstrip() == entry.body.rstrip()
-        )
 
     def _duplicate_groups(self) -> list[list[str]]:
         """标题归一化相同 → 疑似重复组（只报告，不自动合并，留给人在程序里裁决）。"""

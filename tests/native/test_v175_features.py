@@ -9,7 +9,7 @@ from mshub.native.ui import copy_agent_prompt
 
 
 def _primary_agent(button) -> bool:
-    return button is not None and button.text() == "Agent连接提示词" and button.objectName() == "primary"
+    return button is not None and button.text() == "Agent连接提示词" and button.objectName() == "agentButton"
 
 
 def test_every_page_has_agent_prompt_button(qapp, native_facade: MemoryFacade):
@@ -25,9 +25,11 @@ def test_every_page_has_agent_prompt_button(qapp, native_facade: MemoryFacade):
 
 
 def test_secondary_actions_are_ghost_buttons(qapp, native_facade: MemoryFacade):
+    # v1.10.0B（Stitch 结构）：页头动作组分层——主操作（新建记忆）升为 primary，
+    # 次级动作回普通按钮；技能页「添加技能 / 程序」保持幽灵样式。
     window = MainWindow(native_facade)
-    assert window.memory_page.new_window_button.objectName() == "ghost"
-    assert window.memory_page.edit_window_button.objectName() == "ghost"
+    assert window.memory_page.new_window_button.objectName() == "primary"
+    assert window.memory_page.edit_window_button.objectName() == ""
     add_buttons = [b for b in window.skills_page.findChildren(QPushButton) if b.text() == "添加技能 / 程序"]
     assert add_buttons and add_buttons[0].objectName() == "ghost"
     window.close()

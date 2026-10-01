@@ -35,10 +35,14 @@ from .memory_facade import MemoryFacade
 from .state import AppState, ui_settings
 from .task_runner import RequestScope, TaskRunner
 from .job_controller import JobController
-from .theme import PALETTES, ThemeController, ensure_brand_fonts
+from .starfield import StarfieldBackground
+from .theme import PALETTES, ThemeController, current_palette, ensure_brand_fonts, starfield_colors
 from .i18n import LanguageController, localize
 from .branding import apply_brand_icon, show_about
 from .ui import label_controls, show_toast
+from .ui_icons import decorate_controls, tinted_icon
+from .shell_widgets import NAV_COUNT_ROLE, NavigationDelegate, TaskActivityIcon
+from .navigation_symbols import STITCH_NAV_SVGS
 from .. import __version__
 if TYPE_CHECKING:
     from .views.graph_view import GraphView
@@ -48,27 +52,25 @@ from .views.skill_view import SkillsPage, SecurityPage
 from .views.import_view import ImportDialog
 
 
-_NAV_SVGS = {
-    "memory": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 5.5h16v13H4z" fill="none" stroke="COLOR" stroke-width="1.8" stroke-linejoin="round"/><path d="M8 5.5v13M8 9h8M8 13h8M8 17h5" fill="none" stroke="COLOR" stroke-width="1.8" stroke-linecap="round"/></svg>',
-    "graph": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="6" cy="7" r="2.3" fill="none" stroke="COLOR" stroke-width="1.8"/><circle cx="18" cy="5" r="2.3" fill="none" stroke="COLOR" stroke-width="1.8"/><circle cx="17" cy="18" r="2.3" fill="none" stroke="COLOR" stroke-width="1.8"/><path d="m8 7 7.7-1.5M7.3 8.8l8.4 7.3M17.8 7.2l-.6 8.5" fill="none" stroke="COLOR" stroke-width="1.8" stroke-linecap="round"/></svg>',
-    "skills": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4.5 8.5h5l1.5 2h8.5v8.5h-15z" fill="none" stroke="COLOR" stroke-width="1.8" stroke-linejoin="round"/><path d="M4.5 8.5V6.8c0-1 .8-1.8 1.8-1.8h4.2l1.5 2h5.7c1 0 1.8.8 1.8 1.8v1.7" fill="none" stroke="COLOR" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-    "security": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 3.8 19 6.5v5.2c0 4.1-2.8 7.3-7 8.5-4.2-1.2-7-4.4-7-8.5V6.5z" fill="none" stroke="COLOR" stroke-width="1.8" stroke-linejoin="round"/><path d="m8.5 12 2.2 2.2 4.8-4.8" fill="none" stroke="COLOR" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-    "settings": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="COLOR" stroke-width="1.8" stroke-linecap="round"/><circle cx="9" cy="7" r="2" fill="none" stroke="COLOR" stroke-width="1.8"/><circle cx="15" cy="12" r="2" fill="none" stroke="COLOR" stroke-width="1.8"/><circle cx="11" cy="17" r="2" fill="none" stroke="COLOR" stroke-width="1.8"/></svg>',
-}
+_NAV_SVGS = STITCH_NAV_SVGS
 
 
 def _nav_icon(key: str, mode: str) -> QIcon:
+    # v1.10.0C：导航选中态改浅底胶囊（theme.py #nav::item:selected），
+    # 选中图标从白色改主题强调色，浅底上才看得清
     icon = QIcon()
     source = _NAV_SVGS[key]
-    for icon_mode, color in ((QIcon.Mode.Normal, PALETTES[mode]["ink"]), (QIcon.Mode.Selected, "#FFFFFF")):
+    for icon_mode, color in ((QIcon.Mode.Normal, PALETTES[mode]["ink"]), (QIcon.Mode.Selected, PALETTES[mode]["accent"])):
         renderer = QSvgRenderer(QByteArray(source.replace("COLOR", color).encode("utf-8")))
-        pixmap = QPixmap(24, 24)
-        pixmap.fill(Qt.GlobalColor.transparent)
-        painter = QPainter(pixmap)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        renderer.render(painter)
-        painter.end()
-        icon.addPixmap(pixmap, icon_mode)
+        # Exact template symbols, rasterized at common Windows DPI sizes.
+        for size in (20, 25, 30, 40, 60):
+            pixmap = QPixmap(size, size)
+            pixmap.fill(Qt.GlobalColor.transparent)
+            painter = QPainter(pixmap)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+            renderer.render(painter)
+            painter.end()
+            icon.addPixmap(pixmap, icon_mode)
     return icon
 
 
@@ -76,17 +78,10 @@ class _PlaceholderPage(QWidget):
     def __init__(self, title: str, detail: str, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(30, 26, 30, 24)
-        eyebrow = QLabel("NATIVE ROADMAP")
-        eyebrow.setObjectName("eyebrow")
-        heading = QLabel(title)
-        heading.setObjectName("title")
-        message = QLabel(detail)
-        message.setObjectName("muted")
-        message.setWordWrap(True)
-        layout.addWidget(eyebrow)
-        layout.addWidget(heading)
-        layout.addWidget(message)
+        layout.setContentsMargins(20, 14, 20, 12)
+        layout.setSpacing(12)
+        from .ui import HeaderBand
+        layout.addWidget(HeaderBand("NATIVE ROADMAP", title, detail))
         layout.addStretch(1)
 
 
@@ -108,15 +103,20 @@ class MainWindow(QMainWindow):
         self.language.apply(self.facade.config().language)
 
     def _build_ui(self) -> None:
-        container = QWidget()
+        # v1.10.0D（Stitch）：Silk/Mica 画布承载侧栏与内容浮层；页面本身不改变业务路由。
+        container = StarfieldBackground()
+        container.set_colors(*starfield_colors(self.theme.effective_mode))
         outer = QHBoxLayout(container)
-        # v1.7.4：侧边栏改浮动面板——四边 16px 外边距；侧栏与内容区的 16px
-        # 间隙由 splitter 把手宽度提供（把手已透明化）。圆角 20 在 theme.py。
-        outer.setContentsMargins(16, 16, 16, 16)
+        # v1.7.4：侧边栏浮动面板——四边 16px 外边距；侧栏与内容区的 16px
+        # 间隙由 splitter 把手宽度提供（把手已透明化）。圆角 16 在 theme.py。
+        outer.setContentsMargins(8, 8, 8, 8)
         outer.setSpacing(0)
         self.sidebar = QFrame()
         self.sidebar.setObjectName("sidebar")
-        self.sidebar.setMinimumWidth(176)
+        # The 14px brand plus the v1.10.0D micro version pill must remain
+        # readable at the normal desktop breakpoint; 236px is the minimum
+        # width that keeps the three brand elements on one line.
+        self.sidebar.setMinimumWidth(236)
         # v1.7.2：上限从 236 放宽，配合 QSplitter 支持鼠标拖宽侧栏
         self.sidebar.setMaximumWidth(560)
         # v1.7.4：柔和低透明度投影（QSS 不支持 box-shadow，用图形效果实现）
@@ -125,26 +125,37 @@ class MainWindow(QMainWindow):
         self.sidebar_shadow.setOffset(0, 6)
         self.sidebar.setGraphicsEffect(self.sidebar_shadow)
         sidebar_layout = QVBoxLayout(self.sidebar)
-        sidebar_layout.setContentsMargins(16, 26, 16, 20)
+        sidebar_layout.setContentsMargins(12, 18, 12, 12)
         self.brand_label = QLabel("123 MSHub", objectName="brandName")
         self.brand_label.setAccessibleName("123 MSHub")
-        self.brand_label.setFont(QFont(ensure_brand_fonts(), 20, 900))
+        self.brand_label.setFont(QFont(ensure_brand_fonts(), 14, 700))
         self.brand_subtitle = QLabel("本地共享记忆与技能")
         self.brand_subtitle.setObjectName("muted")
         self.brand_logo = QLabel(objectName="brandLogo")
         self.brand_logo.setFixedSize(36, 36)
         brand_row = QHBoxLayout()
-        brand_row.setSpacing(6)
+        # Keep the 14px template brand and the v1.10.0D pill on one line in
+        # the fixed-width Silk sidebar; the compact gap preserves hierarchy.
+        brand_row.setSpacing(2)
         brand_row.addWidget(self.brand_logo)
         brand_row.addWidget(self.brand_label, 1)
+        self.brand_version = QLabel(f"v{__version__}")
+        self.brand_version.setObjectName("versionPill")
+        brand_row.addWidget(self.brand_version)
         sidebar_layout.addLayout(brand_row)
         sidebar_layout.addWidget(self.brand_subtitle)
-        sidebar_layout.addSpacing(22)
+        sidebar_layout.addSpacing(16)
         self.nav = QListWidget()
         self.nav.setObjectName("nav")
+        self.nav.setFrameShape(QFrame.Shape.NoFrame)
+        self.nav.setLineWidth(0)
+        self.nav.setStyleSheet("QListWidget#nav { border: 0; outline: 0; }")
         self.nav.setAccessibleName("主导航")
-        self.nav.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        self.nav.setFont(QFont(ensure_brand_fonts(), 15, 693))
+        # 导航是鼠标/触控入口；去掉 QAbstractItemView 默认的整块焦点框，
+        # 避免模板里的浮起胶囊被一圈高亮矩形包住。点击导航仍会切换页面。
+        self.nav.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.nav.setFont(QFont(ensure_brand_fonts(), 13, QFont.Weight.Bold))
+        self.nav.setItemDelegate(NavigationDelegate(self.nav))
         self.nav.setIconSize(QSize(20, 20))
         # 123UI outline icons with normal/selected theme tints.
         for label, key in (
@@ -157,29 +168,44 @@ class MainWindow(QMainWindow):
             row = QListWidgetItem(label)
             row.setData(Qt.ItemDataRole.UserRole, key)
             row.setData(Qt.ItemDataRole.UserRole + 1, key)
+            if key in {"memory", "skills", "security"}:
+                row.setData(NAV_COUNT_ROLE, 0)
             row.setIcon(_nav_icon(key, self.theme.effective_mode))
             self.nav.addItem(row)
         self.nav.currentRowChanged.connect(self._navigate)
         # v1.9.1（需求 C）：nav 不再直接进侧栏布局，与任务面板组成垂直 QSplitter（见下）
         # v1.6.0：后台任务移到导航栏下半部分（原来在底部 dock 太矮看不清）
+        # v1.10.0（Stitch 需求 4）：悬浮圆角卡——QSS 填充+描边+圆角（theme.py
+        # #jobPanel），配独立小投影；旧版 border-top 衬底已删，直接浮在侧栏上
         self.job_panel = QFrame()
         self.job_panel.setObjectName("jobPanel")
+        self.job_shadow = QGraphicsDropShadowEffect(self.job_panel)
+        self.job_shadow.setBlurRadius(24)
+        self.job_shadow.setOffset(0, 4)
+        self.job_panel.setGraphicsEffect(self.job_shadow)
         job_layout = QVBoxLayout(self.job_panel)
-        job_layout.setContentsMargins(0, 12, 0, 0)
+        job_layout.setContentsMargins(10, 10, 10, 10)
         job_layout.setSpacing(6)
         self._jobs_collapsed = False
         job_header = QHBoxLayout()
+        job_header.setSpacing(7)
+        self.job_activity_icon = TaskActivityIcon(self)
+        job_header.addWidget(self.job_activity_icon, alignment=Qt.AlignmentFlag.AlignVCenter)
         # v1.7.2：标题字号 14px ≥「收起/展开」按钮（13px），原来用 eyebrow 只有 11px 反而更小
         job_title = QLabel("后台任务")
         job_title.setObjectName("jobTitle")
         job_header.addWidget(job_title)
         job_header.addStretch()
         self.job_toggle = QToolButton()
-        self.job_toggle.setText("收起")
+        self.job_toggle.setObjectName("jobToggle")
+        self.job_toggle.setProperty("mshubNoIcon", True)
+        self.job_toggle.setFixedSize(30, 28)
+        self.job_toggle.setIconSize(QSize(16, 16))
+        self.job_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
         self.job_toggle.setCheckable(True)
         self.job_toggle.setAccessibleName("展开或收起后台任务")
         self.job_toggle.toggled.connect(self._toggle_jobs)
-        job_header.addWidget(self.job_toggle)
+        job_header.addWidget(self.job_toggle, alignment=Qt.AlignmentFlag.AlignVCenter)
         job_layout.addLayout(job_header)
         self.job_empty = QLabel("没有正在运行的后台任务")
         self.job_empty.setObjectName("helper")
@@ -221,11 +247,10 @@ class MainWindow(QMainWindow):
         self.job_splitter.addWidget(self.job_panel)
         self.job_splitter.setStretchFactor(0, 1)
         self.job_splitter.setStretchFactor(1, 0)
-        self.job_splitter.setSizes([4000, 800])
         sidebar_layout.addWidget(self.job_splitter, 1)
         # v1.6.0：删除"数据只保存在本机仓库..."提示，"关于"移到设置页
         # v1.7.2：侧栏与内容区改为 QSplitter——支持鼠标拖动分隔条调整侧栏宽度
-        # （查看后台任务长任务名时可以拖宽），不再锁死 176/236。
+        # （查看后台任务长任务名时可以拖宽），不再锁死 236/560。
         # v1.7.4：把手加宽为 16 充当浮动侧栏与内容区的间隙（把手透明，见 theme.py）
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
         self.splitter.setChildrenCollapsible(False)
@@ -233,18 +258,29 @@ class MainWindow(QMainWindow):
         self.splitter.addWidget(self.sidebar)
 
         self.pages = QStackedWidget()
+        self.pages.setObjectName("pages")
         self.memory_page = MemoryPage(self.facade, self.runner, self.jobs)
         # QWebEngine spins up a Chromium renderer and can cost 1–2 seconds at
         # cold start.  Keep only a lightweight placeholder until the user
         # first opens the graph page.
         self.graph_page = None
-        self.graph_placeholder = _PlaceholderPage("共享记忆关系图", "首次打开时加载本地 Sigma 图谱岛。")
+        self.graph_placeholder = _PlaceholderPage("记忆图示", "首次打开时加载本地 Sigma 图谱岛。")
         self.skills_page = SkillsPage(self.facade, self.runner, self.jobs)
         self.security_page = SecurityPage(self.facade, self.runner, self.jobs)
         self.settings_page = SettingsPage(self.facade, self.theme, self.runner, self.jobs, self.language)
+        self.memory_page.totalChanged.connect(lambda total: self._set_nav_count("memory", total))
+        self.skills_page.totalChanged.connect(self._set_asset_counts)
+        self.security_page.totalChanged.connect(self._set_asset_counts)
         for page in (self.memory_page, self.graph_placeholder, self.skills_page, self.security_page, self.settings_page):
             self.pages.addWidget(page)
-        self.splitter.addWidget(self.pages)
+        # v1.10.0（Stitch）：内容区整体坐在半透明页板上浮于点阵背景
+        # （theme.py #pageSheet）；页板内布局零边距，各页自身留白不变。
+        self.page_sheet = QFrame()
+        self.page_sheet.setObjectName("pageSheet")
+        sheet_layout = QVBoxLayout(self.page_sheet)
+        sheet_layout.setContentsMargins(0, 0, 0, 0)
+        sheet_layout.addWidget(self.pages)
+        self.splitter.addWidget(self.page_sheet)
         self.splitter.setStretchFactor(0, 0)
         self.splitter.setStretchFactor(1, 1)
         outer.addWidget(self.splitter, 1)
@@ -258,14 +294,25 @@ class MainWindow(QMainWindow):
         # 清除仓库关联后技能/安全/图谱页会留着旧数据）
         self.settings_page.saved.connect(self._settings_saved)
         self.settings_page.importRequested.connect(self.open_import)
-        self.language.changed.connect(lambda _mode: (localize(self), self.memory_page.retranslate(), self.skills_page.retranslate(), self.security_page.retranslate()))
+        # v1.10.0：语言切换会重译按钮文本——文本→图标映射随之重挂（英文文案不在
+        # 映射表内的按钮自然回退无图标，不报错）
+        self.language.changed.connect(
+            lambda _mode: (
+                localize(self), self.memory_page.retranslate(), self.skills_page.retranslate(),
+                self.security_page.retranslate(), decorate_controls(self, current_palette()),
+            )
+        )
         self.jobs.repositoryChanged.connect(self._repository_changed)
         # v1.6.0：后台任务已移到导航栏下半部分，不再用底部 dock
         self.jobs.changed.connect(self._refresh_jobs)
+        self.jobs.completed.connect(self._job_completed)
         self._refresh_jobs()
         self._verify_fonts()
         self._install_shortcuts()
         label_controls(self)
+        # v1.10.0（Stitch）：按钮/搜索框按文本映射挂图标；主题切换后随 _theme_changed 重染
+        self.workspace = container
+        decorate_controls(self, current_palette())
         # v1.9.1（需求 A）：启动 8 秒后后台查一次新版本（可在设置页关）。
         # 延迟挂网是刻意的——不能回退 v1.8.1 的首帧优化；singleShot 排在
         # QApplication 就绪之后（v1.8.1 教训：排在创建之前会静默不触发）。
@@ -308,6 +355,8 @@ class MainWindow(QMainWindow):
 
     def _settings_saved(self, _config) -> None:
         """v1.7.4：设置保存（含两个清除入口）后，把所有数据页拉一次新。"""
+        for key in ("memory", "skills", "security"):
+            self._set_nav_count(key, 0)
         self.memory_page.refresh()
         self.skills_page.refresh()
         self.security_page.refresh()
@@ -315,11 +364,14 @@ class MainWindow(QMainWindow):
             self.graph_page.refresh_graph()
 
     def _apply_sidebar_shadow(self, mode: str) -> None:
-        """v1.7.4：浮动侧栏投影颜色随主题——暗色下加深一档保证可见。"""
+        """v1.7.4：浮动侧栏投影颜色随主题；v1.10.0 任务悬浮卡投影同走这里。"""
         if not hasattr(self, "sidebar_shadow"):
             return
-        color = QColor(0, 0, 0, 150) if mode == "dark" else QColor(23, 27, 35, 60)
+        dark = mode == "dark"
+        color = QColor(0, 0, 0, 150) if dark else QColor(23, 27, 35, 60)
         self.sidebar_shadow.setColor(color)
+        if hasattr(self, "job_shadow"):
+            self.job_shadow.setColor(QColor(0, 0, 0, 130) if dark else QColor(23, 27, 35, 45))
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
@@ -328,9 +380,10 @@ class MainWindow(QMainWindow):
         if hasattr(self, "brand_label"):
             brand_size = 36
             self.brand_logo.setFixedSize(brand_size, brand_size)
-            self.brand_label.setFont(QFont(ensure_brand_fonts(), 17 if compact else 20, 900))
+            self.brand_label.setFont(QFont(ensure_brand_fonts(), 13 if compact else 14, 700))
             self.brand_label.setText("123" if compact else "123 MSHub")
             self.brand_subtitle.setVisible(not compact)
+            self.brand_version.setVisible(not compact)
             self.brand_logo.setPixmap(apply_brand_icon(self.theme.effective_mode).pixmap(self.brand_logo.size()))
 
     def _ui_settings(self) -> QSettings:
@@ -342,18 +395,56 @@ class MainWindow(QMainWindow):
         try:
             width = int(width)
         except (TypeError, ValueError):
+            # 236px keeps the template's 14px brand, version pill and icon on
+            # one line at the normal desktop width without text elision.
             width = 236
-        self.splitter.setSizes([max(176, min(560, width)), 10000])
+        self.splitter.setSizes([max(236, min(560, width)), 10000])
 
     def _save_sidebar_width(self) -> None:
         width = self.sidebar.width()
-        if 176 <= width <= 560:
+        if 236 <= width <= 560:
             self._ui_settings().setValue("mainSidebar/width", width)
+
+    # ---- v1.10.0：后台任务面板高度三修复（默认可见五项 / 记忆用户调整 / 收起降到最低） ----
+
+    def _job_panel_height(self) -> int:
+        """用户记忆的任务面板高度；无记忆或越界时用紧凑默认 132px。"""
+        value = self._ui_settings().value("jobPanel/height")
+        try:
+            panel = int(value)
+        except (TypeError, ValueError):
+            panel = 0
+        return panel if 44 <= panel <= 720 else 132
+
+    def _apply_job_layout(self, panel_height: int | None = None) -> None:
+        """按像素精确分配导航/任务面板高度——显示后调用（此时分隔条总高已知）。
+
+        v1.9.1 用比例式 setSizes([4000, 800])，实际分配受窗口高度/DPI/布局时序
+        影响不可控，用户侧出现过面板占大半侧栏、导航只剩两项的情况。这里保证：
+        面板 = 指定高度（默认取记忆值），导航 = 其余全部（保底 5 项完整可见）。
+        """
+        total = self.job_splitter.height() or self.sidebar.height() - 120 or 640
+        panel = panel_height if panel_height is not None else self._job_panel_height()
+        panel = max(44, min(panel, total - 260))
+        self.job_splitter.setSizes([max(total - panel, 260), panel])
+
+    def showEvent(self, event) -> None:  # noqa: N802 - Qt virtual method name
+        super().showEvent(event)
+        # 首次显示布局稳定后应用任务面板布局（singleShot(0) 等布局结算完成）
+        if not getattr(self, "_job_layout_applied", False):
+            self._job_layout_applied = True
+            QTimer.singleShot(0, self._apply_job_layout)
+
+    def _save_job_layout(self) -> None:
+        if not self._jobs_collapsed:
+            self._ui_settings().setValue("jobPanel/height", self.job_panel.height())
 
     def _refresh_jobs(self) -> None:
         if not hasattr(self, "job_table"):
             return
         rows = self.jobs.list()
+        self.job_activity_icon.set_running(any(j["status"] == "running" for j in rows))
+        self._update_job_toggle()
         has_finished = any(j["status"] != "running" for j in rows)
         self.job_empty.setVisible(not rows and not self._jobs_collapsed)
         self.job_table.setVisible(bool(rows) and not self._jobs_collapsed)
@@ -364,6 +455,9 @@ class MainWindow(QMainWindow):
             label_item = QTableWidgetItem(str(job["label"]))
             # v1.7.4：侧栏较窄时任务名可能省略，悬停看全名
             label_item.setToolTip(str(job["label"]))
+            result = job.get("result")
+            if isinstance(result, dict) and result.get("summary"):
+                label_item.setToolTip(f"{job['label']}\n{result['summary']}")
             self.job_table.setItem(row, 0, label_item)
             state = {"running": "运行中", "done": "完成", "error": "失败"}.get(job["status"], str(job["status"]))
             state_item = QTableWidgetItem(state)
@@ -382,10 +476,46 @@ class MainWindow(QMainWindow):
         """v1.7.3：一键清除已完成/失败的任务记录，运行中的保留。"""
         self.jobs.clear_finished()
 
+    def _job_completed(self, job) -> None:
+        result = job.get("result")
+        if isinstance(result, dict) and result.get("summary"):
+            self.statusBar().showMessage(str(result["summary"]))
+            show_toast(self.nav, str(result["summary"]), 7000)
+
     def _toggle_jobs(self, collapsed: bool) -> None:
         self._jobs_collapsed = bool(collapsed)
-        self.job_toggle.setText("展开" if collapsed else "收起")
+        self._update_job_toggle()
+        if collapsed:
+            # v1.10.0：收起 = 面板真降到最低（只留标题行），导航区即时放大；
+            # 原来只藏内容不改高度，收起后仍看不到五个导航项
+            self._jobs_expanded_height = max(self.job_panel.height(), 44)
+            self.job_panel.setMinimumHeight(50)
+            self._apply_job_layout(50)
+        else:
+            self.job_panel.setMinimumHeight(120)
+            self._apply_job_layout(getattr(self, "_jobs_expanded_height", 0) or None)
         self._refresh_jobs()
+
+    def _update_job_toggle(self) -> None:
+        collapsed = self._jobs_collapsed
+        name = "chevron_up" if collapsed else "chevron_down"
+        self.job_toggle.setIcon(tinted_icon(name, current_palette()["muted"], 24))
+        self.job_toggle.setProperty("direction", "up" if collapsed else "down")
+        self.job_toggle.setToolTip("展开后台任务" if collapsed else "收起后台任务")
+
+    def _set_nav_count(self, key: str, total: int) -> None:
+        for index in range(self.nav.count()):
+            item = self.nav.item(index)
+            if item.data(Qt.ItemDataRole.UserRole) == key:
+                item.setData(NAV_COUNT_ROLE, max(0, int(total)))
+                item.setToolTip(f"{item.text()} · {max(0, int(total))}")
+                break
+
+    def _set_asset_counts(self, total: int) -> None:
+        # Safety covers the same full asset inventory; hiding passed items or
+        # filtering a skills page must not change the sidebar's total.
+        self._set_nav_count("skills", total)
+        self._set_nav_count("security", total)
 
     def _repository_changed(self) -> None:
         self.memory_page.refresh()
@@ -549,6 +679,11 @@ class MainWindow(QMainWindow):
             graph = self._ensure_graph_page()
             self.pages.setCurrentWidget(graph)
             graph.set_theme(self.theme.effective_mode)
+            # v1.10.0：启动后首次进入图谱页自动加载一次数据——原来预热只建视图
+            # 不装数据，用户每次都要手点「刷新」才见画面
+            if not getattr(self, "_graph_auto_refreshed", False):
+                self._graph_auto_refreshed = True
+                graph.refresh_graph()
         else:
             self.pages.setCurrentIndex(row)
         if row == 0:
@@ -557,6 +692,12 @@ class MainWindow(QMainWindow):
     def _theme_changed(self, mode: str) -> None:
         self.state.update(theme=mode)
         self._apply_sidebar_shadow(mode)
+        # v1.10.0（Stitch）：点阵底板换色 + 图标重染
+        if hasattr(self, "workspace"):
+            self.workspace.set_colors(*starfield_colors(mode))
+        decorate_controls(self, PALETTES.get(mode, {}))
+        self._update_job_toggle()
+        self.job_activity_icon.update()
         icon = apply_brand_icon(mode)
         if hasattr(self, "brand_logo"):
             self.brand_logo.setPixmap(icon.pixmap(self.brand_logo.size()))
@@ -575,7 +716,7 @@ class MainWindow(QMainWindow):
         expected = ensure_brand_fonts()
         for name, widget in (("brand", self.brand_label), ("nav", self.nav)):
             actual = QFontInfo(widget.font()).family()
-            if expected == "Dream Han Sans CN" and actual != expected:
+            if actual != expected:
                 logging.getLogger(__name__).warning("%s font fallback: expected %s, got %s", name, expected, actual)
 
     def open_memory(self, name: str) -> None:
@@ -587,6 +728,7 @@ class MainWindow(QMainWindow):
             event.ignore()
             return
         self._save_sidebar_width()
+        self._save_job_layout()
         self.jobs.shutdown()
         self.runner.pool.waitForDone(1500)
         event.accept()

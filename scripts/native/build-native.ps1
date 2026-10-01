@@ -49,8 +49,9 @@ foreach ($required in @(
     (Join-Path $internal "PySide6\resources\v8_context_snapshot.bin"),
     (Join-Path $internal "PySide6\translations\qtwebengine_locales\zh-CN.pak"),
     (Join-Path $internal "PySide6\translations\qtwebengine_locales\en-US.pak"),
-    (Join-Path $internal "mshub\native\icons\123mshublogo.ico"),
-    (Join-Path $internal "mshub\native\icons\123mshublogohei.ico")
+    (Join-Path $internal "mshub\native\icons\NEWmshublogo.ico"),
+    (Join-Path $internal "mshub\native\icons\new123uilogo.ico"),
+    (Join-Path $internal "mshub\native\icons\MATERIAL-SYMBOLS-LICENSE.txt")
 )) {
     if (-not (Test-Path -LiteralPath $required)) { throw "缺少 onedir 资源：$required" }
 }

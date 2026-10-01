@@ -12,18 +12,20 @@ from PySide6.QtWidgets import (
     QWidget, QCheckBox, QScrollArea, QToolButton, QApplication, QSizePolicy,
 )
 
+from ...memory import TYPE_LABELS
 from ..memory_facade import MemoryFacade
 from ..state import ui_settings
 from ..task_runner import TaskRunner, RequestScope
 from ..widgets import MarkdownView
 from ..i18n import tr
 from ..ui import (SHIFT_RANGE_HINT, AdaptivePage, ElideLabel, FlowLayout, GuardedDialog,
-                  ShiftRangeCheckMixin, copy_agent_prompt, flow_bar, label_controls,
+                  HeaderBand, ShiftRangeCheckMixin, copy_agent_prompt, flow_bar, label_controls,
                   make_agent_prompt_button, prepare_dialog)
-from ..theme import MUTED_TEXT_ON_SELECTION, PALETTES, ROW_TEXT_ON_SELECTION, current_palette as _current_palette
+from ..theme import PALETTES, current_palette as _current_palette, system_font_family
 
 TYPE_OPTIONS = [("用户", "user"), ("项目", "project"), ("参考", "reference"), ("反馈", "feedback")]
-TYPE_LABELS = dict(TYPE_OPTIONS)
+# v1.10.0C 修复：分类标签映射统一用核心层 mshub.memory.TYPE_LABELS（token键→中文），
+# 原本地 TYPE_LABELS = dict(TYPE_OPTIONS) 方向写反（中文→token），胶囊文字恒为"参考"。
 
 # v1.7.2：软删除的真实语义（用户问"删除之后保存备份原件备查吗"）——移入回收目录、原件保留
 SOFT_DELETE_MEMORY_TIP = (
@@ -33,19 +35,29 @@ SOFT_DELETE_MEMORY_TIP = (
 )
 
 
-def _type_color(kind: str) -> str:
-    stylesheet = QApplication.instance().styleSheet() if QApplication.instance() else ""
-    mode = "dark" if "#0B0E14" in stylesheet else "light"
-    return PALETTES.get(mode, {}).get(kind, PALETTES.get(mode, {}).get("accent", "#0148D2"))
-
-
 def _type_colors_cached() -> dict:
     """ocr 审查修复：单次刷新内亮暗模式不变——一次算好四类颜色，行循环只查表，
-    不再每行扫描整份应用级联样式表（搜索/筛选热路径）。"""
+    不再每行扫描整份应用级联样式表（搜索/筛选热路径）。
+    v1.10.0C 修复：TYPE_OPTIONS 是 (标签, token键) 对，原来按标签取色全部
+    落空到 accent——分类胶囊失去四色区分。"""
     stylesheet = QApplication.instance().styleSheet() if QApplication.instance() else ""
     mode = "dark" if "#0B0E14" in stylesheet else "light"
     palette = PALETTES.get(mode, {})
-    return {kind: palette.get(kind, palette.get("accent", "#0148D2")) for kind, _value in TYPE_OPTIONS}
+    return {value: palette.get(value, palette.get("accent", "#4F46E5")) for _label, value in TYPE_OPTIONS}
+
+
+def _type_pill_style(color: str) -> str:
+    """Return the compact, softly tinted category capsule from the Stitch table."""
+    raw = str(color).lstrip("#")
+    try:
+        r, g, b = (int(raw[index:index + 2], 16) for index in (0, 2, 4))
+    except (TypeError, ValueError):
+        r, g, b = 79, 70, 229
+    return (
+        f"color:{color};border:1px solid rgba({r},{g},{b},0.45);"
+        f"background:rgba({r},{g},{b},0.12);border-radius:10px;"
+        "font-size:10px;font-weight:650;padding:1px 0;"
+    )
 
 
 def _error(payload: object) -> str:
@@ -53,6 +65,7 @@ def _error(payload: object) -> str:
 
 
 class MemoryPage(ShiftRangeCheckMixin, AdaptivePage):
+    totalChanged = Signal(int)
     openGraphRequested = Signal()
     statusMessage = Signal(str)
     promptCopied = Signal()
@@ -64,22 +77,22 @@ class MemoryPage(ShiftRangeCheckMixin, AdaptivePage):
         self._timer = QTimer(self); self._timer.setSingleShot(True); self._timer.setInterval(300); self._timer.timeout.connect(self._refresh_now)
         self._name_timer = QTimer(self); self._name_timer.setSingleShot(True); self._name_timer.setInterval(250); self._name_timer.timeout.connect(self._check_name)
         self._request_id = 0; self._current_name = ""; self._creating = False; self._loading = False; self._dirty = False; self._refreshing_listing = False; self._items: list[dict[str, Any]] = []
-        # v1.7.4：每行的文字控件引用，用于选中行皇家蓝高亮时的文字配色切换
+        # 每行的文字控件引用：刷新/重译后统一复位行内样式（见 _paint_selected_rows）
         self._row_meta: list[dict[str, Any]] = []
         self._build_ui()
 
     def _build_ui(self):
-        root = QVBoxLayout(self); root.setContentsMargins(28, 24, 28, 16); root.setSpacing(16)
-        head = QHBoxLayout(); head.setSpacing(10); title_box = QVBoxLayout(); title_box.setSpacing(5); eyebrow = QLabel("共享记忆"); eyebrow.setObjectName("eyebrow"); title = QLabel("记忆仓库"); title.setObjectName("title"); sub = QLabel("条目文件是事实源；搜索、整理与收编都可回看。 "); sub.setObjectName("muted"); title_box.addWidget(eyebrow); title_box.addWidget(title); title_box.addWidget(sub); head.addLayout(title_box); head.addStretch()
-        # v1.7.5：右上角固定「Agent连接提示词」皇家蓝按钮；同页动作改幽灵样式放左边
-        self.new_window_button = QPushButton("新建记忆"); self.new_window_button.setObjectName("ghost"); self.new_window_button.clicked.connect(self.open_new_editor); head.addWidget(self.new_window_button)
-        self.edit_window_button = QPushButton("编辑选中"); self.edit_window_button.setObjectName("ghost"); self.edit_window_button.clicked.connect(self.edit_selected); head.addWidget(self.edit_window_button)
-        self.agent_button = make_agent_prompt_button(self, self.copy_prompt); head.addWidget(self.agent_button); root.addLayout(head)
+        root = QVBoxLayout(self); root.setContentsMargins(20, 14, 20, 12); root.setSpacing(12)
+        # v1.10.0B（Stitch 结构）：页头 = 横向信息带（眉标胶囊+大标题+分隔线+副题，动作组右侧）
+        band = HeaderBand("共享记忆", "记忆仓库", "条目文件是事实源；搜索、整理与收编都可回看。")
+        self.new_window_button = QPushButton("新建记忆"); self.new_window_button.setObjectName("primary"); self.new_window_button.clicked.connect(self.open_new_editor); band.actions.addWidget(self.new_window_button)
+        self.edit_window_button = QPushButton("编辑选中"); self.edit_window_button.clicked.connect(self.edit_selected); band.actions.addWidget(self.edit_window_button)
+        self.agent_button = make_agent_prompt_button(self, self.copy_prompt); band.actions.addWidget(self.agent_button); root.addWidget(band)
         stats_widget = QWidget(); self.stats_row = FlowLayout(stats_widget, spacing=8); self.stat_buttons: dict[str, QPushButton] = {}
         for key, label in (("total", "总数"), ("user", "用户"), ("project", "项目"), ("reference", "参考"), ("feedback", "反馈"), ("this_week", "本周新增"), ("inbox_pending", "待收编")):
-            # v1.9.0（需求 5）：统计筛选行与技能仓库/安全中心统一为普通功能按钮视觉
-            # （去掉 #stat 描边浅底胶囊样式与 flat），点击行为不变。
-            button = QPushButton(f"{label} 0"); button.setMinimumHeight(40); button.setProperty("i18n_stat", label); button.setProperty("i18n_count", "0")
+            # v1.10.0D：Stitch 统计胶囊使用共享 token；沿用独立 metric
+            # 对象名，避免改变既有 v1.9.0 的 #stat 兼容契约。
+            button = QPushButton(f"{label} 0"); button.setObjectName("metric"); button.setMinimumHeight(30); button.setProperty("i18n_stat", label); button.setProperty("i18n_count", "0")
             button.clicked.connect(lambda _checked=False, key=key: self._stat_filter(key)); self.stat_buttons[key] = button; self.stats_row.addWidget(button)
         # Keep the chips readable in their own compact line. The batch bar is
         # folded until a row is checked, so this still removes one full row.
@@ -90,10 +103,28 @@ class MemoryPage(ShiftRangeCheckMixin, AdaptivePage):
         self.inbox_button = QPushButton("投递箱"); self.inbox_button.clicked.connect(self.open_inbox); toolbar.addWidget(self.inbox_button); root.addLayout(toolbar)
         self.batch_bar = QWidget(); batch = FlowLayout(self.batch_bar, spacing=8); self.batch_hint = QLabel("勾选列表中的条目进行批量操作"); self.batch_hint.setObjectName("muted"); batch.addWidget(self.batch_hint); self.batch_type = QComboBox(); self.batch_type.addItem("批量改分类…", ""); [self.batch_type.addItem(label, value) for label, value in TYPE_OPTIONS]; batch.addWidget(self.batch_type); self.batch_type.activated.connect(self.batch_update_type); self.batch_tags = QLineEdit(); self.batch_tags.setPlaceholderText("批量标签（逗号）"); self.batch_tags.setMaximumWidth(180); batch.addWidget(self.batch_tags); bt = QPushButton("应用标签"); bt.clicked.connect(self.batch_update_tags); batch.addWidget(bt); ai = QPushButton("AI 补全主题"); ai.clicked.connect(self.batch_ai); batch.addWidget(ai); bd = QPushButton("批量删除"); bd.setObjectName("danger"); bd.setToolTip(SOFT_DELETE_MEMORY_TIP + "\n（批量操作对勾选的每一条执行同样的软删除；列表聚焦时也可按 Delete 键触发。）"); bd.clicked.connect(self.batch_delete); batch.addWidget(bd); root.addWidget(self.batch_bar); self.batch_bar.hide()
         splitter = QSplitter(Qt.Orientation.Horizontal); splitter.setChildrenCollapsible(False)
+        # v1.10.0B（Stitch 结构）：列表 = 表格卡——列头条 + 数据行（圆角卡容器见
+        # theme.py #listCard；列宽与行内列宽一一对应保证纵向对齐）
+        list_card = QFrame(); list_card.setObjectName("listCard")
+        card_layout = QVBoxLayout(list_card); card_layout.setContentsMargins(0, 0, 0, 0); card_layout.setSpacing(0)
+        header_row = QWidget(); header_row.setObjectName("listHeader")
+        hlay = QHBoxLayout(header_row); hlay.setContentsMargins(14, 7, 14, 7); hlay.setSpacing(10)
+        self.master_check = QCheckBox(); self.master_check.setAccessibleName("全选条目")
+        self.master_check.setToolTip("勾选/取消当前列表全部条目")
+        self.master_check.toggled.connect(self._toggle_all_rows)
+        hlay.addWidget(self.master_check)
+        hlay.addWidget(QLabel("记忆条目 / 语义摘要"))
+        hlay.addStretch(1)
+        # 列宽常量与数据行严格一致（行内同名列用 setFixedWidth 对齐）
+        self._col_tags, self._col_type, self._col_source, self._col_time = 116, 62, 104, 86
+        for text, width in (("关联标签", self._col_tags), ("分类", self._col_type), ("来源渠道", self._col_source), ("同步时间", self._col_time)):
+            col = QLabel(text); col.setFixedWidth(width); col.setAlignment(Qt.AlignmentFlag.AlignRight); hlay.addWidget(col)
+        card_layout.addWidget(header_row)
         self.entry_list = QListWidget(); self.entry_list.setObjectName("memoryList"); self.entry_list.setAccessibleName("记忆条目列表"); self.entry_list.setAccessibleDescription("使用方向键选择，Enter 或双击编辑"); self.entry_list.setMinimumWidth(340); self.entry_list.currentItemChanged.connect(self._selection_changed); self.entry_list.itemDoubleClicked.connect(lambda _item: self.edit_selected())
-        # v1.7.4：选中行整行皇家蓝高亮（QSS 画底色），行内自绘文字色随之切换
+        # 行选中/刷新后统一复位行内文字样式（v1.10.0C 起选中为主题色浅染，不再反白）
         self.entry_list.itemSelectionChanged.connect(self._paint_selected_rows)
-        splitter.addWidget(self.entry_list)
+        card_layout.addWidget(self.entry_list, 1)
+        splitter.addWidget(list_card)
         self.empty_card = QFrame(objectName="emptyCard"); empty_layout = QVBoxLayout(self.empty_card); empty_layout.setContentsMargins(36, 36, 36, 36); empty_layout.setSpacing(10); empty_title = QLabel("还没有记忆条目"); empty_title.setObjectName("title"); empty_layout.addWidget(empty_title, alignment=Qt.AlignmentFlag.AlignHCenter); empty_layout.addWidget(QLabel("先建立一条可复用的共享记忆，或者用右上角「Agent连接提示词」连接你的 Agent。", objectName="muted"), alignment=Qt.AlignmentFlag.AlignHCenter); empty_actions = QHBoxLayout(); empty_new = QPushButton("新建一条记忆"); empty_new.setObjectName("primary"); empty_new.clicked.connect(self.open_new_editor); empty_prompt = QPushButton("Agent连接提示词"); empty_prompt.clicked.connect(self.copy_prompt); empty_actions.addWidget(empty_new); empty_actions.addWidget(empty_prompt); empty_layout.addLayout(empty_actions); root.addWidget(self.empty_card); self.empty_card.hide()
         detail = QFrame(); detail.setObjectName("surface"); dl = QVBoxLayout(detail); dl.setContentsMargins(20, 18, 20, 18); dl.setSpacing(12)
         dh = QHBoxLayout(); self.detail_title = QLabel("选择一条记忆"); self.detail_title.setObjectName("sectionTitle"); dh.addWidget(self.detail_title); dh.addStretch(); self.new_button = QPushButton("新建"); self.new_button.setObjectName("primary"); self.new_button.clicked.connect(self.new_entry); dh.addWidget(self.new_button); dl.addLayout(dh)
@@ -103,7 +134,7 @@ class MemoryPage(ShiftRangeCheckMixin, AdaptivePage):
         self.type_edit = QComboBox(); [self.type_edit.addItem(label, value) for label, value in TYPE_OPTIONS]; form.addRow("类型", self.type_edit); self.tags_edit = QLineEdit(); self.tags_edit.setPlaceholderText("Enter 或中英文逗号确认，最多 12 个"); form.addRow("标签", self.tags_edit); dl.addLayout(form)
         self.created_label = QLabel(""); self.created_label.setObjectName("muted"); self.updated_label = QLabel(""); self.updated_label.setObjectName("muted"); dl.addWidget(self.created_label); dl.addWidget(self.updated_label)
         mode = QHBoxLayout(); self.edit_mode = QPushButton("编辑"); self.preview_mode = QPushButton("预览"); self.edit_mode.clicked.connect(lambda: self.body_stack.setCurrentIndex(0)); self.preview_mode.clicked.connect(self._show_preview); mode.addWidget(QLabel("正文")); mode.addStretch(); mode.addWidget(self.edit_mode); mode.addWidget(self.preview_mode); dl.addLayout(mode)
-        self.body_stack = QStackedWidget(); self.body_edit = QPlainTextEdit(); self.body_edit.setFont(QFont("Cascadia Mono", 10)); self.body_edit.setPlaceholderText("正文支持 [[双链]]；显式保存，不自动保存。"); self.preview = MarkdownView(); self.body_stack.addWidget(self.body_edit); self.body_stack.addWidget(self.preview); dl.addWidget(self.body_stack, 1)
+        self.body_stack = QStackedWidget(); self.body_edit = QPlainTextEdit(); self.body_edit.setFont(QFont(system_font_family(), 10)); self.body_edit.setPlaceholderText("正文支持 [[双链]]；显式保存，不自动保存。"); self.preview = MarkdownView(); self.body_stack.addWidget(self.body_edit); self.body_stack.addWidget(self.preview); dl.addWidget(self.body_stack, 1)
         links_row = QHBoxLayout(); links_row.addWidget(QLabel("双链")); self.links_box = links_row; links_row.addStretch(); dl.addLayout(links_row)
         actions = QHBoxLayout(); self.status = QLabel(""); self.status.setObjectName("status"); actions.addWidget(self.status, 1); self.delete_button = QPushButton("软删除"); self.delete_button.setObjectName("danger"); self.delete_button.setToolTip(SOFT_DELETE_MEMORY_TIP); self.delete_button.clicked.connect(self.delete_current); actions.addWidget(self.delete_button); self.hard_delete_button = QPushButton("删除"); self.hard_delete_button.setObjectName("danger"); self.hard_delete_button.setToolTip("彻底删除：直接删除条目文件，不进入 memory-trash 回收目录，删除后无法恢复。"); self.hard_delete_button.clicked.connect(self.hard_delete_current); actions.addWidget(self.hard_delete_button); self.save_button = QPushButton("保存"); self.save_button.setObjectName("primary"); self.save_button.clicked.connect(self.save_current); actions.addWidget(self.save_button); dl.addLayout(actions)
         self.editor_dialog = GuardedDialog(self, self.can_close_editor); self.editor_dialog.setWindowTitle("记忆编辑"); self.editor_dialog.setModal(False); self.editor_dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, False); editor_layout = QVBoxLayout(self.editor_dialog); editor_layout.setContentsMargins(0, 0, 0, 0); editor_layout.addWidget(detail); prepare_dialog(self.editor_dialog); self._restore_editor_geometry(); self.editor_dialog.finished.connect(lambda _code: self._save_editor_geometry()); self.editor_dialog.hide(); self.editor_save_shortcut = QShortcut(QKeySequence("Ctrl+S"), self.editor_dialog); self.editor_save_shortcut.activated.connect(self.save_current); self.edit_window_button.setEnabled(False); self.content_splitter = splitter; splitter.setSizes([1100, 0]); root.addWidget(splitter, 1)
@@ -173,10 +204,10 @@ class MemoryPage(ShiftRangeCheckMixin, AdaptivePage):
                 box.setObjectName("memoryRow")
                 box.setAccessibleName(str(item.get("title") or item.get("name") or "记忆条目"))
                 box.setAccessibleDescription("双击编辑；使用复选框加入批量操作")
-                box.setFixedHeight(64)
+                box.setFixedHeight(52)
                 lay = QHBoxLayout(box)
-                lay.setContentsMargins(8, 4, 8, 4)
-                lay.setSpacing(8)
+                lay.setContentsMargins(14, 4, 14, 4)
+                lay.setSpacing(10)
                 check = QCheckBox()
                 check.setAccessibleName(f"选择 {item.get('title') or item.get('name') or '记忆条目'}")
                 check.setProperty("memory_name", item.get("name", ""))
@@ -187,34 +218,53 @@ class MemoryPage(ShiftRangeCheckMixin, AdaptivePage):
                 text = QVBoxLayout()
                 text.setContentsMargins(0, 0, 0, 0)
                 text.setSpacing(1)
-                title_row = QHBoxLayout()
-                title_row.setContentsMargins(0, 0, 0, 0)
                 title = ElideLabel(str(item.get("title") or item.get("name") or ""))
-                title.setStyleSheet("font-size:14px;font-weight:650")
-                title_row.addWidget(title, 1)
-                type_label = tr(TYPE_LABELS.get(item.get("type"), "参考"))
-                source_label = tr("手工") if item.get("source") == "manual" else str(item.get("source") or "")
-                badge = ElideLabel(f"{type_label} · {source_label} · {', '.join(item.get('tags') or [])} · {str(item.get('updated',''))[:10]}")
-                badge.setMinimumWidth(140)
-                badge.setMaximumWidth(320)
-                badge.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
-                type_color = type_colors.get(item.get("type"), type_colors.get("reference", "#0148D2"))
-                badge.setStyleSheet(f"color:{type_color};font-size:12px;font-weight:550")
-                badge.setToolTip(badge.text())
-                title_row.addWidget(badge)
+                title.setObjectName("rowTitle")
                 desc = ElideLabel(str(item.get("description") or ""))
-                desc.setObjectName("muted")
-                desc.setStyleSheet("font-size:12px;font-weight:450")
-                desc.setWordWrap(False)
+                desc.setObjectName("rowDesc")
                 desc.setToolTip(desc.text())
-                text.addLayout(title_row)
-                text.addWidget(desc)
+                text.addWidget(title, 1)
+                text.addWidget(desc, 1)
                 lay.addLayout(text, 1)
-                row.setSizeHint(QSize(0, 64))
+                # v1.10.0B（Stitch 结构）：右侧四列——标签 / 分类胶囊 / 来源 / 等宽时间，
+                # 列宽与 #listHeader 列头一一对应；类型胶囊色随 taxonomy token 走
+                type_key = str(item.get("type") or "reference")
+                tags = ElideLabel(" · ".join((item.get("tags") or [])[:3]))
+                tags.setObjectName("rowCol")
+                # v1.10.0C：ElideLabel 默认 Ignored 策略会让 setFixedWidth 失效
+                # （固定列不被布局计入、右侧列重叠越界），固定列必须改回 Fixed
+                tags.setFixedWidth(self._col_tags)
+                tags.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
+                tags.setAlignment(Qt.AlignmentFlag.AlignRight)
+                tags.setToolTip("、".join(item.get("tags") or []))
+                lay.addWidget(tags)
+                type_color = type_colors.get(type_key, type_colors.get("reference", "#4F46E5"))
+                pill = QLabel(tr(TYPE_LABELS.get(type_key, "参考")))
+                pill.setObjectName("typePill")
+                pill.setProperty("pillType", type_key)
+                pill.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                pill.setFixedWidth(self._col_type - 12)
+                pill.setFixedHeight(22)
+                pill.setStyleSheet(_type_pill_style(type_color))
+                lay.addWidget(pill, alignment=Qt.AlignmentFlag.AlignCenter)
+                source_label = tr("手工") if item.get("source") == "manual" else str(item.get("source") or "—")
+                source = ElideLabel(source_label)
+                source.setObjectName("rowCol")
+                source.setFixedWidth(self._col_source)
+                source.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
+                source.setAlignment(Qt.AlignmentFlag.AlignRight)
+                lay.addWidget(source)
+                updated = ElideLabel(str(item.get("updated", ""))[:10])
+                updated.setObjectName("rowTime")
+                updated.setFixedWidth(self._col_time)
+                updated.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
+                updated.setAlignment(Qt.AlignmentFlag.AlignRight)
+                lay.addWidget(updated)
+                row.setSizeHint(QSize(0, 52))
                 self.entry_list.addItem(row)
                 self.entry_list.setItemWidget(row, box)
-                # v1.7.4：登记行内文字控件，选中态配色切换用
-                self._row_meta.append({"title": title, "badge": badge, "desc": desc, "color": type_color})
+                # 登记行内文字控件，刷新/重译后复位样式用
+                self._row_meta.append({"title": title, "desc": desc, "tags": tags, "pill": pill, "source": source, "time": updated, "color": type_color})
             # Restore the previous row while signals are blocked. A refresh
             # must never turn a dirty editor into a selection confirmation.
             target = -1
@@ -231,7 +281,7 @@ class MemoryPage(ShiftRangeCheckMixin, AdaptivePage):
         finally:
             self.entry_list.blockSignals(was_blocked)
             self._refreshing_listing = False
-        # v1.7.4：刷新/保存后滚回原选中行（不再跳回列表开头），并按选中态刷行内文字色
+        # 刷新/保存后滚回原选中行（不再跳回列表开头），并复位行内文字样式
         if target >= 0:
             current_item = self.entry_list.item(target)
             if current_item is not None:
@@ -243,6 +293,7 @@ class MemoryPage(ShiftRangeCheckMixin, AdaptivePage):
 
     def _apply_stats(self, result):
         stats = result.get("stats") or {"total": len(self._items), "inbox_pending": result.get("inbox_pending", 0), "types": {}}
+        self.totalChanged.emit(int(stats.get("total", len(self._items))))
         types = stats.get("types") or {}
         for key in ("total", "user", "project", "reference", "feedback", "this_week", "inbox_pending"):
             label = self.stat_buttons[key].property("i18n_stat")
@@ -286,25 +337,29 @@ class MemoryPage(ShiftRangeCheckMixin, AdaptivePage):
         if hasattr(self, "batch_bar"):
             self.batch_bar.setVisible(bool(self._selected_names()))
 
-    def _paint_selected_rows(self):
-        """v1.7.4：记忆列表选中行改为整行皇家蓝（QSS 背景在 theme.py）。
+    def _toggle_all_rows(self, checked: bool) -> None:
+        """v1.10.0B：列头主复选框——勾选/取消当前列表全部行（与 Shift 连选等效）。"""
+        for check in self._row_checks:
+            check.setChecked(checked)
+        self._update_batch_bar()
 
-        行内容是 setItemWidget 的自绘控件，不吃 ::item:selected 的 color，
-        需要按选中态手动切换标题/徽标/描述的文字色，保证蓝底上可读。
+    def _paint_selected_rows(self):
+        """刷新后统一复位行内文字样式。
+
+        v1.10.0C：选中行改为主题色浅染（theme.py #memoryList::item:selected），
+        文字保持墨色不再反白，这里只需清空历史内联样式并把分类胶囊重置回类型色。
         """
         for index in range(self.entry_list.count()):
             item = self.entry_list.item(index)
             meta = self._row_meta[index] if index < len(self._row_meta) else None
             if item is None or meta is None:
                 continue
-            if item.isSelected():
-                meta["title"].setStyleSheet(f"font-size:14px;font-weight:650;color:{ROW_TEXT_ON_SELECTION}")
-                meta["badge"].setStyleSheet(f"color:{ROW_TEXT_ON_SELECTION};font-size:12px;font-weight:550")
-                meta["desc"].setStyleSheet(f"font-size:12px;font-weight:450;color:{MUTED_TEXT_ON_SELECTION}")
-            else:
-                meta["title"].setStyleSheet("font-size:14px;font-weight:650")
-                meta["badge"].setStyleSheet(f"color:{meta['color']};font-size:12px;font-weight:550")
-                meta["desc"].setStyleSheet("font-size:12px;font-weight:450")
+            meta["title"].setStyleSheet("")
+            meta["desc"].setStyleSheet("")
+            meta["tags"].setStyleSheet("")
+            meta["source"].setStyleSheet("")
+            meta["time"].setStyleSheet("")
+            meta["pill"].setStyleSheet(_type_pill_style(meta["color"]))
 
     def _selection_changed(self, current, _previous):
         if not current: return
@@ -579,7 +634,7 @@ class MemoryPage(ShiftRangeCheckMixin, AdaptivePage):
         splitter = QSplitter(Qt.Orientation.Horizontal)
         left = QListWidget()
         right = QFrame(); rl = QVBoxLayout(right)
-        raw = QPlainTextEdit(); raw.setReadOnly(True); raw.setFont(QFont("Cascadia Mono", 9))
+        raw = QPlainTextEdit(); raw.setReadOnly(True); raw.setFont(QFont(system_font_family(), 9))
         warning = QLabel(""); warning.setObjectName("error"); warning.setWordWrap(True)
         rl.addWidget(warning); rl.addWidget(QLabel("投递原文（只读）")); rl.addWidget(raw, 1)
         form = QFormLayout()
@@ -701,7 +756,7 @@ class MemoryPage(ShiftRangeCheckMixin, AdaptivePage):
         self._set_status("正在读取索引…")
 
         def done(data):
-            dialog = QDialog(self); dialog.setWindowTitle("MEMORY.md（只读索引源文件）"); dialog.resize(900, 650); layout = QVBoxLayout(dialog); note = QLabel(str(data.get("note") or "索引由程序维护，手动修改会被覆盖。")); note.setObjectName("muted"); layout.addWidget(note); view = QPlainTextEdit(); view.setReadOnly(True); view.setFont(QFont("Cascadia Mono", 9)); view.setPlainText(str(data.get("content") or "")); layout.addWidget(view)
+            dialog = QDialog(self); dialog.setWindowTitle("MEMORY.md（只读索引源文件）"); dialog.resize(900, 650); layout = QVBoxLayout(dialog); note = QLabel(str(data.get("note") or "索引由程序维护，手动修改会被覆盖。")); note.setObjectName("muted"); layout.addWidget(note); view = QPlainTextEdit(); view.setReadOnly(True); view.setFont(QFont(system_font_family(), 9)); view.setPlainText(str(data.get("content") or "")); layout.addWidget(view)
             self._register_panel_dialog("_index_dialog", dialog)
 
         self.scope.call("index", self.facade.index_file, done, lambda msg: self._set_status(f"索引读取失败：{msg}"))

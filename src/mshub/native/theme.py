@@ -1,6 +1,14 @@
-"""123mshub Native design tokens shared by Qt and the local graph island."""
+"""123mshub Native design tokens shared by Qt and the local graph island.
+
+v1.10.0（Stitch 视觉移植）：配色与组件样式按 Stitch 两套设计系统重制——
+暗色走 Fluent Mica Utility（深海军蓝层阶 + 白 8% 描边），亮色走 Silk
+（冷灰粘土底 + 浅卡 + 顶部高光边）。
+v1.10.1（系统字体与视觉层级收口）：品牌主色从皇家蓝 #0156FC 换成 Stitch 的
+靛蓝 #6366F1 / 紫罗兰 #7C3AED 体系（亮色 Silk 令牌 + 暗色 Mica 令牌），
+图谱四分类色统一为 用户=靛蓝 / 项目=紫罗兰 / 参考=亮绿 / 反馈=亮红（列表胶囊
+与图谱节点/图例同一映射）；选中态从实底反白改为主题色浅染。token 键位不变。
+"""
 import json
-import os
 from pathlib import Path
 
 from PySide6.QtCore import QObject, QSettings, Signal
@@ -9,26 +17,40 @@ from PySide6.QtWidgets import QApplication
 
 DURATIONS = {"hover": 120, "fade": 180, "panel": 220}
 
+# Stitch typography is deliberately compact. Keeping the scale here prevents
+# each native page from drifting toward a different dashboard size.
+TYPOGRAPHY = {
+    "display": 20,  # page title / template text-xl
+    "brand": 14,    # sidebar brand / template text-sm
+    "body": 12,     # controls, navigation and normal copy / text-xs
+    "row": 12,      # table and memory row titles
+    "meta": 11,     # descriptions, column heads and timestamps
+    "micro": 10,    # eyebrow, version and count labels
+    "nav": 13,      # primary sidebar navigation (one step above body)
+    "count": 10,    # right-aligned sidebar totals
+    "section": 14,  # in-page section title
+}
+
 _TOKENS_PATH = Path(__file__).with_name("design_tokens.json")
 
 # ocr 审查修复：design_tokens.json 缺失/损坏时（打包或环境包部署异常）曾静默
 # 返回空 dict，下游 stylesheet()/graph_palette() 直接 KeyError 且远离根因。
 # 嵌一份与 json 同源的完整默认令牌作兜底：文件丢了 UI 也能起来（颜色不漂移）。
 _FALLBACK_TOKENS = {
-    "light": {"bg": "#F2F4F8", "sidebar": "#F7F8FA", "surface": "#FFFFFF", "raised": "#FFFFFF", "inset": "#F3F5F8",
-              "ink": "#171B23", "muted": "#4E5766", "faint": "#606A7A", "line": "#E2E6EE", "strong": "#828DA0",
-              "action": "#0156FC", "on_action": "#FFFFFF", "accent": "#0148D2", "selection": "#E7F0FF",
-              "error": "#AF2424", "error_soft": "#FBEAEA", "ok": "#116B3A", "ok_soft": "#E5F4EB",
-              "warning": "#88420A", "warning_soft": "#FBF0DD", "user": "#7144B8", "project": "#0148D2",
-              "reference": "#006F72", "feedback": "#97500A", "glass": "#F7F8FA", "action_hover": "#0148D2",
-              "action_pressed": "#003CAF"},
-    "dark": {"bg": "#0B0E14", "sidebar": "#0F1219", "surface": "#141926", "raised": "#1B2232", "inset": "#1B2232",
-             "ink": "#E9ECF4", "muted": "#A7B0C2", "faint": "#9AA6BC", "line": "#303A4D", "strong": "#73839E",
-             "action": "#0156FC", "on_action": "#FFFFFF", "accent": "#8DB5FF", "selection": "#172E57",
-             "error": "#FFAAA3", "error_soft": "#3D242A", "ok": "#58DFAC", "ok_soft": "#17392F",
-             "warning": "#F5C46A", "warning_soft": "#40341F", "user": "#B8A0FC", "project": "#8DB5FF",
-             "reference": "#6ED7D0", "feedback": "#F5BD74", "glass": "#1B2232", "action_hover": "#0148D2",
-             "action_pressed": "#003CAF"},
+    "light": {"bg": "#E8EAF0", "sidebar": "#E5E7ED", "surface": "#F0F2F8", "raised": "#FFFFFF", "inset": "#E9ECF3",
+              "ink": "#2E3040", "muted": "#585A68", "faint": "#8A8C9A", "line": "#D0D2DC", "strong": "#B8BACA",
+              "action": "#6366F1", "on_action": "#FFFFFF", "accent": "#4F46E5", "selection": "#E0E2FF",
+              "error": "#DC2626", "error_soft": "#FEE2E2", "ok": "#047857", "ok_soft": "#D1FAE5",
+              "warning": "#B45309", "warning_soft": "#FEF3C7", "user": "#6366F1", "project": "#7C3AED",
+              "reference": "#22C55E", "feedback": "#F43F5E", "glass": "#EEF0F7", "action_hover": "#4F46E5",
+              "action_pressed": "#4338CA", "star_dot": "#6366F1", "star_bright": "#7C3AED", "sheet_alpha": 216},
+    "dark": {"bg": "#0B0E14", "sidebar": "#0E172A", "surface": "#131B2E", "raised": "#1A243D", "inset": "#0F1830",
+             "ink": "#DAE2FD", "muted": "#94A3B8", "faint": "#64748B", "line": "#232D45", "graph_line": "#465574", "strong": "#33415E",
+             "action": "#6366F1", "on_action": "#FFFFFF", "accent": "#A5B4FC", "selection": "#2A2B63",
+             "error": "#F87171", "error_soft": "#3D242A", "ok": "#34D399", "ok_soft": "#17392F",
+             "warning": "#FBBF24", "warning_soft": "#40341F", "user": "#6366F1", "project": "#7C3AED",
+             "reference": "#34D399", "feedback": "#FB7185", "glass": "#1A243D", "action_hover": "#818CF8",
+             "action_pressed": "#4F46E5", "star_dot": "#6366F1", "star_bright": "#A5B4FC", "sheet_alpha": 218},
 }
 
 
@@ -44,46 +66,38 @@ def _load_tokens() -> dict:
         logging.getLogger(__name__).error("设计令牌文件加载失败，使用内置默认令牌：%s", exc)
         return json.loads(json.dumps(_FALLBACK_TOKENS))
 
-_DREAM_FONT_FAMILY = "Dream Han Sans CN"
-_dream_fonts_loaded = False
+_SYSTEM_FONT_FALLBACK = "Segoe UI"
+
+
+def system_font_family() -> str:
+    """Return the Qt application font family without registering project fonts.
+
+    Qt resolves the platform default after ``QApplication`` is created.  The
+    static QSS constants are built during module import, so the Windows
+    default remains the safe fallback for that early phase; live theme changes
+    call :func:`stylesheet` again and pick up a user-selected system font.
+    """
+
+    app = QApplication.instance()
+    if app is not None:
+        family = QFontDatabase.systemFont(QFontDatabase.SystemFont.GeneralFont).family().strip()
+        if family:
+            return family
+    return _SYSTEM_FONT_FALLBACK
 
 
 def ensure_brand_fonts() -> str:
-    """Load the four installed Dream Han Sans weights and return their family.
+    """Backward-compatible name for callers that used the old font loader.
 
-    The files are separate faces in Windows Fonts but share one real Qt family
-    name.  Loading them through QFontDatabase makes the W1/W15/W20/W27 style
-    names available to Qt instead of silently falling back to Segoe UI.
+    v1.10.1 deliberately does not register Dream Han Sans or any bundled face;
+    the UI always follows the system font selected by Qt.
     """
 
-    global _dream_fonts_loaded
-    if _dream_fonts_loaded:
-        return _DREAM_FONT_FAMILY
-    # ocr 审查修复：字体未装时原来每次调用都重扫字体目录+枚举系统字体，
-    # 而 resizeEvent 会高频调用（拖窗口卡顿）——记住"已尝试"，失败直接回退。
-    if getattr(ensure_brand_fonts, "_checked", False):
-        return "Segoe UI"
-    ensure_brand_fonts._checked = True
-    candidates = (
-        # v1.8.0（审查 L-1）：非标准安装盘时 SystemRoot 环境变量兜底
-        Path(os.environ.get("SystemRoot", r"C:\Windows")) / "Fonts",
-        Path.home() / "AppData/Local/Microsoft/Windows/Fonts",
-    )
-    for weight in ("W1", "W15", "W20", "W27"):
-        filename = f"DreamHanSansCN-{weight}.ttf"
-        path = next((root / filename for root in candidates if (root / filename).is_file()), None)
-        if path is not None:
-            QFontDatabase.addApplicationFont(str(path))
-    _dream_fonts_loaded = _DREAM_FONT_FAMILY in QFontDatabase.families()
-    return _DREAM_FONT_FAMILY if _dream_fonts_loaded else "Segoe UI"
+    return system_font_family()
 PALETTES = _load_tokens()
 PALETTES.setdefault("light", {})
 PALETTES.setdefault("dark", {})
 
-
-# v1.8.0（审查 UI 项）：视图层行内 setStyleSheet 引用的语义色单一来源
-ROW_TEXT_ON_SELECTION = "#FFFFFF"
-MUTED_TEXT_ON_SELECTION = "#E9ECF4"
 
 def current_palette() -> dict:
     """v1.8.0（审查 UI 项）：视图层行内样式的取色入口——亮暗跟随应用样式表。"""
@@ -100,129 +114,196 @@ def graph_palette(mode):
         "canvas": token["bg"],
         "label": token["ink"],
         "muted": token["muted"],
-        "line": token["line"],
+        "line": token.get("graph_line", token["line"]),
         "accent": token["accent"],
         "selection": token["selection"],
         "types": {key: token[key] for key in ("user", "project", "reference", "feedback")},
     }
 
 
+def _rgba(hex_color: str, alpha: int) -> str:
+    color = hex_color.lstrip("#")
+    r, g, b = int(color[0:2], 16), int(color[2:4], 16), int(color[4:6], 16)
+    return f"rgba({r}, {g}, {b}, {alpha/255:.3f})"
+
+
+def starfield_colors(mode: str) -> tuple[str, str, str, bool]:
+    """兼容旧工作区接口；v1.10.0D 的原生画布使用静态 Silk/Mica 底色。"""
+    token = PALETTES["dark" if mode == "dark" else "light"]
+    bright_default = "#A5B4FC" if mode == "dark" else "#7C3AED"
+    return token["bg"], token.get("star_dot", "#6366F1"), token.get("star_bright", bright_default), mode == "dark"
+
+
 def stylesheet(mode):
-    # Build the stylesheet at import time without touching QFontDatabase; the
-    # application font registry is only safe to query after QApplication exists.
-    family = _DREAM_FONT_FAMILY
+    # Use the platform font selected by Qt.  The explicit fallbacks keep the
+    # graph WebEngine and early-import QSS deterministic on Windows.
+    family = system_font_family()
+    font_stack = f"'{family}', 'Segoe UI', 'Microsoft YaHei', sans-serif"
     p = PALETTES[mode]
-    if mode == "dark":
-        ghost_ink, ghost_line, ghost_hover = "#FFFFFF", "rgba(255,255,255,0.75)", "rgba(255,255,255,0.10)"
-    else:
-        ghost_ink, ghost_line, ghost_hover = p["ink"], "rgba(23,27,35,0.45)", p["selection"]
+    dark = mode == "dark"
+    # 内容区悬浮页板：点阵背景透出的一层半透明卡（Stitch 的 Mica 质感近似——
+    # Qt 无 backdrop-blur，用高不透明度近似磨砂）
+    sheet = _rgba(p["surface"], int(p.get("sheet_alpha", 216)))
+    sidebar_fill = _rgba(p["sidebar"], 235)
+    job_card = _rgba(p["raised"], dark and 200 or 178)
+    agent_grad = "qlineargradient(x1:0 y1:0, x2:1 y2:1, stop:0 #6366F1, stop:0.55 #6156EA, stop:1 #7C3AED)"
+    eyebrow_bg = _rgba(p["action"], 36)
+    eyebrow_line = _rgba(p["action"], 92)
+    stat_bg = _rgba(p["action"], 20)
+    danger_line = _rgba(p["error"], 120)
+    ghost_ink = "#FFFFFF" if dark else p["ink"]
+    ghost_line = "rgba(255,255,255,0.75)" if dark else "rgba(46,48,64,0.45)"
+    ghost_hover = "rgba(255,255,255,0.10)" if dark else p["selection"]
+    # Silk 亮色的"挤压凸起"暗示：顶边白高光 + 其余细线（暗色用顶边微光）
+    card_top = "#FFFFFF" if not dark else "rgba(255,255,255,0.06)"
+    # v1.10.0C：选中态 = 主题色浅染（Stitch 选中行是 primary-fixed 淡底，不再实底反白）
+    selected_tint = _rgba(p["action"], 30 if not dark else 46)
+    nav_selected = (
+        f"background: {p['raised']}; color: {p['ink']}; border: 1px solid {p['strong']};"
+        if dark else
+        f"background: {p['raised']}; color: {p['accent']}; border: 1px solid {eyebrow_line};"
+    )
     return f"""
-QWidget {{ background: {p['bg']}; color: {p['ink']}; font-family: '{family}', 'Segoe UI', 'Microsoft YaHei'; font-size: 14px; font-weight: 500; widget-animation-duration: {DURATIONS['hover']}; }}
+QWidget {{ background: {p['bg']}; color: {p['ink']}; font-family: {font_stack}; font-size: {TYPOGRAPHY['body']}px; font-weight: 400; widget-animation-duration: {DURATIONS['hover']}; }}
 QMainWindow, QDialog {{ background: {p['bg']}; }}
+/* v1.10.0D：中央底板由静态 Silk/Mica 画布绘制，QSS 侧放行 */
+QWidget#workspace {{ background: transparent; border: none; }}
+QWidget#pageArea {{ background: transparent; }}
+/* 页面根透明——透出 #pageSheet 的半透明层（各页内部卡片自带上色不受影响） */
+QStackedWidget#pages > QWidget {{ background: transparent; }}
+/* v1.10.0B（Stitch 结构）：页头横向信息带——独立底色+描边，与内容区分层 */
+QFrame#headerBand {{ background: {p['surface']}; border: 1px solid {p['line']}; border-top: 1px solid {card_top}; border-radius: 16px; }}
+QFrame#headerBand QLabel#title {{ font-size: {TYPOGRAPHY['display']}px; line-height: 24px; font-weight: 700; letter-spacing: -0.2px; }}
+QFrame#headerDivider {{ background: {p['line']}; border: none; }}
+/* v1.10.0B：品牌版本胶囊（Stitch 名字旁 mono 小胶囊） */
+QLabel#versionPill {{ color: {p['accent']}; background: {eyebrow_bg}; border: 1px solid {eyebrow_line}; border-radius: 10px; min-height: 20px; padding: 1px 6px; font-size: {TYPOGRAPHY['micro']}px; font-weight: 600; }}
+/* v1.10.0B（Stitch 结构）：记忆列表表格卡 */
+QFrame#listCard {{ background: {p['surface']}; border: 1px solid {p['line']}; border-top: 1px solid {card_top}; border-radius: 16px; }}
+QWidget#listHeader {{ background: {p['inset']}; border: none; border-bottom: 1px solid {p['line']}; border-top-left-radius: 15px; border-top-right-radius: 15px; }}
+QWidget#listHeader QLabel {{ color: {p['muted']}; font-size: {TYPOGRAPHY['meta']}px; font-weight: 600; background: transparent; }}
+QListWidget#memoryList {{ background: transparent; border: none; padding: 0; }}
+QListWidget#memoryList::item {{ background: transparent; border: none; border-bottom: 1px solid {_rgba(p['line'], 120)}; border-radius: 0; padding: 0; margin: 0; }}
+QListWidget#memoryList::item:hover {{ background: {_rgba(p['action'], 14)}; }}
+/* v1.10.0C：选中行 = 主题色浅染（Stitch primary-fixed 淡底），行内文字不再反白 */
+QListWidget#memoryList::item:selected {{ background: {selected_tint}; border-bottom: 1px solid {_rgba(p['line'], 120)}; }}
+QLabel#rowTitle {{ font-size: {TYPOGRAPHY['row']}px; font-weight: 700; background: transparent; }}
+QLabel#rowDesc {{ color: {p['muted']}; font-size: {TYPOGRAPHY['meta']}px; background: transparent; }}
+QLabel#rowCol {{ color: {p['muted']}; font-size: {TYPOGRAPHY['meta']}px; background: transparent; }}
+QLabel#rowTime {{ color: {p['faint']}; font-size: {TYPOGRAPHY['meta']}px; background: transparent; }}
 QLabel, QCheckBox, QRadioButton {{ background: transparent; }}
-/* v1.7.4：侧边栏改浮动面板——四边 16px 外边距由主窗口布局负责，这里画
-   圆角 20 的面板底色与描边；柔和投影用 QGraphicsDropShadowEffect（QSS 不支持阴影） */
-QFrame#sidebar {{ background: {p['sidebar']}; border: 1px solid {p['line']}; border-radius: 20px; }}
-QFrame#surface, QFrame#emptyCard, QGroupBox {{ background: {p['surface']}; border: 1px solid {p['line']}; border-radius: 12px; }}
+/* v1.7.4：侧边栏浮动面板；v1.10.0 换 Stitch Mica 半透明层阶 */
+QFrame#sidebar {{ background: {sidebar_fill}; border: 1px solid {p['line']}; border-radius: 16px; }}
+QFrame#pageSheet {{ background: {sheet}; border: 1px solid {p['line']}; border-radius: 16px; }}
+QFrame#surface, QFrame#emptyCard, QGroupBox {{ background: {p['surface']}; border: 1px solid {p['line']}; border-top: 1px solid {card_top}; border-radius: 12px; }}
 QWidget#memoryRow {{ background: transparent; }}
 QFrame#emptyCard {{ border: 1px dashed {p['strong']}; }}
 QGroupBox {{ margin-top: 14px; padding: 16px; }}
-QGroupBox::title {{ subcontrol-origin: margin; left: 16px; color: {p['ink']}; font-size: 13px; font-weight: 700; }}
+QGroupBox::title {{ subcontrol-origin: margin; left: 16px; color: {p['ink']}; font-size: 12px; font-weight: 700; }}
 QLineEdit, QTextEdit, QTextBrowser, QPlainTextEdit, QComboBox {{
- background: {p['surface']}; color: {p['ink']}; border: 1px solid {p['strong']};
- border-radius: 8px; padding: 8px 10px; selection-background-color: {p['selection']};
+ background: {p['inset']}; color: {p['ink']}; border: 1px solid {p['line']};
+ border-radius: 12px; padding: 6px 10px; font-size: 12px; selection-background-color: {p['selection']};
  selection-color: {p['ink']}; placeholder-text-color: {p['faint']};
 }}
-QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus, QComboBox:focus {{ border: 2px solid {p['accent']}; padding: 7px 9px; }}
+QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus, QComboBox:focus {{ border: 2px solid {p['accent']}; padding: 6px 9px; }}
 QComboBox::drop-down {{ width: 24px; border: none; }}
 QComboBox QAbstractItemView {{ background: {p['raised']}; color: {p['ink']}; selection-background-color: {p['selection']}; }}
-QPushButton, QToolButton {{ min-height: 36px; padding: 0 12px; border-radius: 8px;
- border: 1px solid {p['strong']}; background: {p['surface']}; color: {p['ink']}; font-size: 13px; font-weight: 550; }}
-QPushButton:hover, QToolButton:hover {{ background: {p['inset']}; border-color: {p['accent']}; }}
+QPushButton, QToolButton {{ min-height: 30px; padding: 0 12px; border-radius: 12px;
+ border: 1px solid {p['line']}; background: {p['surface']}; color: {p['ink']}; font-size: {TYPOGRAPHY['body']}px; font-weight: 500; }}
+QPushButton:hover, QToolButton:hover {{ background: {p['raised']}; border-color: {p['strong']}; }}
 QPushButton:focus, QToolButton:focus {{ border: 2px solid {p['accent']}; }}
 QPushButton:pressed, QToolButton:pressed {{ background: {p['selection']}; }}
 QPushButton:disabled, QToolButton:disabled {{ color: {p['faint']}; background: {p['bg']}; border-color: {p['line']}; }}
-QPushButton#primary {{ background: {p['action']}; color: {p['on_action']}; border-color: {p['action']}; font-weight: 700; }}
+QPushButton#primary {{ background: {p['action']}; color: {p['on_action']}; border-color: {p['action']}; font-weight: 700; font-size: {TYPOGRAPHY['body']}px; }}
 QPushButton#primary:hover {{ background: {p['action_hover']}; border-color: {p['action_hover']}; }}
 QPushButton#primary:focus {{ border: 2px solid {p['ink']}; }}
 QPushButton#primary:pressed {{ background: {p['action_pressed']}; }}
 QPushButton#primary:disabled {{ background: {p['strong']}; color: {p['faint']}; }}
-/* v1.7.5：幽灵按钮（描边空心）——与右上角皇家蓝「Agent连接提示词」并排的次级动作。
-   暗色按用户模板白字白边；亮色主题下纯白会没入浅底，同构换成墨色字+半透明描边。 */
+/* v1.10.0C（Stitch Silk）：Agent 连接提示词——靛蓝→紫罗兰动能渐变，智能体专属签名色 */
+QPushButton#agentButton {{ background: {agent_grad}; color: #FFFFFF; border: 1px solid rgba(255,255,255,0.22); font-weight: 700; }}
+QPushButton#agentButton:hover {{ border: 1px solid rgba(255,255,255,0.42); }}
+QPushButton#agentButton:pressed {{ background: {p['action_pressed']}; }}
+QPushButton#agentButton:disabled {{ background: {p['strong']}; color: {p['faint']}; border-color: {p['line']}; }}
+/* v1.7.5：幽灵按钮（描边空心）；暗色白字白边、亮色同构换墨色 */
 QPushButton#ghost {{ color: {ghost_ink}; border: 1px solid {ghost_line}; background: transparent; font-weight: 600; }}
 QPushButton#ghost:hover {{ background: {ghost_hover}; border-color: {p['accent']}; color: {p['accent']}; }}
 QPushButton#ghost:pressed {{ background: {p['selection']}; }}
 QPushButton#ghost:disabled {{ color: {p['faint']}; border-color: {p['line']}; }}
-QPushButton#danger {{ color: {p['error']}; border-color: {p['error']}; background: {p['error_soft']}; font-weight: 650; }}
-QPushButton#stat {{ color: {p['accent']}; border-color: {p['line']}; border-radius: 10px; font-size: 13px; font-weight: 650; min-height: 40px; padding: 8px 14px; background: {p['inset']}; }}
-QLabel#badge {{ color: {p['accent']}; background: {p['inset']}; border: 1px solid {p['selection']}; border-radius: 10px; padding: 3px 10px; font-size: 12px; }}
+QPushButton#danger {{ color: {p['error']}; border-color: {danger_line}; background: {p['error_soft']}; font-weight: 600; }}
+QPushButton#metric {{ color: {p['accent']}; border: 1px solid {eyebrow_line}; border-radius: 15px; font-size: {TYPOGRAPHY['body']}px; font-weight: 600; min-height: 30px; padding: 3px 12px; background: {stat_bg}; }}
+QPushButton#metric:hover {{ background: {eyebrow_bg}; }}
+QLabel#badge {{ color: {p['accent']}; background: {eyebrow_bg}; border: 1px solid {eyebrow_line}; border-radius: 10px; padding: 2px 11px; font-size: 11px; font-weight: 600; }}
 QLabel#error, QLabel#inboxWarning {{ color: {p['error']}; background: {p['error_soft']}; border-radius: 10px; padding: 8px; }}
 QListWidget {{ background: transparent; border: none; outline: none; padding: 4px; }}
-QListWidget::item {{ padding: 10px; border-radius: 10px; margin: 3px 0; }}
+QListWidget::item {{ padding: 10px; border-radius: 12px; margin: 3px 0; }}
 QListWidget::item:hover {{ background: {p['surface']}; }}
-QListWidget::item:selected {{ background: {p['selection']}; color: {p['ink']}; }}QLabel#brandName {{ background: transparent; font-family: '{family}', 'Segoe UI', 'Microsoft YaHei'; font-size: 20px; font-weight: 760; }}
-/* Navigation uses the actual Dream Han Sans family with its W20 face. */
-QListWidget#nav::item {{ padding: 12px 14px; font-family: '{family}', 'Segoe UI', 'Microsoft YaHei'; font-size: 14px; font-weight: 650; }}
-QListWidget#nav::item:selected {{ background: {p['action']}; color: {p['on_action']}; }}
-QListWidget#memoryList::item {{ background: {p['surface']}; border: 1px solid {p['line']}; border-radius: 10px; padding: 0px 10px; margin: 2px 0; }}
-/* v1.7.4：记忆列表选中从"高亮边框"改为整行皇家蓝底（行内文字色由 MemoryPage 联动切换） */
-QListWidget#memoryList::item:selected {{ background: {p['action']}; border: 1px solid {p['action']}; }}
-/* v1.6.0：侧栏后台任务面板；v1.7.2 标题 15px 明确大于"收起/展开"按钮的 13px（原来 eyebrow 11px 反而更小） */
-QFrame#jobPanel {{ background: transparent; border-top: 1px solid {p['line']}; }}
-QFrame#jobPanel QLabel#jobTitle {{ color: {p['ink']}; font-size: 15px; font-weight: 800; }}
-/* v1.7.3：任务面板"清除已完成"入口——弱化的文字按钮，不与表格抢视觉 */
-QPushButton#jobClear {{ background: transparent; border: none; color: {p['muted']}; font-size: 12px; font-weight: 550; min-height: 24px; padding: 0 2px; text-align: left; }}
+QListWidget::item:selected {{ background: {p['selection']}; color: {p['ink']}; }}QLabel#brandName {{ background: transparent; font-family: {font_stack}; font-size: {TYPOGRAPHY['brand']}px; font-weight: 700; }}
+/* Primary navigation follows the system font and gets one additional size step. */
+QListWidget#nav {{ background: transparent; border: none; outline: none; padding: 0; }}
+QListWidget#nav:focus {{ border: none; outline: none; }}
+QListWidget#nav::item {{ padding: 5px 8px; border-radius: 12px; border: 1px solid transparent; font-family: {font_stack}; font-size: {TYPOGRAPHY['nav']}px; font-weight: 700; }}
+/* v1.10.0C（Stitch）：导航选中 = 浅色浮起胶囊（亮白/暗 slate）+ 主题色描边，不再实底反白 */
+QListWidget#nav::item:selected {{ {nav_selected} }}
+/* v1.10.0B：行样式已上移至 #listCard 表格卡区（旧独立行卡样式退役） */
+
+/* v1.10.0（Stitch 需求 4）：后台任务 = 悬浮圆角卡——去掉旧版 border-top 分隔与
+   卡下衬底，直接浮在侧栏底色上（卡片自带半透明填充+描边+独立投影） */
+QFrame#jobPanel {{ background: {job_card}; border: 1px solid {p['line']}; border-top: 1px solid {card_top}; border-radius: 14px; }}
+QFrame#jobPanel QLabel#jobTitle {{ color: {p['ink']}; font-size: {TYPOGRAPHY['body']}px; font-weight: 700; }}
+QTableWidget#jobTable {{ background: transparent; border: none; }}
+QTableWidget#jobTable QHeaderView::section {{ background: transparent; border: none; border-bottom: 1px solid {p['line']}; }}
+/* v1.7.3：任务面板"清除已完成"入口——弱化的文字按钮 */
+QPushButton#jobClear {{ background: transparent; border: none; color: {p['muted']}; font-size: 11px; font-weight: 500; min-height: 22px; padding: 0 2px; text-align: left; }}
 QPushButton#jobClear:hover {{ color: {p['accent']}; }}
 QPushButton#jobClear:pressed {{ color: {p['action']}; }}
-/* v1.7.2：后台任务表头压紧（状态/进度列只占文字宽度，任务列吃满剩余空间）；
-   v1.7.4：内边距再收紧一档，给两字动词+技能名腾出显示宽度 */
 QTableWidget#jobTable QHeaderView::section {{ padding: 4px 6px; }}
-QTableView {{ background: {p['surface']}; alternate-background-color: {p['inset']}; gridline-color: {p['line']}; border: 1px solid {p['line']}; border-radius: 10px; selection-background-color: {p['selection']}; selection-color: {p['ink']}; }}
+QTableView {{ background: {p['surface']}; alternate-background-color: {p['inset']}; gridline-color: {p['line']}; border: 1px solid {p['line']}; border-radius: 12px; selection-background-color: {p['selection']}; selection-color: {p['ink']}; }}
 /* v1.6.0：技能库/安全中心加行高（原来压得太紧难以操作） */
-QTableView::item {{ padding: 12px 10px; }}
-QHeaderView::section {{ background: {p['raised']}; color: {p['muted']}; padding: 10px; border: none; border-bottom: 1px solid {p['line']}; font-size: 12px; font-weight: 700; }}
-QLabel#eyebrow {{ color: {p['accent']}; font-size: 12px; font-weight: 800; }}
-QLabel#muted, QLabel#status {{ color: {p['muted']}; font-size: 13px; font-weight: 450; }}
-/* v1.9.0（需求 1）：设置保存成功反馈——皇家蓝加粗强调，与主按钮同色系 */
-QLabel#statusSaved {{ color: {p['action']}; font-size: 13px; font-weight: 700; }}
-QLabel#faint {{ color: {p['faint']}; font-size: 12px; font-weight: 450; }}
-QLabel#title {{ color: {p['ink']}; font-family: '{family}', 'Segoe UI', 'Microsoft YaHei'; font-size: 30px; font-weight: 760; }}
-QTabWidget::pane {{ border: 1px solid {p['line']}; border-radius: 16px; padding: 16px; background: {p['surface']}; }}
-QTabBar::tab {{ padding: 10px 18px; border-radius: 10px; color: {p['muted']}; background: {p['sidebar']}; font-size: 13px; }}
-QTabBar::tab:selected {{ color: {p['accent']}; background: {p['surface']}; font-weight: 650; }}
+QTableView::item {{ padding: 8px 10px; font-size: {TYPOGRAPHY['body']}px; }}
+QHeaderView::section {{ background: {p['raised']}; color: {p['muted']}; padding: 7px 10px; border: none; border-bottom: 1px solid {p['line']}; font-size: {TYPOGRAPHY['meta']}px; font-weight: 600; }}
+/* v1.10.0（Stitch）：页头 eyebrow 从纯文字改为发光胶囊（含色点由文本自带） */
+QLabel#eyebrow {{ color: {p['accent']}; background: {eyebrow_bg}; border: 1px solid {eyebrow_line}; border-radius: 9px; padding: 2px 10px; font-size: {TYPOGRAPHY['micro']}px; font-weight: 700; }}
+QLabel#muted, QLabel#status {{ color: {p['muted']}; font-size: {TYPOGRAPHY['meta']}px; font-weight: 400; }}
+/* v1.9.0（需求 1）：设置保存成功反馈——皇家蓝加粗强调 */
+QLabel#statusSaved {{ color: {p['action']}; font-size: {TYPOGRAPHY['body']}px; font-weight: 700; }}
+QLabel#faint {{ color: {p['faint']}; font-size: {TYPOGRAPHY['meta']}px; font-weight: 400; }}
+QLabel#title {{ color: {p['ink']}; font-family: {font_stack}; font-size: {TYPOGRAPHY['display']}px; font-weight: 700; }}
+QTabWidget::pane {{ border: 1px solid {p['line']}; border-radius: 14px; padding: 16px; background: {p['surface']}; }}
+QTabBar::tab {{ padding: 8px 16px; margin: 0 4px 6px 0; border: 1px solid {p['line']}; border-radius: 12px; color: {p['muted']}; background: {p['inset']}; font-size: 12px; font-weight: 500; }}
+QTabBar::tab:selected {{ color: {p['accent']}; background: {p['selection']}; border-color: {eyebrow_line}; font-weight: 600; }}
 QDockWidget {{ border: 1px solid {p['line']}; }}
 QDockWidget::title {{ background: {p['glass']}; padding: 8px 12px; color: {p['muted']}; }}
 QToolTip {{ background: {p['raised']}; color: {p['ink']}; border: 1px solid {p['line']}; padding: 8px 10px; }}
-QScrollBar:vertical {{ width: 10px; background: transparent; margin: 0; }}
-QScrollBar:horizontal {{ height: 10px; background: transparent; margin: 0; }}
-QScrollBar::handle {{ background: {p['strong']}; border-radius: 5px; min-height: 24px; min-width: 24px; }}
+QScrollBar:vertical {{ width: 8px; background: transparent; margin: 0; }}
+QScrollBar:horizontal {{ height: 8px; background: transparent; margin: 0; }}
+QScrollBar::handle {{ background: {p['strong']}; border-radius: 4px; min-height: 24px; min-width: 24px; }}
 QScrollBar::handle:hover {{ background: {p['faint']}; }}
 QScrollBar::add-line, QScrollBar::sub-line {{ width: 0; height: 0; }}
 QScrollBar::add-page, QScrollBar::sub-page {{ background: transparent; }}
-QCheckBox::indicator {{ width: 16px; height: 16px; border: 1px solid {p['strong']}; border-radius: 4px; background: {p['surface']}; }}
-/* v1.7.4：勾选态 = 实心皇家蓝方框；白描边保证在蓝色选中行上仍清晰可辨 */
+QCheckBox::indicator {{ width: 16px; height: 16px; border: 1px solid {p['strong']}; border-radius: 4px; background: {p['inset']}; }}
+/* 勾选态 = 实心主题色方框；白描边保证在浅染选中行上仍清晰可辨 */
 QCheckBox::indicator:checked {{ background: {p['action']}; border: 2px solid #FFFFFF; }}
 QCheckBox:focus {{ outline: 2px solid {p['accent']}; }}
-/* v1.7.4：浮动侧栏与内容区之间的分隔条透明（拖拽区仍在）；悬停淡色提示可拖。
-   编辑器里需要可见把手的分隔条用 #descSplitter 单独上色。 */
+/* v1.7.4：浮动侧栏与内容区分隔条透明（拖拽区仍在）；悬停淡色提示可拖。 */
 QSplitter::handle {{ background: transparent; }}
 QSplitter::handle:hover {{ background: {p['selection']}; }}
 QSplitter#descSplitter::handle {{ background: {p['line']}; }}
-/* v1.9.1：侧栏内导航/任务面板的垂直分隔条——可见细线提示可拖高度 */
-QSplitter#jobSplitter::handle {{ background: {p['line']}; border-radius: 3px; margin: 1px 2px; }}
+/* v1.9.1：侧栏内导航/任务面板垂直分隔条；v1.10.0 悬浮卡化后透明（卡缘即界线） */
+QSplitter#jobSplitter::handle {{ background: transparent; }}
 QTableWidget, QTableView {{ alternate-background-color: {p['inset']}; selection-background-color: {p['selection']}; selection-color: {p['ink']}; outline: none; }}
-/* v1.7.4：表格选中行从"左侧 2px 竖条"改为整行皇家蓝底 + 白字（技能仓库/安全中心统一） */
-QTableWidget::item:selected, QTableView::item:selected {{ background: {p['action']}; color: {p['on_action']}; border: none; }}
+/* v1.10.0C：表格选中行整行主题色浅染（技能仓库/安全中心统一），文字保持墨色 */
+QTableWidget::item:selected, QTableView::item:selected {{ background: {selected_tint}; color: {p['ink']}; border: none; }}
 QTableWidget:focus, QTableView:focus, QListWidget#memoryList:focus, QTabWidget:focus {{ border: 2px solid {p['accent']}; }}
 QListWidget#nav:focus::item:selected {{ border: 2px solid {p['accent']}; }}
-QPlainTextEdit, QTextBrowser {{ font-family: 'Cascadia Mono', 'Microsoft YaHei'; }}
+QPlainTextEdit, QTextBrowser {{ font-family: {font_stack}; }}
 QGroupBox {{ color: {p['ink']}; }}
-QProgressBar {{ min-height: 7px; max-height: 7px; border: 0; border-radius: 4px; background: {p['line']}; text-align: center; }}
-QProgressBar::chunk {{ border-radius: 4px; background: {p['action']}; }}
-QStatusBar {{ background: {p['sidebar']}; color: {p['muted']}; border-top: 1px solid {p['line']}; }}
+QProgressBar {{ min-height: 6px; max-height: 6px; border: 0; border-radius: 3px; background: {p['line']}; text-align: center; }}
+QProgressBar::chunk {{ border-radius: 3px; background: {p['action']}; }}
+QStatusBar {{ background: transparent; color: {p['muted']}; border: none; font-size: 11px; }}
 QToolButton#iconButton {{ min-width: 32px; max-width: 32px; padding: 0; }}
-QLabel#sectionTitle {{ color: {p['ink']}; font-size: 18px; font-weight: 700; }}
-QLabel#helper {{ color: {p['faint']}; font-size: 12px; font-weight: 450; }}
+QToolButton#jobToggle {{ min-width: 30px; max-width: 30px; min-height: 28px; max-height: 28px; padding: 0; border-radius: 8px; qproperty-toolButtonStyle: ToolButtonIconOnly; }}
+QLabel#jobActivityIcon {{ background: transparent; }}
+QLabel#sectionTitle {{ color: {p['ink']}; font-size: {TYPOGRAPHY['section']}px; font-weight: 700; }}
+QLabel#helper {{ color: {p['faint']}; font-size: {TYPOGRAPHY['meta']}px; font-weight: 400; }}
 QLabel#statusOk {{ color: {p['ok']}; background: {p['ok_soft']}; border-radius: 8px; padding: 6px 10px; }}
 QLabel#statusWarning {{ color: {p['warning']}; background: {p['warning_soft']}; border-radius: 8px; padding: 6px 10px; }}
 QLabel#statusError {{ color: {p['error']}; background: {p['error_soft']}; border-radius: 8px; padding: 6px 10px; }}
@@ -245,7 +326,9 @@ class ThemeController(QObject):
         super().__init__(parent)
         ensure_brand_fonts()
         self.settings = settings or QSettings("123mshub", "123mshub")
-        self.mode = str(self.settings.value("theme", "system"))
+        # v1.10.0：默认主题从「跟随系统」改为「暗色」——Stitch 主视觉即暗色 Mica；
+        # 用户在设置页选过亮色/暗色的不受影响（仅无记忆时生效）
+        self.mode = str(self.settings.value("theme", "dark"))
         app = QApplication.instance()
         if app and hasattr(app.styleHints(), "colorSchemeChanged"):
             app.styleHints().colorSchemeChanged.connect(self._system_changed)
@@ -277,6 +360,9 @@ class ThemeController(QObject):
         effective = self.effective_mode
         app = QApplication.instance()
         if app:
-            app.setStyleSheet(DARK_QSS if effective == "dark" else LIGHT_QSS)
+            # Rebuild after QApplication exists so a user-selected system font
+            # is reflected immediately; constants remain available to tests and
+            # consumers that import the module before the app starts.
+            app.setStyleSheet(stylesheet(effective))
         self.changed.emit(effective)
         return effective

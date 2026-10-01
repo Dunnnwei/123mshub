@@ -10,7 +10,7 @@ from PySide6.QtWidgets import QApplication, QHBoxLayout, QLabel, QVBoxLayout, QW
 from ..graph_bridge import GraphBridge
 from ..memory_facade import MemoryFacade
 from ..task_runner import TaskRunner
-from ..ui import copy_agent_prompt, make_agent_prompt_button
+from ..ui import HeaderBand, copy_agent_prompt, make_agent_prompt_button
 
 try:  # QtWebEngine is part of the native extra, but keep service imports usable without it.
     from PySide6.QtWebChannel import QWebChannel
@@ -87,22 +87,21 @@ class GraphView(QWidget):
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
-        # v1.7.5：图谱页顶部细条——右上角统一「Agent连接提示词」皇家蓝按钮
-        bar = QHBoxLayout()
-        bar.setContentsMargins(16, 10, 16, 0)
-        bar.addStretch()
+        layout.setContentsMargins(14, 12, 14, 12)
+        layout.setSpacing(10)
+        # v1.10.0D：图谱与其余四页共用 Stitch 页头层级；图谱岛内部只
+        # 保留搜索、筛选、画布和节点浏览，不再显示第二个偏大的标题。
+        band = HeaderBand("记忆关系", "记忆图示", "双链关系在画布上自然展开；悬停节点查看关联。")
         self.agent_button = make_agent_prompt_button(self, self._copy_prompt)
-        bar.addWidget(self.agent_button)
-        layout.addLayout(bar)
+        band.actions.addWidget(self.agent_button)
+        layout.addWidget(band)
         # QtWebEngine cannot create a Chromium surface on the offscreen
         # platform plugin used by unit tests.  The real Windows build uses the
         # full web island; tests still validate its static assets and bridge.
         if not _WEB_ENGINE_AVAILABLE or QApplication.platformName() == "offscreen":
             label = QLabel("图谱 web 岛需要安装 native extra（PySide6 + QtWebEngine）。")
             label.setObjectName("muted")
-            layout.addWidget(label)
+            layout.addWidget(label, 1)
             return
         self.web_view = QWebEngineView(self)
         config_dir = self.facade.config_store.config_dir / "web-profile"
@@ -126,7 +125,7 @@ class GraphView(QWidget):
         self.web_view.loadFinished.connect(self._loaded)
         self.bridge.themeChanged.connect(self._push_palette)
         self.bridge.openMemoryRequested.connect(self.openMemoryRequested)
-        layout.addWidget(self.web_view)
+        layout.addWidget(self.web_view, 1)
         if self.graph_path.is_file():
             self.web_view.setUrl(QUrl.fromLocalFile(str(self.graph_path)))
         else:

@@ -47,10 +47,14 @@ def test_graph_bridge_persists_settings_and_explicit_palette(native_facade: Memo
     bridge = GraphBridge(native_facade, "dark")
     palette = json.loads(bridge.getPalette())
     assert palette["theme"] == "dark"
-    assert palette["background"] == "#141926"
-    assert palette["label"] == "#E9ECF4"
-    assert palette["accent"] == "#8DB5FF"
-    assert palette["types"]["project"] == "#8DB5FF"
+    assert palette["background"] == "#131B2E"
+    assert palette["label"] == "#DAE2FD"
+    assert palette["accent"] == "#A5B4FC"
+    assert palette["types"]["user"] == "#6366F1"
+    assert palette["types"]["project"] == "#7C3AED"
+    assert palette["types"]["reference"] == "#34D399"
+    assert palette["types"]["feedback"] == "#FB7185"
+    assert palette["line"] == "#465574"
     assert bridge.writeGraphSettings('{"labelThreshold": 12, "forces": {"center": 2}}') is True
     restored = GraphBridge(native_facade, "dark")
     settings = json.loads(restored.readGraphSettings())

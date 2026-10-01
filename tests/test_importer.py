@@ -216,7 +216,19 @@ class TestRun:
         assert len(second["memory_skipped_same"]) == 3
         assert second["skills_skipped"] == []
 
-    def test_conflicting_content_renames(self, service: ImportService, tmp_path: Path) -> None:
+    def test_same_memory_content_with_different_names_is_skipped(self, service: ImportService, tmp_path: Path) -> None:
+        source = tmp_path / "content-dup"
+        source.mkdir()
+        template = "---\nname: {name}\ndescription: 同一正文\ntype: reference\n---\n\n完全相同的正文。\n"
+        (source / "a.md").write_text(template.format(name="first-note"), encoding="utf-8")
+        (source / "b.md").write_text(template.format(name="second-note"), encoding="utf-8")
+        result = service.run(str(source))
+        assert result["memory_imported"] == 1
+        assert len(result["memory_skipped_duplicate"]) == 1
+        assert result["memory_duplicate_details"][0]["reason"] == "同类型正文内容相同"
+        assert service.memory.stats()["total"] == 1
+
+    def test_conflicting_content_is_skipped_without_renaming(self, service: ImportService, tmp_path: Path) -> None:
         source = tmp_path / "dsh"
         _make_dsh(source)
         memory = MemoryService(service.config_store)
@@ -225,14 +237,15 @@ class TestRun:
             "description": "程序里已有的条目", "body": "本地正文不一样。",
         })
         result = service.run(str(source))
-        assert "user-profile → user-profile-2" in result["memory_renamed"]
+        assert result["memory_renamed"] == []
+        assert "user-profile" in result["memory_skipped_duplicate"]
         assert memory.get_entry("user-profile")["description"] == "程序里已有的条目"
-        assert "用户画像正文" in memory.get_entry("user-profile-2")["body"]
-        # 再次导入同一来源：-2 已存在且实质内容相同 → 幂等跳过，不再生成 -3
+        assert not (tmp_path / "repo" / "memory" / "notes" / "user-profile-2.md").exists()
+        # 再次导入同一来源仍跳过，不生成 -2/-3 等避让副本
         again = service.run(str(source))
         assert again["memory_imported"] == 0
-        assert "user-profile-2" in again["memory_skipped_same"]
-        assert not any("user-profile-3" in item for item in again["memory_renamed"])
+        assert "user-profile" in again["memory_skipped_same"]
+        assert not again["memory_renamed"]
 
     def test_chinese_filename_in_source_does_not_abort(self, service: ImportService, tmp_path: Path) -> None:
         """来源里 name 为纯中文的条目：单条失败不中止整批（ocr 审查 #high 修复）。"""

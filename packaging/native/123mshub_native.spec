@@ -27,7 +27,7 @@ datas = graph_datas + [
     (str(src_root / "mshub/native/design_tokens.json"), "mshub/native"),
 ] + [
     (str(icon_root / name), "mshub/native/icons")
-    for name in ("123mshublogo.ico", "123mshublogohei.ico")
+    for name in ("NEWmshublogo.ico", "new123uilogo.ico", "MATERIAL-SYMBOLS-LICENSE.txt")
 ]
 # PyInstaller's official PySide6 hooks collect the exact Qt DLLs, WebEngine
 # helper/resources and translations referenced by these imports.  Do not use
@@ -63,7 +63,7 @@ exe = EXE(
     [],
     [],
     name="123mshub",
-    icon=str(icon_root / "123mshublogo.ico"),
+    icon=str(icon_root / "NEWmshublogo.ico"),
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

@@ -55,6 +55,7 @@ EN = {
     "已存状态": "Saved state", "清除已存 Token": "Clear saved token", "AI 与凭据": "AI & credentials",
     "说明": "Note", "匿名访问可用，但更容易触发 GitHub 速率限制。": "Anonymous access works with lower GitHub rate limits.",
     "重新识别已同步条目": "Reconcile synced entries", "导入记忆技能库…": "Import memories & skills…",
+    "导入记忆技能库（可选择Agent记忆或技能文件夹导入）": "Import memories (Agent) or skills (folder)…",
     "打开仓库目录": "Open repository", "维护与导入": "Maintenance & import", "保存设置": "Save settings",
     "多选": "Select", "检查通过后不显示": "Hide passed items", "识别条目": "Reconcile entries",
     "清除所有配置": "Clear all settings", "清除仓库数据保留配置": "Detach repository (keep settings)",

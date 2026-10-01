@@ -29,7 +29,7 @@ def show_toast(anchor: QWidget, text: str, duration_ms: int = 1500) -> None:
     toast.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
     toast.setStyleSheet(
         "QLabel#mshubToast { background: rgba(23,27,35,.92); color:#FFFFFF;"
-        " border-radius:14px; padding:7px 18px; font-size:13px; font-weight:600; }"
+        " border-radius:14px; padding:7px 18px; font-size:12px; font-weight:600; }"
     )
     toast.adjustSize()
     top_left = anchor.mapTo(window, QPoint(anchor.width() // 2 - toast.width() // 2, anchor.height() + 8))
@@ -179,9 +179,13 @@ class ShiftRangeCheckMixin:
         return super().eventFilter(watched, event)
 
 def make_agent_prompt_button(parent: QWidget, clicked_slot) -> QPushButton:
-    """v1.7.5：构造右上角皇家蓝「Agent连接提示词」按钮，保证五页样式文案一致。"""
+    """五页右上角「Agent连接提示词」共用的复制动作按钮，保证样式文案一致。
+
+    v1.10.0（Stitch）：objectName 从 primary 独立为 agentButton——动能渐变
+    （v1.10.0C 起为靛蓝→紫罗兰）专属签名色，仅智能体相关操作使用。
+    """
     button = QPushButton(AGENT_PROMPT_BUTTON_TEXT, parent)
-    button.setObjectName("primary")
+    button.setObjectName("agentButton")
     button.setToolTip(AGENT_PROMPT_BUTTON_TIP)
     button.clicked.connect(clicked_slot)
     return button
@@ -254,6 +258,45 @@ class ElideLabel(QLabel):
         painter.setPen(self.palette().color(QPalette.ColorRole.WindowText))
         text = self.fontMetrics().elidedText(self.text(), Qt.TextElideMode.ElideRight, self.contentsRect().width())
         painter.drawText(self.contentsRect(), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, text)
+
+
+class HeaderBand(QFrame):
+    """v1.10.0B（Stitch 结构移植）：页头横向信息带。
+
+    结构对齐 Stitch 稿：``[眉标胶囊] [大标题] | [副题···] ---- [动作按钮组]``
+    （原来是竖排三行标签，视觉上与旧版无结构差异）。副题吸收 divider+stretch，
+    动作组用 :attr:`actions` 布局自行 addWidget。
+    """
+
+    def __init__(self, eyebrow: str, title: str, subtitle: str, parent=None):
+        super().__init__(parent)
+        self.setObjectName("headerBand")
+        # v1.10.0C：垂直方向锁 Maximum——页面内容为空（列表未填充）时根布局会把
+        # 多余高度摊给页头，眉标胶囊被拉成高条；钉在 sizeHint 上五页高度一致
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
+        row = QHBoxLayout(self)
+        row.setContentsMargins(18, 12, 18, 12)
+        row.setSpacing(12)
+        if eyebrow:
+            row.addWidget(QLabel(eyebrow, objectName="eyebrow"))
+        row.addWidget(QLabel(title, objectName="title"))
+        divider = QFrame()
+        divider.setObjectName("headerDivider")
+        divider.setFixedWidth(1)
+        divider.setFrameShape(QFrame.Shape.NoFrame)
+        row.addWidget(divider)
+        self.subtitle = QLabel(subtitle, objectName="muted")
+        self.subtitle.setWordWrap(False)
+        row.addWidget(self.subtitle, 1)
+        self.actions_widget = QWidget()
+        # 全局 QWidget 底色规则会把动作区刷成灰块，页头带内必须透明；
+        # 注意必须带选择器——裸 background 会级联进子按钮，把渐变主按钮洗掉
+        self.actions_widget.setObjectName("headerActions")
+        self.actions_widget.setStyleSheet("QWidget#headerActions { background: transparent; }")
+        self.actions = QHBoxLayout(self.actions_widget)
+        self.actions.setContentsMargins(0, 0, 0, 0)
+        self.actions.setSpacing(8)
+        row.addWidget(self.actions_widget)
 
 
 class PageHeader(QWidget):
@@ -333,8 +376,10 @@ class DataTable(QTableWidget):
         self.setTextElideMode(Qt.TextElideMode.ElideRight)
         self.setMinimumWidth(0)
         self.verticalHeader().hide()
-        self.verticalHeader().setDefaultSectionSize(52)
-        self.verticalHeader().setMinimumSectionSize(52)
+        # Stitch table rows use a compact 44px rhythm; keep it readable while
+        # preserving the checkbox target and avoiding a sparse dashboard.
+        self.verticalHeader().setDefaultSectionSize(44)
+        self.verticalHeader().setMinimumSectionSize(44)
         self.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Fixed)
         self.horizontalHeader().setMinimumSectionSize(32)
         self.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)

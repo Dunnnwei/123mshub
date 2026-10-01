@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (QCheckBox, QDialog, QDialogButtonBox, QHBoxLayout
     QLabel, QPlainTextEdit, QPushButton, QVBoxLayout)
 
 from ..task_runner import RequestScope
+from ..theme import system_font_family
 from ..ui import prepare_dialog
 
 
@@ -18,16 +19,16 @@ class ImportDialog(QDialog):
         self.facade, self.runner, self.jobs = facade, runner, jobs
         self.source = Path(source)
         self.scope = RequestScope(runner, self)
-        self.setWindowTitle("导入记忆技能库")
+        self.setWindowTitle("导入记忆技能库（可选择Agent记忆或技能文件夹导入）")
         self.resize(920, 650)
         root = QVBoxLayout(self)
-        intro = QLabel(f"来源目录：{self.source}\n扫描是只读的；确认后写入当前仓库，重复内容按既有幂等规则跳过。")
+        intro = QLabel(f"来源目录：{self.source}\n自动跳过同名或同类型正文相同的记忆，以及同库名称、来源或目录相同的技能；不覆盖已有内容。")
         intro.setWordWrap(True); intro.setObjectName("muted"); root.addWidget(intro)
         options = QHBoxLayout()
         self.memory = QCheckBox("导入记忆"); self.memory.setChecked(True); options.addWidget(self.memory)
         self.skills = QCheckBox("导入技能 / 程序"); self.skills.setChecked(True); options.addWidget(self.skills)
         options.addStretch(); self.scan_button = QPushButton("扫描预览"); options.addWidget(self.scan_button); root.addLayout(options)
-        self.preview = QPlainTextEdit(); self.preview.setReadOnly(True); self.preview.setAccessibleName("导入扫描预览"); self.preview.setFont(QFont("Cascadia Mono", 9)); root.addWidget(self.preview, 1)
+        self.preview = QPlainTextEdit(); self.preview.setReadOnly(True); self.preview.setAccessibleName("导入扫描预览"); self.preview.setFont(QFont(system_font_family(), 9)); root.addWidget(self.preview, 1)
         self.status = QLabel("尚未扫描"); self.status.setObjectName("status"); root.addWidget(self.status)
         buttons = QDialogButtonBox(); self.import_button = buttons.addButton("确认导入", QDialogButtonBox.ButtonRole.AcceptRole); close = buttons.addButton("关闭", QDialogButtonBox.ButtonRole.RejectRole); self.import_button.setEnabled(False); root.addWidget(buttons)
         self.scan_button.clicked.connect(self.scan); self.import_button.clicked.connect(self.start_import); close.clicked.connect(self.reject)
@@ -60,5 +61,6 @@ class ImportDialog(QDialog):
 
     def start_import(self):
         self.import_button.setEnabled(False); self.scan_button.setEnabled(False); self.status.setText("已提交后台任务；关闭此窗口不影响导入。")
-        self.jobs.submit("import", f"导入 {self.source.name or self.source}", lambda report: self.facade.run_import(self.source, include_memory=self.memory.isChecked(), include_skills=self.skills.isChecked(), progress=report), progress=True)
+        include_memory, include_skills = self.memory.isChecked(), self.skills.isChecked()
+        self.jobs.submit("import", f"导入 {self.source.name or self.source}", lambda report: self.facade.run_import(self.source, include_memory=include_memory, include_skills=include_skills, progress=report), progress=True)
         self.accept()

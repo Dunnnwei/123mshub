@@ -3,8 +3,9 @@ import FA2LayoutSync from 'graphology-layout-forceatlas2'
 import FA2Layout from 'graphology-layout-forceatlas2/worker'
 import Sigma from 'sigma'
 import { drawDiscNodeLabel, NodeCircleProgram } from 'sigma/rendering'
+import { rankedTypeColors } from './colors.js'
 
-const colors = { user: '#7144B8', project: '#0148D2', reference: '#006F72', feedback: '#97500A' }
+const colors = { user: '#6366F1', project: '#7C3AED', reference: '#22C55E', feedback: '#F43F5E' }
 const typeLabels = { user: '用户', project: '项目', reference: '参考', feedback: '反馈' }
 const programs = { user: NodeCircleProgram, project: NodeCircleProgram, reference: NodeCircleProgram, feedback: NodeCircleProgram }
 const settingsKey = 'mshub.memoryGraph.settings.v1'
@@ -88,7 +89,17 @@ function stableHash(value) { let hash = 2166136261; for (const char of String(va
 function seededPosition(id, index) { return { x: ((stableHash(`${id}:x:${index}`) / 0xffffffff) * 2 - 1) * 18, y: ((stableHash(`${id}:y:${index}`) / 0xffffffff) * 2 - 1) * 18 } }
 function parseColor(value) { const text = String(value || '').trim(); const hex = text.match(/^#([0-9a-f]{6})$/i); if (hex) return [parseInt(hex[1].slice(0,2),16), parseInt(hex[1].slice(2,4),16), parseInt(hex[1].slice(4,6),16)]; const rgb = text.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i); return rgb ? rgb.slice(1, 4).map(Number) : null }
 function mix(fg, amount, bg) { const a = parseColor(fg) || [166,166,166]; const b = parseColor(bg) || [255,255,255]; const v = Math.max(0, Math.min(1, Number(amount) || 0)); return `#${a.map((x, i) => Math.round(x * v + b[i] * (1 - v)).toString(16).padStart(2,'0')).join('')}` }
-function refreshTheme() { const bg = paletteFromBridge?.background || '#FFFFFF'; const label = paletteFromBridge?.label || '#171B23'; Object.assign(colors, paletteFromBridge?.types || {}); theme = { background: bg, label, dimNode: mix('#A6A6A6', .1, bg), dimEdge: mix('#8C8C8C', .12, bg), focusEdge: paletteFromBridge?.line || mix('#8C8C8C', .45, bg) }; if (graph) graph.forEachNode((id) => graph.setNodeAttribute(id, 'color', colors[graph.getNodeAttribute(id, 'type')] || colors.reference)); renderer?.setSetting('labelColor', { color: theme.label }); renderer?.refresh() }
+function refreshTheme() {
+  const dark = document.documentElement.dataset.theme === 'dark'
+  const bg = paletteFromBridge?.background || (dark ? '#131B2E' : '#F0F2F8')
+  const label = paletteFromBridge?.label || (dark ? '#DAE2FD' : '#2E3040')
+  Object.assign(colors, rankedTypeColors(raw.nodes, dark))
+  for (const [type, color] of Object.entries(colors)) document.documentElement.style.setProperty(`--${type}`, color)
+  theme = { background: bg, label, dimNode: mix('#A6A6A6', .1, bg), dimEdge: mix('#8C8C8C', dark ? .22 : .12, bg), focusEdge: paletteFromBridge?.line || (dark ? '#465574' : '#D0D2DC') }
+  if (graph) graph.forEachNode((id) => graph.setNodeAttribute(id, 'color', colors[graph.getNodeAttribute(id, 'type')] || colors.reference))
+  renderer?.setSetting('labelColor', { color: theme.label })
+  renderer?.refresh()
+}
 function normalize(node, index) { const id = String(node.id || node.name || `memory-${index}`); const pos = seededPosition(id, index); const type = colors[node.type] ? node.type : 'reference'; return { id, label: String(node.title || id), title: String(node.title || id), type, source: String(node.source || ''), tags: Array.isArray(node.tags) ? node.tags : [], x: Number.isFinite(node.x) ? node.x : pos.x, y: Number.isFinite(node.y) ? node.y : pos.y, baseX: Number.isFinite(node.x) ? node.x : pos.x, baseY: Number.isFinite(node.y) ? node.y : pos.y, phase: stableHash(`${id}:float`) % 6283 / 1000, color: colors[type] } }
 function nodeMatch(data) { const q = query.trim().toLocaleLowerCase(); if (!q) return true; return [data.id, data.title, data.source, ...(data.tags || [])].some((value) => String(value || '').toLocaleLowerCase().includes(q)) }
 // v1.5.0：reducer 不再掺漂浮偏移（sigma v3 的 reducer 输出不进 WebGL 缓冲），
@@ -172,10 +183,10 @@ renderer.getMouseCaptor().on('mousedown', () => { pointerHeld = true }); rendere
 // 每帧调 updateFloatScale 实时跟踪缩放比，动画全程连续。
 }
 function render(data) { raw = data; syncGraph(data); $('#node-count').textContent = String(graph.order); $('#edge-count').textContent = String(graph.size); // v1.7.2：仓库已配置但没有任何记忆时，给出下一步指引而不是卡在"正在读取"
-  if (graph.order === 0) message.textContent = '仓库中暂无记忆条目：在「记忆仓库」新建或导入后，这里会展示关系图。'; message.classList.toggle('hidden', graph.order > 0); refreshTheme(); if (!renderer) { renderer = new Sigma(graph, $('#sigma-container'), { renderLabels: true, labelRenderedSizeThreshold: Number(graphSettings.labelThreshold || 8), labelFont: 'Segoe UI, Microsoft YaHei, sans-serif', labelSize: 12, labelWeight: '500', labelColor: { color: theme.label }, defaultNodeColor: '#A6A6A6', defaultEdgeColor: theme.focusEdge, defaultNodeType: 'circle', nodeProgramClasses: programs, defaultDrawNodeLabel: drawLabel, defaultDrawNodeHover: drawHover, nodeReducer, edgeReducer, hideEdgesOnMove: graph.size > 8000, stagePadding: 28, zIndex: true }); bindRenderer() } else renderer.setGraph(graph); startLayout(); window.mshubGraphReady = true; window.mshubGraphNodeCount = graph.order; window.mshubGraphEdgeCount = graph.size }
+  if (graph.order === 0) message.textContent = '仓库中暂无记忆条目：在「记忆仓库」新建或导入后，这里会展示关系图。'; message.classList.toggle('hidden', graph.order > 0); refreshTheme(); if (!renderer) { renderer = new Sigma(graph, $('#sigma-container'), { renderLabels: true, labelRenderedSizeThreshold: Number(graphSettings.labelThreshold || 8), labelFont: 'system-ui, Segoe UI, Microsoft YaHei, sans-serif', labelSize: 12, labelWeight: '500', labelColor: { color: theme.label }, defaultNodeColor: '#A6A6A6', defaultEdgeColor: theme.focusEdge, defaultNodeType: 'circle', nodeProgramClasses: programs, defaultDrawNodeLabel: drawLabel, defaultDrawNodeHover: drawHover, nodeReducer, edgeReducer, hideEdgesOnMove: graph.size > 8000, stagePadding: 28, zIndex: true }); bindRenderer() } else renderer.setGraph(graph); startLayout(); window.mshubGraphReady = true; window.mshubGraphNodeCount = graph.order; window.mshubGraphEdgeCount = graph.size }
 function load() { if (!bridge) return; message.textContent = '正在读取记忆关系…'; message.classList.remove('hidden'); const kinds = $('#include-tags').checked ? 'link,tag' : 'link'; bridge.getGraph(kinds, (payload) => { let data = null; try { data = JSON.parse(payload) } catch (error) { message.textContent = `图谱数据解析失败：${error}`; return } // v1.7.2：仓库未配置/读取失败时返回带 unavailable 标记的结构化载荷，给出人话提示而不是 JSON 报错
   if (data && data.unavailable) { message.textContent = data.unavailable === 'repo-not-set' ? '尚未配置仓库路径，记忆图示暂无法显示。请先在「设置选项 → 仓库与语言」选择仓库根目录并保存。' : `仓库读取失败：${data.message || '未知错误'}`; return } render(data) }) }
-window.mshubSetTheme = (mode) => { const value = mode === 'dark' ? 'dark' : 'light'; document.documentElement.dataset.theme = value; document.body.dataset.theme = value; const meta = document.querySelector('meta[name="theme-color"]'); if (meta) meta.content = value === 'dark' ? '#0B0E14' : '#F2F4F8'; refreshTheme() }
+window.mshubSetTheme = (mode) => { const value = mode === 'dark' ? 'dark' : 'light'; document.documentElement.dataset.theme = value; document.body.dataset.theme = value; const meta = document.querySelector('meta[name="theme-color"]'); if (meta) meta.content = value === 'dark' ? '#0B0E14' : '#F0F2F8'; refreshTheme() }
 window.mshubSetPalette = (payload) => { try { paletteFromBridge = typeof payload === 'string' ? JSON.parse(payload) : payload; window.mshubSetTheme(paletteFromBridge.theme); } catch {} }
 window.mshubSetGraphSettings = (payload) => { try { graphSettings = mergeSettings(typeof payload === 'string' ? JSON.parse(payload) : payload); saveSettings(); load() } catch {} }
 // ---- v1.5.0 呼吸引擎 ----------------------------------------------------

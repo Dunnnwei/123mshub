@@ -16,7 +16,7 @@ from ..i18n import LanguageController, localize
 from ..settings_service import detect_proxy, list_models, mask_secret, test_connection, validate_endpoint
 from ..task_runner import RequestScope, TaskRunner
 from ..widgets import button
-from ..ui import AdaptivePage, copy_agent_prompt, label_controls, make_agent_prompt_button, scroll_form
+from ..ui import AdaptivePage, HeaderBand, copy_agent_prompt, label_controls, make_agent_prompt_button, scroll_form
 
 
 class SettingsPage(AdaptivePage):
@@ -36,21 +36,16 @@ class SettingsPage(AdaptivePage):
 
     def _build_ui(self):
         root = QVBoxLayout(self)
-        root.setContentsMargins(28, 24, 28, 16)
-        root.setSpacing(16)
-        root.addWidget(QLabel("本地配置", objectName="eyebrow"))
-        root.addWidget(QLabel("设置选项", objectName="title"))
-        root.addWidget(QLabel("配置目录固定为 %APPDATA%\\mshub；修改草稿不会立即生效。", objectName="muted"))
-        # v1.6.0："关于 123 MSHub"从导航栏移到设置页
-        # v1.7.5：右上角统一「Agent连接提示词」皇家蓝按钮（最右），关于按钮在其左
-        about_row = QHBoxLayout()
-        about_row.addStretch()
+        root.setContentsMargins(20, 14, 20, 12)
+        root.setSpacing(12)
+        # v1.10.0B（Stitch 结构）：页头 = 横向信息带，关于/Agent 按钮并入右侧动作组
+        band = HeaderBand("本地配置", "设置选项", "配置目录固定为 %APPDATA%\\mshub；修改草稿不会立即生效。")
         about_btn = QPushButton("关于 123 MSHub")
         about_btn.clicked.connect(lambda: self._show_about())
-        about_row.addWidget(about_btn)
+        band.actions.addWidget(about_btn)
         self.agent_button = make_agent_prompt_button(self, self.copy_prompt)
-        about_row.addWidget(self.agent_button)
-        root.addLayout(about_row)
+        band.actions.addWidget(self.agent_button)
+        root.addWidget(band)
         self.tabs = QTabWidget()
         self.tabs.setAccessibleName("设置分类")
         self.tabs.setUsesScrollButtons(True)
@@ -163,7 +158,7 @@ class SettingsPage(AdaptivePage):
         layout = QVBoxLayout(maintenance)
         self.heal_button = button("重新识别已同步条目", self.heal)
         layout.addWidget(self.heal_button)
-        layout.addWidget(button("导入记忆技能库…", self.choose_import))
+        layout.addWidget(button("导入记忆技能库（可选择Agent记忆或技能文件夹导入）", self.choose_import))
         layout.addWidget(button("打开仓库目录", self.open_repo))
         # v1.7.4：快速重置入口——换仓库 / 重新导入新仓库时不必手工清理
         reset_line = QFrame()

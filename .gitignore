@@ -53,3 +53,8 @@ uiastra/
 uik3/
 uinew/
 .tmp-ocr-review.txt
+
+# v1.10 系列 Stitch 设计稿原始导出（本地资料，符号语义已提取进 docs/ui-redesign）
+stitchui/
+stitchuirb/
+stitch_123_mshub.zip
