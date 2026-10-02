@@ -81,18 +81,27 @@ class RichHoverToolTip(QObject):
 
     def show(self, text: str, global_pos: QPoint) -> None:
         self.hide()
+        # QToolTip/QPalette follows the Windows style rather than MSHub's
+        # selected theme.  Read the live application tokens here so a light
+        # MSHub session always gets a light card, even on a dark Windows theme.
+        from .theme import current_palette
+        palette = current_palette()
         tip = QFrame(self.watched.window(), Qt.WindowType.ToolTip | Qt.WindowType.FramelessWindowHint)
         tip.setObjectName("richHoverTooltip")
         tip.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         tip.setStyleSheet(
-            "QFrame#richHoverTooltip { background: palette(base); color: palette(text); "
-            "border: 1px solid #6366F1; border-radius: 10px; padding: 8px; }"
+            f"QFrame#richHoverTooltip {{ background: {palette['raised']}; color: {palette['ink']}; "
+            f"border: 1px solid {palette['line']}; border-radius: 10px; padding: 8px; }}"
         )
         label = QLabel(text, tip)
+        label.setTextFormat(Qt.TextFormat.PlainText)
         label.setWordWrap(True)
         label.setMaximumWidth(self.max_width)
         label.setTextInteractionFlags(Qt.TextInteractionFlag.NoTextInteraction)
-        label.setStyleSheet("background: transparent; border: 0; padding: 0; line-height: 1.35;")
+        label.setStyleSheet(
+            f"background: transparent; color: {palette['ink']}; border: 0; padding: 0; "
+            "line-height: 1.35;"
+        )
         layout = QVBoxLayout(tip)
         layout.setContentsMargins(10, 8, 10, 8)
         layout.addWidget(label)
@@ -208,7 +217,7 @@ class CheckableTableMixin:
         self._apply_sort(col, self._sort_order)
 
 
-SHIFT_RANGE_HINT = "可使用 Shift 连选"
+SHIFT_RANGE_HINT = "双击可打开编辑  ·  可使用 Shift 连选"
 
 
 class ShiftRangeCheckMixin:

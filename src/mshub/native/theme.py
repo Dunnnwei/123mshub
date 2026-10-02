@@ -181,6 +181,8 @@ QLabel#versionPill {{ color: {p['accent']}; background: {eyebrow_bg}; border: 1p
 QFrame#listCard {{ background: {p['surface']}; border: 1px solid {p['line']}; border-top: 1px solid {card_top}; border-radius: 16px; }}
 QWidget#listHeader {{ background: {p['inset']}; border: none; border-bottom: 1px solid {p['line']}; border-top-left-radius: 15px; border-top-right-radius: 15px; }}
 QWidget#listHeader QLabel {{ color: {p['muted']}; font-size: {TYPOGRAPHY['meta']}px; font-weight: 600; background: transparent; }}
+QHeaderView#listHeaderView {{ background: transparent; border: none; }}
+QHeaderView#listHeaderView::section {{ background: transparent; color: #6366F1; padding: 7px 10px; border: none; border-bottom: 1px solid {p['line']}; font-size: {TYPOGRAPHY['meta']}px; font-weight: 700; }}
 QListWidget#memoryList {{ background: transparent; border: none; padding: 0; }}
 QListWidget#memoryList::item {{ background: transparent; border: none; border-bottom: 1px solid {_rgba(p['line'], 120)}; border-radius: 0; padding: 0; margin: 0; }}
 QListWidget#memoryList::item:hover {{ background: {_rgba(p['action'], 14)}; }}
@@ -251,12 +253,15 @@ QFrame#jobPanel {{ background: {job_card}; border: 1px solid {p['line']}; border
 QFrame#jobPanel QLabel#jobTitle {{ color: {p['ink']}; font-size: {TYPOGRAPHY['body']}px; font-weight: 700; }}
 QTableWidget#jobTable {{ background: transparent; border: none; }}
 QTableWidget#jobTable QHeaderView::section {{ background: transparent; border: none; border-bottom: 1px solid {p['line']}; }}
+QTableWidget#jobTable::item:selected {{ color: {p['error']}; background: {selected_tint}; }}
 /* v1.7.3：任务面板"清除已完成"入口——弱化的文字按钮 */
-QPushButton#jobClear {{ background: transparent; border: none; color: {p['muted']}; font-size: 11px; font-weight: 500; min-height: 22px; padding: 0 2px; text-align: left; }}
-QPushButton#jobClear:hover {{ color: {p['accent']}; }}
-QPushButton#jobClear:pressed {{ color: {p['action']}; }}
-QPushButton#jobAction {{ background: transparent; border: none; color: {p['accent']}; font-size: 11px; font-weight: 650; min-height: 22px; padding: 0 4px; }}
-QPushButton#jobAction:hover {{ color: {p['action']}; }}
+/* The three task actions are one text-button family.  Their visibility is
+   controlled together by MainWindow, so the collapsed card never has a
+   button sitting under the splitter arrow. */
+QPushButton#jobClear, QPushButton#jobAction {{ background: transparent; border: none; color: {p['muted']}; font-size: 11px; font-weight: 500; min-height: 22px; padding: 0 4px; text-align: left; }}
+QPushButton#jobClear:hover, QPushButton#jobAction:hover {{ color: {p['accent']}; }}
+QPushButton#jobClear:pressed, QPushButton#jobAction:pressed {{ color: {p['action']}; }}
+QPushButton#jobClear:disabled, QPushButton#jobAction:disabled {{ color: {p['faint']}; }}
 QTableWidget#jobTable QHeaderView::section {{ padding: 4px 6px; }}
 QTableView {{ background: {p['surface']}; alternate-background-color: {p['inset']}; gridline-color: {p['line']}; border: 1px solid {p['line']}; border-radius: 12px; selection-background-color: {p['selection']}; selection-color: {p['ink']}; }}
 /* v1.6.0：技能库/安全中心加行高（原来压得太紧难以操作） */

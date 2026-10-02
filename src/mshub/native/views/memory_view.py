@@ -153,7 +153,7 @@ class MemoryPage(ShiftRangeCheckMixin, AdaptivePage):
         self.editor_dialog = GuardedDialog(self, self.can_close_editor); self.editor_dialog.setWindowTitle("记忆编辑"); self.editor_dialog.setModal(False); self.editor_dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, False); editor_layout = QVBoxLayout(self.editor_dialog); editor_layout.setContentsMargins(0, 0, 0, 0); editor_layout.addWidget(detail); prepare_dialog(self.editor_dialog); self._restore_editor_geometry(); self.editor_dialog.finished.connect(lambda _code: self._save_editor_geometry()); self.editor_dialog.hide(); self.editor_save_shortcut = QShortcut(QKeySequence("Ctrl+S"), self.editor_dialog); self.editor_save_shortcut.activated.connect(self.save_current); self.edit_window_button.setEnabled(False); self.content_splitter = splitter; splitter.setSizes([1100, 0]); root.addWidget(splitter, 1)
         tidy_widget, tidy = flow_bar(self); tidy_button = QPushButton("归纳整理"); tidy_button.clicked.connect(self.tidy); reports = QPushButton("整理日报"); reports.clicked.connect(self.show_reports); duty = QPushButton("复制值守提示词"); duty.clicked.connect(self.copy_duty); index = QPushButton("查看索引源文件"); index.clicked.connect(self.show_index); tidy.addWidget(tidy_button); tidy.addWidget(reports); tidy.addWidget(duty); tidy.addWidget(index); root.addWidget(tidy_widget)
         # v1.9.0（需求 6）：底部 Shift 连选提示小字（右对齐贴列表右边线）
-        hint_row = QHBoxLayout(); hint_row.addStretch(); self.shift_hint = QLabel(SHIFT_RANGE_HINT); self.shift_hint.setObjectName("helper"); hint_row.addWidget(self.shift_hint); root.addLayout(hint_row)
+        hint_row = QHBoxLayout(); hint_row.addStretch(); self.shift_hint = QLabel(tr(SHIFT_RANGE_HINT)); self.shift_hint.setObjectName("helper"); hint_row.addWidget(self.shift_hint); root.addLayout(hint_row)
         # v1.9.0（需求 2）：列表聚焦时按 Delete 键 = 批量删除勾选项
         self._delete_shortcut = QShortcut(QKeySequence(Qt.Key_Delete), self.entry_list)
         self._delete_shortcut.setContext(Qt.ShortcutContext.WidgetShortcut)
@@ -163,6 +163,15 @@ class MemoryPage(ShiftRangeCheckMixin, AdaptivePage):
         self.type_edit.currentIndexChanged.connect(self._mark_dirty)
         self._set_editor_enabled(False)
         label_controls(self)
+        QTimer.singleShot(0, self._equalize_header_actions)
+
+    def _equalize_header_actions(self) -> None:
+        """Keep the three header actions on one shared hit-target grid."""
+        buttons = (self.new_window_button, self.edit_window_button, self.agent_button)
+        width = max(128, max(button.sizeHint().width() for button in buttons))
+        width = min(width, 190)
+        for button in buttons:
+            button.setFixedSize(width, 34)
 
     def _mark_dirty(self, *_):
         if self._loading:
@@ -321,6 +330,8 @@ class MemoryPage(ShiftRangeCheckMixin, AdaptivePage):
         self.inbox_button.setText(f"{inbox_label} · {pending}" if pending else inbox_label)
 
     def retranslate(self):
+        self._equalize_header_actions()
+        self.shift_hint.setText(tr(SHIFT_RANGE_HINT))
         if hasattr(self, "_last_result"):
             self._apply_listing(self._last_result)
         result = getattr(self, "_last_result", {}) or {}

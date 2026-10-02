@@ -20,15 +20,36 @@ class JobController(QObject):
         self.timer.timeout.connect(self.poll)
         self.timer.start()
 
-    def submit(self, kind, label, fn, *, progress=False, changed=True, callback=None, retry=None):
+    # These operations are safe to repeat from the task panel because their
+    # callable is captured at submission time.  Destructive delete jobs are
+    # deliberately excluded; retrying those would turn a harmless click into
+    # a second destructive request.
+    _AUTO_RETRY_KINDS = frozenset({
+        "install", "update", "translate", "metadata", "scan", "trust",
+        "import", "reconcile", "ai", "tidy", "upgrade",
+    })
+
+    def submit(self, kind, label, fn, *, progress=False, changed=True, callback=None, retry=None,
+               _register_auto_retry=True):
         def run(report):
             report(None, label)
             return fn(report) if progress else fn()
         job = self.manager.submit(kind, label, run)
         if callback:
             self._callbacks[job.id] = callback
-        if retry:
+        if retry is not None:
             self._retry_callbacks[job.id] = retry
+        elif _register_auto_retry and kind in self._AUTO_RETRY_KINDS:
+            # Capture all arguments in a zero-argument callback.  The retry
+            # gets a new job id and therefore a fresh progress row, while the
+            # original failure remains available for its details dialog.
+            def resubmit(kind=kind, label=label, fn=fn, progress=progress,
+                         changed=changed, callback=callback):
+                return self.submit(
+                    kind, label, fn, progress=progress, changed=changed,
+                    callback=callback,
+                )
+            self._retry_callbacks[job.id] = resubmit
         if changed:
             self._mutations.add(job.id)
         self.changed.emit()
@@ -62,9 +83,16 @@ class JobController(QObject):
         """Re-submit a failed/unfinished task when its owner supplied a retry action."""
         job = next((row for row in self.manager.list_jobs() if row["id"] == identifier), None)
         callback = self._retry_callbacks.get(identifier)
-        if not job or not callback or job["status"] == "running":
+        if not job or not callback or job["status"] != "error":
             return None
         return callback()
+
+    def can_retry(self, identifier) -> bool:
+        job = next((row for row in self.manager.list_jobs() if row["id"] == identifier), None)
+        # A completed task has useful details but should not be re-run by an
+        # accidental click.  Running tasks are still in flight; only an
+        # observed failure is an actionable retry state.
+        return bool(job and job["status"] == "error" and identifier in self._retry_callbacks)
 
     def clear_finished(self) -> int:
         """v1.7.3：一键清除全部已结束任务（运行中保留），供侧栏任务面板使用。

@@ -1,0 +1,29 @@
+{
+  "version": "1.10.4",
+  "frozen_modules_match_source": {
+    "mshub": true,
+    "mshub.native.main_window": true,
+    "mshub.native.shell_widgets": true,
+    "mshub.native.navigation_symbols": true,
+    "mshub.native.column_resize": true,
+    "mshub.native.list_table": true,
+    "mshub.native.ui": true,
+    "mshub.native.job_controller": true,
+    "mshub.native.theme": true,
+    "mshub.native.i18n": true,
+    "mshub.native.views.skill_view": true,
+    "mshub.native.views.memory_view": true
+  },
+  "packaged_assets_match_source": {
+    "NEWmshublogo.ico": true,
+    "new123uilogo.ico": true,
+    "MATERIAL-SYMBOLS-LICENSE.txt": true
+  },
+  "zip_crc": "pass",
+  "zip_exe_matches_onedir": true,
+  "zip_entries": 212,
+  "exe_sha256": "51b76804f452e3d5b95f4d83165adc9c6fc872667541945a21bd89e6f72ea6b7",
+  "zip_sha256": "35faf8f222183c59b84247007e5b34c2063f95a38b7fb4b454ab387fc44ec1e6",
+  "exe_bytes": 8930974,
+  "zip_bytes": 159015532
+}

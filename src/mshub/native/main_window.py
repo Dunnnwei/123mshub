@@ -188,7 +188,14 @@ class MainWindow(QMainWindow):
         job_layout.setContentsMargins(10, 10, 10, 10)
         job_layout.setSpacing(6)
         self._jobs_collapsed = False
-        job_header = QHBoxLayout()
+        # Keep the header as a fixed, single visual row.  The body below it is
+        # the only area that changes when the panel expands, so the collapsed
+        # card cannot overlap the splitter arrow or its neighbours.
+        self.job_header_widget = QWidget(self.job_panel)
+        self.job_header_widget.setObjectName("jobHeader")
+        self.job_header_widget.setFixedHeight(28)
+        job_header = QHBoxLayout(self.job_header_widget)
+        job_header.setContentsMargins(0, 0, 0, 0)
         job_header.setSpacing(7)
         self.job_activity_icon = TaskActivityIcon(self)
         job_header.addWidget(self.job_activity_icon, alignment=Qt.AlignmentFlag.AlignVCenter)
@@ -207,7 +214,7 @@ class MainWindow(QMainWindow):
         self.job_toggle.setAccessibleName("展开或收起后台任务")
         self.job_toggle.toggled.connect(self._toggle_jobs)
         job_header.addWidget(self.job_toggle, alignment=Qt.AlignmentFlag.AlignVCenter)
-        job_layout.addLayout(job_header)
+        job_layout.addWidget(self.job_header_widget)
         self.job_empty = QLabel("没有正在运行的后台任务")
         self.job_empty.setObjectName("helper")
         self.job_empty.setWordWrap(True)
@@ -223,6 +230,9 @@ class MainWindow(QMainWindow):
         self.job_table.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.job_table.verticalHeader().setDefaultSectionSize(32)
         self.job_table.verticalHeader().setMinimumSectionSize(32)
+        self.job_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.job_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+        self.job_table.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         # v1.7.2：任务列吃满剩余宽度；状态/进度按内容压紧（配合侧栏拖宽查看长任务名）
         self.job_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         self.job_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
@@ -232,7 +242,11 @@ class MainWindow(QMainWindow):
         job_layout.addWidget(self.job_table)
         # v1.10.3：失败/未完成任务需要可追溯、可重试；动作行贴右侧与
         # 「清除已完成」并排，避免把错误原因藏在单行 tooltip 里。
-        job_actions = QHBoxLayout()
+        self.job_actions_widget = QWidget(self.job_panel)
+        self.job_actions_widget.setObjectName("jobActions")
+        job_actions = QHBoxLayout(self.job_actions_widget)
+        job_actions.setContentsMargins(0, 0, 0, 0)
+        job_actions.setSpacing(4)
         job_actions.addStretch(1)
         self.job_clear_button = QPushButton("清除已完成")
         self.job_clear_button.setObjectName("jobClear")
@@ -249,7 +263,7 @@ class MainWindow(QMainWindow):
         self.job_retry_button.setEnabled(False)
         self.job_retry_button.clicked.connect(self._retry_selected_job)
         job_actions.addWidget(self.job_retry_button)
-        job_layout.addLayout(job_actions)
+        job_layout.addWidget(self.job_actions_widget)
         # v1.9.1（需求 C）：任务面板高度可拖——与导航组成垂直 QSplitter。
         # 垂直方向 Ignored 策略让面板跟随用户拖动而不是回弹到 sizeHint；
         # 把手细线上色见 theme.py 的 #jobSplitter。收起按钮仍可用（只藏内容）。
@@ -442,8 +456,10 @@ class MainWindow(QMainWindow):
         """
         total = self.job_splitter.height() or self.sidebar.height() - 120 or 640
         panel = panel_height if panel_height is not None else self._job_panel_height()
-        panel = max(44, min(panel, total - 260))
-        self.job_splitter.setSizes([max(total - panel, 260), panel])
+        minimum_navigation = max(160, 260)
+        panel = max(54, min(panel, max(54, total - minimum_navigation - self.job_splitter.handleWidth())))
+        navigation = max(minimum_navigation, total - self.job_splitter.handleWidth() - panel)
+        self.job_splitter.setSizes([navigation, panel])
 
     def showEvent(self, event) -> None:  # noqa: N802 - Qt virtual method name
         super().showEvent(event)
@@ -463,15 +479,25 @@ class MainWindow(QMainWindow):
         self.job_activity_icon.set_running(any(j["status"] == "running" for j in rows))
         self._update_job_toggle()
         has_finished = any(j["status"] != "running" for j in rows)
-        self.job_empty.setVisible(not rows and not self._jobs_collapsed)
-        self.job_table.setVisible(bool(rows) and not self._jobs_collapsed)
-        # 只在有已结束任务时显示清除入口，收起状态下隐藏
-        self.job_clear_button.setVisible(has_finished and not self._jobs_collapsed)
+        has_rows = bool(rows)
+        body_visible = has_rows and not self._jobs_collapsed
+        self.job_empty.setVisible(not has_rows and not self._jobs_collapsed)
+        self.job_table.setVisible(body_visible)
+        # All three actions share one visibility rule: they are present while
+        # the panel has task rows and disappear together when it is empty or
+        # collapsed.  Clear is disabled when there is nothing to clear.
+        self.job_actions_widget.setVisible(body_visible)
+        self.job_clear_button.setVisible(body_visible)
+        self.job_detail_button.setVisible(body_visible)
+        self.job_retry_button.setVisible(body_visible)
+        self.job_clear_button.setEnabled(has_finished)
+        self.job_table.blockSignals(True)
         self.job_table.setRowCount(len(rows))
         for row, job in enumerate(rows):
             label_item = QTableWidgetItem(str(job["label"]))
             # v1.7.4：侧栏较窄时任务名可能省略，悬停看全名
             label_item.setToolTip(str(job["label"]))
+            label_item.setData(Qt.ItemDataRole.UserRole, job["id"])
             result = job.get("result")
             if isinstance(result, dict) and result.get("summary"):
                 label_item.setToolTip(f"{job['label']}\n{result['summary']}")
@@ -492,6 +518,7 @@ class MainWindow(QMainWindow):
                 error_color = QColor(current_palette()["error"])
                 for cell in (label_item, state_item, progress_item):
                     cell.setForeground(error_color)
+        self.job_table.blockSignals(False)
         restore_row = next((index for index, job in enumerate(rows) if job["id"] == self._selected_job_id), -1)
         if restore_row >= 0:
             self.job_table.selectRow(restore_row)
@@ -502,12 +529,14 @@ class MainWindow(QMainWindow):
     def _job_selection_changed(self) -> None:
         selected = self.job_table.selectionModel().selectedRows() if hasattr(self, "job_table") else []
         row = selected[0].row() if selected else -1
-        rows = self.jobs.list() if hasattr(self, "jobs") else []
-        job = rows[row] if 0 <= row < len(rows) else None
+        item = self.job_table.item(row, 0) if row >= 0 else None
+        identifier = item.data(Qt.ItemDataRole.UserRole) if item else None
+        job = next((candidate for candidate in self.jobs.list()
+                    if candidate["id"] == identifier), None) if identifier else None
         self._selected_job_id = job["id"] if job else None
         if hasattr(self, "job_detail_button"):
             self.job_detail_button.setEnabled(job is not None)
-            self.job_retry_button.setEnabled(bool(job and job["status"] != "done" and job.get("kind") == "install"))
+            self.job_retry_button.setEnabled(bool(job and self.jobs.can_retry(job["id"])))
 
     def _selected_job(self):
         if not self._selected_job_id:
@@ -519,26 +548,36 @@ class MainWindow(QMainWindow):
         if not job:
             return
         result = job.get("result")
-        summary = result.get("summary") if isinstance(result, dict) else ""
+        if isinstance(result, dict):
+            summary = result.get("summary") or result.get("message") or result.get("detail") or ""
+        else:
+            summary = str(result) if result not in (None, "") else ""
         detail = str(job.get("error") or job.get("detail") or summary or "暂无更多错误信息")
         box = QMessageBox(self)
         box.setIcon(QMessageBox.Icon.Warning if job["status"] != "done" else QMessageBox.Icon.Information)
         box.setWindowTitle(f"任务详情 · {job.get('label', '')}")
         box.setText(detail)
-        box.setInformativeText(f"状态：{job.get('status')}\n阶段：{job.get('phase') or '—'}")
+        box.setInformativeText(
+            f"状态：{job.get('status')}\n阶段：{job.get('phase') or '—'}\n"
+            f"任务：{job.get('label', '')}"
+        )
+        if isinstance(result, dict):
+            extra = result.get("detail") or result.get("message") or result.get("summary")
+            if extra and str(extra) != detail:
+                box.setDetailedText(str(extra))
         box.setStandardButtons(QMessageBox.StandardButton.Ok)
         box.exec()
 
     def _retry_selected_job(self) -> None:
         job = self._selected_job()
-        if not job or job.get("kind") != "install":
+        if not job:
             return
         retried = self.jobs.retry(job["id"])
         if retried is None:
             self.statusBar().showMessage("该任务当前不可重试")
         else:
             self._selected_job_id = retried.id
-            self.statusBar().showMessage("已重新提交安装任务")
+            self.statusBar().showMessage(f"已重新提交：{job.get('label', '后台任务')}")
             self._refresh_jobs()
 
     def _clear_finished_jobs(self) -> None:
@@ -558,11 +597,18 @@ class MainWindow(QMainWindow):
         if collapsed:
             # v1.10.0：收起 = 面板真降到最低（只留标题行），导航区即时放大；
             # 原来只藏内容不改高度，收起后仍看不到五个导航项
-            self._jobs_expanded_height = max(self.job_panel.height(), 44)
-            self.job_panel.setMinimumHeight(50)
-            self._apply_job_layout(50)
+            self._jobs_expanded_height = max(self.job_panel.height(), 120)
+            self.job_empty.hide()
+            self.job_table.hide()
+            self.job_actions_widget.hide()
+            self.job_panel.setMinimumHeight(54)
+            self.job_panel.setMaximumHeight(54)
+            self.job_splitter.handle(1).setEnabled(False)
+            self._apply_job_layout(54)
         else:
             self.job_panel.setMinimumHeight(120)
+            self.job_panel.setMaximumHeight(16777215)
+            self.job_splitter.handle(1).setEnabled(True)
             self._apply_job_layout(getattr(self, "_jobs_expanded_height", 0) or None)
         self._refresh_jobs()
 
