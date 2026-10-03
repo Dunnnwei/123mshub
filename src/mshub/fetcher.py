@@ -7,6 +7,7 @@ import subprocess
 import tarfile
 import tempfile
 import time
+import zipfile
 from abc import ABC, abstractmethod
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
@@ -20,6 +21,8 @@ from .process import hidden_windows_kwargs
 from .urltool import mirror_url
 
 MAX_ARCHIVE_BYTES = 750 * 1024 * 1024
+MAX_LOCAL_ZIP_BYTES = 500 * 1024 * 1024
+MAX_LOCAL_ZIP_MEMBERS = 20_000
 
 _PROXY_ENV_VARS = (
     "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY",
@@ -354,3 +357,78 @@ def _run(command: list[str], *, env: dict | None = None, timeout: int = 180) -> 
 def cleanup_fetch(result: FetchResult | None) -> None:
     if result:
         shutil.rmtree(result.temp_root, ignore_errors=True)
+
+
+def fetch_local(source: SourceSpec) -> FetchResult:
+    """Create a safe temporary snapshot of a local directory or ZIP source."""
+    raw = Path(source.source_url).expanduser()
+    if not raw.exists():
+        raise ValidationError(f"本地来源不存在：{raw}")
+    temp_root = Path(tempfile.mkdtemp(prefix="mshub-local-"))
+    extracted = temp_root / "source"
+    try:
+        if raw.is_dir():
+            shutil.copytree(
+                raw,
+                extracted,
+                symlinks=False,
+                ignore=lambda _path, names: [name for name in names if (Path(_path) / name).is_symlink()],
+            )
+        elif raw.is_file() and raw.suffix.casefold() == ".zip":
+            extracted.mkdir(parents=True)
+            _extract_zip_safely(raw, extracted)
+            children = [item for item in extracted.iterdir() if item.is_dir()]
+            if len(children) == 1 and not any(item.is_file() for item in extracted.iterdir()):
+                extracted = children[0]
+        else:
+            raise ValidationError("本地来源必须是目录或 .zip 文件。")
+        return FetchResult(
+            root=extracted,
+            commit_hash="",
+            commit_date=datetime.now(UTC).isoformat(),
+            ref="LOCAL",
+            fetcher="local",
+            temp_root=temp_root,
+        )
+    except Exception:
+        shutil.rmtree(temp_root, ignore_errors=True)
+        raise
+
+
+def _extract_zip_safely(archive: Path, destination: Path) -> None:
+    """Extract user-selected ZIP with traversal, link and size guards."""
+    total = 0
+    seen: set[str] = set()
+    try:
+        with zipfile.ZipFile(archive) as handle:
+            members = handle.infolist()
+            if len(members) > MAX_LOCAL_ZIP_MEMBERS:
+                raise ValidationError("ZIP 文件条目过多，已停止导入。")
+            for member in members:
+                name = member.filename.replace("\\", "/")
+                parts = PurePosixPath(name).parts
+                if not parts or name.startswith("/") or ".." in parts:
+                    raise ValidationError("ZIP 包含不安全路径，已停止导入。")
+                if name in seen:
+                    raise ValidationError("ZIP 包含重复路径，已停止导入。")
+                seen.add(name)
+                # Unix mode 0120000 denotes symlink; reject links rather than follow them.
+                if ((member.external_attr >> 16) & 0o170000) == 0o120000:
+                    raise ValidationError("ZIP 包含符号链接，已停止导入。")
+                total += max(0, int(member.file_size))
+                if total > MAX_LOCAL_ZIP_BYTES:
+                    raise ValidationError("ZIP 解压后超过 500MB 安全上限。")
+                target = destination.joinpath(*parts)
+                resolved = target.resolve()
+                try:
+                    resolved.relative_to(destination.resolve())
+                except ValueError as exc:
+                    raise ValidationError("ZIP 路径试图跳出目标目录。") from exc
+                if member.is_dir():
+                    resolved.mkdir(parents=True, exist_ok=True)
+                    continue
+                resolved.parent.mkdir(parents=True, exist_ok=True)
+                with handle.open(member) as source, resolved.open("wb") as output:
+                    shutil.copyfileobj(source, output, length=1024 * 1024)
+    except zipfile.BadZipFile as exc:
+        raise ValidationError(f"ZIP 文件损坏：{exc}") from exc

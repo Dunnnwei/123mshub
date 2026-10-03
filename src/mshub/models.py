@@ -31,6 +31,8 @@ class SourceSpec:
     def name(self) -> str:
         # monorepo 子目录技能（如 anthropics/skills 的 skills/docx）必须以
         # 完整路径为唯一名，否则同仓库多个子技能会互相覆盖。
+        if self.provider == "local":
+            return self.repo
         base = f"{self.owner}/{self.repo}"
         return f"{base}/{self.subdir}" if self.subdir else base
 
@@ -82,4 +84,3 @@ class ScanReport:
         data = asdict(self)
         data["status"] = self.status.value
         return data
-

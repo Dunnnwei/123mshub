@@ -4,7 +4,7 @@ from mshub.native.branding import icon_path
 
 
 def test_native_branding_assets_and_version():
-    assert __version__ == "1.11.0"
+    assert __version__ == "1.11.1"
     assert NATIVE_VERSION == __version__
     assert icon_path("light").name == "NEWmshublogo.ico"
     assert icon_path("dark").name == "NEWmshublogo.ico"

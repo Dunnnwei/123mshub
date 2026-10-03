@@ -37,7 +37,7 @@ EN = {
     "安装模式": "Install mode", "标准（按说明文件）": "Standard (referenced files)", "全仓（完整 Git）": "Full repository",
     "抓取方式": "Fetcher", "技能下载方式": "Download method",
     "ZIP 压缩包（免装 Git）": "ZIP archive (no Git needed)", "Git 克隆（保留完整历史）": "Git clone (full history)",
-    "中文": "Chinese", "自动翻译": "Auto-translate",
+    "中文": "Chinese", "自动翻译": "Auto-translate", "AI说明": "AI description", "命名": "Name",
     "英文说明": "English description", "中文说明": "Chinese description", "扫描预览": "Scan preview", "后台入库": "Install in background",
     "选择本地目录…": "Choose local directory…", "所属库": "Library", "共享技能库": "Shared skills",
     "程序库": "Programs", "分支": "Branch", "子目录": "Subdirectory", "版本": "Version", "目录名": "Directory name",

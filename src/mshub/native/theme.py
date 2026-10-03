@@ -1,6 +1,6 @@
 """123mshub Native design tokens shared by Qt and the local graph island.
 
-v1.11.0：令牌来自可复用的 ``123ui5.0``。结构、状态、字号、间距和动效
+v1.11.1：令牌来自可复用的 ``123ui5.0``。结构、状态、字号、间距和动效
 继续遵循 Hermes Agent 的 ``Mono — Clean grayscale — minimal and focused``
 主题；品牌强调层使用 Indigo ``#6366F1`` 与 Violet ``#7C3AED``，并由同一
 份令牌源同时供 Qt、本地图谱和未来文件调用。

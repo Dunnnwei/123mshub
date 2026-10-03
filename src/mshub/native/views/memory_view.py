@@ -149,7 +149,10 @@ class MemoryPage(ShiftRangeCheckMixin, AdaptivePage):
         self.editor_dialog = GuardedDialog(self, self.can_close_editor); self.editor_dialog.setWindowTitle("记忆编辑"); self.editor_dialog.setModal(False); self.editor_dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, False); editor_layout = QVBoxLayout(self.editor_dialog); editor_layout.setContentsMargins(0, 0, 0, 0); editor_layout.addWidget(detail); prepare_dialog(self.editor_dialog); self._restore_editor_geometry(); self.editor_dialog.finished.connect(lambda _code: self._save_editor_geometry()); self.editor_dialog.hide(); self.editor_save_shortcut = QShortcut(QKeySequence("Ctrl+S"), self.editor_dialog); self.editor_save_shortcut.activated.connect(self.save_current); self.edit_window_button.setEnabled(False); self.content_splitter = splitter; splitter.setSizes([1100, 0]); root.addWidget(splitter, 1)
         tidy_widget, tidy = flow_bar(self); tidy_button = QPushButton("归纳整理"); tidy_button.clicked.connect(self.tidy); reports = QPushButton("整理日报"); reports.clicked.connect(self.show_reports); duty = QPushButton("复制值守提示词"); duty.clicked.connect(self.copy_duty); index = QPushButton("查看索引源文件"); index.clicked.connect(self.show_index); tidy.addWidget(tidy_button); tidy.addWidget(reports); tidy.addWidget(duty); tidy.addWidget(index); root.addWidget(tidy_widget)
         # v1.9.0（需求 6）：底部 Shift 连选提示小字（右对齐贴列表右边线）
-        hint_row = QHBoxLayout(); hint_row.addStretch(); self.shift_hint = QLabel(tr(SHIFT_RANGE_HINT)); self.shift_hint.setObjectName("helper"); hint_row.addWidget(self.shift_hint); root.addLayout(hint_row)
+        # Keep the range result beside the common Shift hint, matching the
+        # skills and security pages.  The editor status label is intentionally
+        # separate because it describes save/load operations.
+        hint_row = QHBoxLayout(); self.range_status = QLabel(""); self.range_status.setObjectName("status"); hint_row.addWidget(self.range_status, 1); self.shift_hint = QLabel(tr(SHIFT_RANGE_HINT)); self.shift_hint.setObjectName("helper"); hint_row.addWidget(self.shift_hint); root.addLayout(hint_row)
         # v1.9.0（需求 2）：列表聚焦时按 Delete 键 = 批量删除勾选项
         self._delete_shortcut = QShortcut(QKeySequence(Qt.Key_Delete), self.entry_list)
         self._delete_shortcut.setContext(Qt.ShortcutContext.WidgetShortcut)
@@ -353,7 +356,7 @@ class MemoryPage(ShiftRangeCheckMixin, AdaptivePage):
         return self._row_checks[row] if 0 <= row < len(self._row_checks) else None
 
     def _shift_range_applied(self, low: int, high: int) -> None:
-        self._set_status(f"已连选第 {low + 1}–{high + 1} 条（共 {high - low + 1} 条）")
+        self.range_status.setText(f"已连选第 {low + 1}–{high + 1} 行（共 {high - low + 1} 项）")
         self._update_batch_bar()
 
     def _update_batch_bar(self):

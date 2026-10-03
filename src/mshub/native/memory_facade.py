@@ -14,6 +14,8 @@ from ..tidy import TidyService
 from ..importer import ImportService
 from ..ai_presets import AI_PROVIDER_PRESETS
 from ..translation import translate_description
+from ..ai_gateway import chat_completion, strip_fence
+import json
 
 
 class MemoryFacade:
@@ -148,6 +150,51 @@ class MemoryFacade:
 
     def skill_translate_batch(self, names: list[str] | None = None, progress=None):
         return self.repository.translate_descriptions(names, progress=progress)
+
+    def skill_ai_description(self, name: str, library: str = "") -> dict[str, str]:
+        """Generate bilingual skill descriptions from the installed local files."""
+        item = self.repository.get(name, library)
+        root = Path(str(item.get("absolute_dir") or ""))
+        if not root.is_dir():
+            raise ValueError("技能目录不存在，无法生成 AI 说明。")
+        materials: list[str] = []
+        seen_materials: set[Path] = set()
+        for candidate in (root / "SKILL.md", root / "skill.md", root / "README.md", root / "README.MD"):
+            if candidate.is_file() and candidate not in seen_materials:
+                text = candidate.read_text(encoding="utf-8", errors="replace").strip()
+                if text:
+                    materials.append(f"--- {candidate.name} ---\n{text[:12000]}")
+                    seen_materials.add(candidate)
+        if not materials:
+            for candidate in sorted(root.glob("*.md"))[:3]:
+                text = candidate.read_text(encoding="utf-8", errors="replace").strip()
+                if text:
+                    materials.append(f"--- {candidate.name} ---\n{text[:8000]}")
+        if not materials:
+            raise ValueError("技能目录没有可读取的 Markdown 说明材料。")
+        config = self.config_store.load()
+        prompt = (
+            "你是 agent skill 文档编辑。仅根据下面的本地技能材料，生成清楚、准确、可执行的中英文说明。"
+            "不要补充材料中没有的功能、集成、数据或性能承诺。输出严格 JSON，键为 zh 和 en，值为一段 1-3 句说明；"
+            "不要 Markdown 围栏，不要额外键。技能名称：" + name + "\n\n" + "\n\n".join(materials)
+        )
+        raw = chat_completion(
+            config.ai_base_url,
+            self.config_store.get_secret("ai_key"),
+            config.ai_model,
+            prompt,
+            timeout=90,
+            json_mode=True,
+            label="AI说明",
+        )
+        try:
+            parsed = json.loads(strip_fence(raw))
+        except json.JSONDecodeError as exc:
+            raise ValueError("AI说明返回的不是有效 JSON。") from exc
+        zh, en = str(parsed.get("zh") or "").strip(), str(parsed.get("en") or "").strip()
+        if not zh or not en:
+            raise ValueError("AI说明未同时返回中文和英文说明。")
+        return {"zh": zh, "en": en}
 
     def skill_update_metadata(self, name: str, updates: dict[str, Any], library: str = ""):
         # Tags already have a stable public core entry point.  Keep metadata

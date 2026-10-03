@@ -192,7 +192,7 @@ class SkillsPage(ShiftRangeCheckMixin, CheckableTableMixin, AdaptivePage):
         prompt = QHBoxLayout(); self.prompt_button = QPushButton("复制指定技能提示词"); self.prompt_button.clicked.connect(self.copy_skill_prompt); prompt.addWidget(self.prompt_button); self.install_prompt_button = QPushButton("复制安装提示词"); self.install_prompt_button.clicked.connect(self.copy_install_prompt); prompt.addWidget(self.install_prompt_button); detail_layout.addLayout(prompt)
         splitter.addWidget(detail); detail.setVisible(False); splitter.setHandleWidth(0); splitter.setChildrenCollapsible(True); splitter.setSizes([720, 0]); self.content_splitter = splitter  # Detail opens in a dialog; no draggable splitter handle.
         empty = QFrame(objectName="emptyCard"); empty_layout = QVBoxLayout(empty); empty_layout.addWidget(QLabel("还没有技能或程序", objectName="title"), alignment=Qt.AlignmentFlag.AlignHCenter); empty_layout.addWidget(QLabel("从 GitHub URL、owner/repo 或本地目录添加第一项资产。", objectName="muted"), alignment=Qt.AlignmentFlag.AlignHCenter); empty_add = QPushButton("添加技能 / 程序"); empty_add.setObjectName("primary"); empty_add.clicked.connect(self.open_add); empty_layout.addWidget(empty_add, alignment=Qt.AlignmentFlag.AlignHCenter); self.empty_card = empty; root.addWidget(empty); root.addWidget(splitter, 1); empty.hide()
-        batch = FlowLayout(spacing=8); batch.addWidget(QLabel("已勾选条目：")); self.batch_check = QPushButton("批量离线检查"); self.batch_check.clicked.connect(lambda: self.batch_scan("offline")); batch.addWidget(self.batch_check); self.batch_ai_check = QPushButton("批量 AI 检查"); self.batch_ai_check.clicked.connect(lambda: self.batch_scan("ai")); batch.addWidget(self.batch_ai_check); self.batch_update = QPushButton("批量更新 GitHub"); self.batch_update.clicked.connect(self.batch_update_github); batch.addWidget(self.batch_update); self.batch_trust = QPushButton("批量信任"); self.batch_trust.clicked.connect(self.batch_trust_items); batch.addWidget(self.batch_trust); self.batch_translate = QPushButton("批量中文翻译"); self.batch_translate.clicked.connect(self.batch_translate_items); batch.addWidget(self.batch_translate); self.batch_delete = QPushButton("批量删除"); self.batch_delete.setObjectName("danger"); self.batch_delete.setToolTip("删除勾选的技能/程序（软删除：移入仓库回收目录 .meta\\trash，可找回；\n也可在列表聚焦时按 Delete 键触发）。"); self.batch_delete.clicked.connect(self.batch_delete_items); batch.addWidget(self.batch_delete); root.addLayout(batch)
+        batch = FlowLayout(spacing=8); self.batch_check = QPushButton("批量离线检查"); self.batch_check.clicked.connect(lambda: self.batch_scan("offline")); batch.addWidget(self.batch_check); self.batch_ai_check = QPushButton("批量 AI 检查"); self.batch_ai_check.clicked.connect(lambda: self.batch_scan("ai")); batch.addWidget(self.batch_ai_check); self.batch_update = QPushButton("批量更新 GitHub"); self.batch_update.clicked.connect(self.batch_update_github); batch.addWidget(self.batch_update); self.batch_trust = QPushButton("批量信任"); self.batch_trust.clicked.connect(self.batch_trust_items); batch.addWidget(self.batch_trust); self.batch_translate = QPushButton("批量中文翻译"); self.batch_translate.clicked.connect(self.batch_translate_items); batch.addWidget(self.batch_translate); self.batch_delete = QPushButton("批量删除"); self.batch_delete.setObjectName("danger"); self.batch_delete.setToolTip("删除勾选的技能/程序（软删除：移入仓库回收目录 .meta\\trash，可找回；\n也可在列表聚焦时按 Delete 键触发）。"); self.batch_delete.clicked.connect(self.batch_delete_items); batch.addWidget(self.batch_delete); root.addLayout(batch)
         # v1.9.0：底部状态行 + Shift 连选提示（右对齐贴表格右边线）
         bottom = QHBoxLayout(); self.status = QLabel(""); self.status.setObjectName("status"); bottom.addWidget(self.status, 1); self.shift_hint = QLabel(tr(SHIFT_RANGE_HINT)); self.shift_hint.setObjectName("helper"); bottom.addWidget(self.shift_hint); root.addLayout(bottom)
         self._timer = QTimer(self); self._timer.setSingleShot(True); self._timer.setInterval(300); self._timer.timeout.connect(self._refresh_now); self.metadata_dialog = None
@@ -558,6 +558,9 @@ class MetadataDialog(QDialog):
         descriptions.addWidget(zh_box); descriptions.addWidget(en_box); descriptions.setSizes([1, 1])
         root.addWidget(descriptions, 1)
         # v1.7.2：补回自动翻译按钮；v1.7.4 明确目标态：点完后固定「左栏中文 / 右栏英文」
+        self.ai_description_button = QPushButton("AI说明"); self.ai_description_button.setObjectName("primary")
+        self.ai_description_button.setToolTip("读取当前技能的 SKILL.md/README 等说明材料，生成可复核的中英文推荐说明并覆盖两栏。")
+        self.ai_description_button.clicked.connect(self.ai_description)
         self.translate_button = QPushButton("自动翻译"); self.translate_button.setObjectName("primary")
         self.translate_button.setToolTip(
             "调用设置中已配置的 AI 接口，保证「左栏中文说明 / 右栏英文说明」：\n"
@@ -574,9 +577,9 @@ class MetadataDialog(QDialog):
         footer.addWidget(self.translate_status)
         self.save_button = QPushButton("保存"); self.save_button.setObjectName("primary"); self.save_button.clicked.connect(self.save)
         self.close_button = QPushButton("关闭"); self.close_button.clicked.connect(self._hide)
-        for button in (self.translate_button, self.save_button, self.close_button):
+        for button in (self.ai_description_button, self.translate_button, self.save_button, self.close_button):
             button.setFixedSize(92, 32)
-        footer.addWidget(self.translate_button); footer.addWidget(self.save_button); footer.addWidget(self.close_button)
+        footer.addWidget(self.ai_description_button); footer.addWidget(self.translate_button); footer.addWidget(self.save_button); footer.addWidget(self.close_button)
         root.addLayout(footer)
         prepare_dialog(self); label_controls(self); self._restore_geometry(); self.load_item(item)
 
@@ -606,8 +609,11 @@ class MetadataDialog(QDialog):
 
     def load_item(self, item):
         self.item = item
+        self._ai_request_id = getattr(self, "_ai_request_id", 0) + 1
         # ocr 审查修复：切换条目时复位按钮（上一条的翻译任务可能还在跑/已过期）
         self.translate_button.setEnabled(True)
+        self.ai_description_button.setEnabled(True)
+        self.ai_description_button.setText("AI说明")
         self.name.setText(str(item.get("name") or "")); self.directory.setText(Path(str(item.get("local_dir") or "")).name); self.provider.setCurrentIndex(max(0, self.provider.findData(item.get("provider", "github")))); self.source.setText(str(item.get("source_url") or "")); self.library.setCurrentIndex(max(0, self.library.findData(item.get("library", "skills")))); self.version.setText(str(item.get("version") or "")); self.tags.setText(", ".join(item.get("tags") or [])); self.description.setPlainText(str(item.get("description") or "")); self.description_zh.setPlainText(str(item.get("description_zh") or "")); self.translate_status.clear(); self._directory_hint(); self._source_hint(); self.setWindowTitle(f"编辑技能信息 · {item.get('name', '')}")
 
     def _directory_hint(self):
@@ -694,6 +700,40 @@ class MetadataDialog(QDialog):
         # state or a different selected skill.
         self.page.jobs.submit("translate", f"翻译 {name}", lambda: facade.skill_translate_text(text, target), changed=False, callback=done)
 
+    def ai_description(self):
+        """Generate reviewable Chinese/English descriptions from local skill material."""
+        name = str(self.item.get("name") or "")
+        library = str(self.item.get("library") or "")
+        identity = (name, library)
+        request_id = getattr(self, "_ai_request_id", 0) + 1
+        self._ai_request_id = request_id
+        self.ai_description_button.setEnabled(False)
+        self.ai_description_button.setText("生成中…")
+        self.translate_status.setText("正在读取技能材料并调用 AI 说明…")
+
+        def done(job):
+            self.ai_description_button.setEnabled(True)
+            self.ai_description_button.setText("AI说明")
+            if (not self.isVisible() or getattr(self, "_ai_request_id", 0) != request_id or
+                    (str(self.item.get("name") or ""), str(self.item.get("library") or "")) != identity):
+                return
+            if job.get("status") == "error":
+                self.translate_status.setText(f"AI说明失败：{job.get('error') or '未知错误'}")
+                return
+            result = job.get("result") or {}
+            if not isinstance(result, dict) or not result.get("zh") or not result.get("en"):
+                self.translate_status.setText("AI说明失败：接口没有返回完整的中英文说明。")
+                return
+            self.description_zh.setPlainText(str(result["zh"]).strip())
+            self.description.setPlainText(str(result["en"]).strip())
+            self.translate_status.setText("AI说明已填入中英文两栏，请检查后点「保存」。")
+
+        self.page.jobs.submit(
+            "ai", f"AI说明 {name}",
+            lambda: self.page.facade.skill_ai_description(name, library),
+            changed=False, callback=done,
+        )
+
     def save(self):
         updates = {"name": self.name.text().strip(), "dir_name": self.directory.text().strip(), "provider": self.provider.currentData(), "source_url": self.source.text().strip(), "target_library": self.library.currentData(), "version": self.version.text().strip(), "tags": [tag.strip() for tag in self.tags.text().replace("，", ",").split(",") if tag.strip()], "description": self.description.toPlainText().strip(), "description_zh": self.description_zh.toPlainText().strip()}
         # v1.7.4：登记保存后的回跳目标（含改名后的新条目名），列表刷新时滚回该行
@@ -712,7 +752,8 @@ class AddSkillDialog(QDialog):
     def __init__(self, page: SkillsPage):
         super().__init__(page); self.page = page; self.setWindowTitle("添加技能 / 程序"); self.resize(780, 560)
         root = QVBoxLayout(self); form = QFormLayout()
-        self.source = QLineEdit(); self.source.setPlaceholderText("GitHub URL、owner/repo 或本地目录"); source_row = QHBoxLayout(); source_row.addWidget(self.source, 1); browse = QPushButton("选择本地目录…"); browse.clicked.connect(self.browse_local); source_row.addWidget(browse); form.addRow("来源", source_row)
+        self.source = QLineEdit(); self.source.setPlaceholderText("GitHub URL、owner/repo、本地目录或 .zip 文件"); source_row = QHBoxLayout(); source_row.addWidget(self.source, 1); browse = QPushButton("选择本地目录…"); browse.clicked.connect(self.browse_local); source_row.addWidget(browse); form.addRow("来源", source_row)
+        self.naming = QLineEdit(); self.naming.setPlaceholderText("本地来源可自定义名称；留空按目录或 ZIP 文件名"); self.naming.textChanged.connect(self._name_edited); form.addRow("命名", self.naming)
         self.tags = QLineEdit(); self.tags.setPlaceholderText("多个标签用逗号分隔"); form.addRow("标签", self.tags)
         self.item_type = QComboBox(); self.item_type.addItem("技能", "skill"); self.item_type.addItem("程序", "project"); form.addRow("类型", self.item_type)
         self.mode = QComboBox(); self.mode.addItem("标准（按说明文件）", "standard"); self.mode.addItem("全仓（完整 Git）", "full"); form.addRow("安装模式", self.mode)
@@ -726,11 +767,31 @@ class AddSkillDialog(QDialog):
         actions = QDialogButtonBox(); preview = actions.addButton("扫描预览", QDialogButtonBox.ButtonRole.ActionRole); install = actions.addButton("后台入库", QDialogButtonBox.ButtonRole.AcceptRole); close = actions.addButton("关闭", QDialogButtonBox.ButtonRole.RejectRole); root.addWidget(actions)
         preview.clicked.connect(self.do_preview); install.clicked.connect(self.do_install); close.clicked.connect(self.reject); prepare_dialog(self); label_controls(self)
 
-    def options(self): return {"item_type": self.item_type.currentData(), "mode": self.mode.currentData(), "fetcher_name": self.fetcher.currentData(), "tags": [tag.strip() for tag in self.tags.text().replace("，", ",").split(",") if tag.strip()]}
+    def options(self):
+        name = self.naming.text().strip()
+        options = {"item_type": self.item_type.currentData(), "mode": self.mode.currentData(), "fetcher_name": self.fetcher.currentData(), "tags": [tag.strip() for tag in self.tags.text().replace("，", ",").split(",") if tag.strip()]}
+        if name:
+            options["item_name"] = name
+            options["local_dir_name"] = name
+        return options
 
     def browse_local(self):
+        selected, _ = QFileDialog.getOpenFileName(self, "选择本地目录或 ZIP 文件", "", "技能来源 (*.zip);;所有文件 (*)")
+        if selected:
+            self.source.setText(selected)
+            if not self.naming.text().strip():
+                self.naming.setText(Path(selected).stem)
+            return
         selected = QFileDialog.getExistingDirectory(self, "选择本地技能或程序目录")
-        if selected: self.source.setText(selected)
+        if selected:
+            self.source.setText(selected)
+            if not self.naming.text().strip():
+                self.naming.setText(Path(selected).name)
+
+    def _name_edited(self, _value):
+        # A local path is a source, not an identity.  Once the user edits the
+        # name it remains authoritative even if the source field changes.
+        return
 
     def do_preview(self):
         try:

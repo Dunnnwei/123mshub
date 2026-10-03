@@ -11,7 +11,7 @@ from typing import Any, Callable, NamedTuple
 from .config import ConfigStore
 from .database import Database
 from .errors import ConflictError, NotFoundError, SkillRepoError, ValidationError
-from .fetcher import cleanup_fetch, get_fetcher, remote_version
+from .fetcher import cleanup_fetch, fetch_local, get_fetcher, remote_version
 from .indexer import rebuild_index
 from .libraries import (
     ACTIVE_LIBRARIES,
@@ -90,10 +90,26 @@ def _dir_name_for(source: SourceSpec) -> str:
     原来在 install 与 _target_exists 各写一遍（owner/repo + 子目录后缀），
     一处改动另一处漏改就会出现"装进 A 目录、却在 B 目录判存在"的错位。
     """
-    dir_name = safe_dir_name(source.owner, source.repo)
+    dir_name = safe_dir_name("local" if source.provider == "local" else source.owner, source.repo)
     if source.subdir:
         dir_name = f"{dir_name}__{source.subdir.replace('/', '_')}"
     return dir_name
+
+
+def _validate_install_name(value: str) -> str:
+    """Validate the user-facing name used for local identity and directory."""
+    name = str(value or "").strip()
+    if not name:
+        raise ValidationError("命名不能为空。")
+    if name in {".", ".."} or name.startswith("."):
+        raise ValidationError("命名不能以点开头或使用 . / ..。")
+    if any(char in name for char in '<>:"/\\|?*') or any(ord(char) < 32 for char in name):
+        raise ValidationError("命名不能包含路径分隔符或 Windows 非法字符。")
+    if name.rstrip(" .") != name or name.upper() in {
+        "CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))
+    }:
+        raise ValidationError("命名不能使用 Windows 保留名称或以空格/句点结尾。")
+    return name
 
 
 class SkillRepository:
@@ -502,6 +518,8 @@ class SkillRepository:
         fetcher_name: str | None = None,
         ref: str | None = None,
         subdir: str | None = None,
+        item_name: str | None = None,
+        local_dir_name: str | None = None,
     ) -> dict[str, Any]:
         if item_type not in {"skill", "project"}:
             raise ValidationError("仓库类型必须是 skill 或 project。")
@@ -510,6 +528,10 @@ class SkillRepository:
         if item_type == "project":
             mode = InstallMode.FULL.value
             fetcher_name = "git"
+        if item_name:
+            _validate_install_name(item_name)
+        if local_dir_name:
+            _validate_install_name(local_dir_name)
         install_mode = self._mode(mode)
         source, result, parsed = self._fetch_and_parse(
             source_value, fetcher_name=fetcher_name, ref=ref, subdir=subdir
@@ -519,7 +541,7 @@ class SkillRepository:
             selected = all_files if install_mode == InstallMode.FULL else parsed.referenced_files
             total_bytes = sum((result.root / Path(relative)).stat().st_size for relative in selected)
             return {
-                "name": source.name,
+                "name": str(item_name or (local_dir_name if source.provider == "local" else source.name) or source.name),
                 "item_type": item_type,
                 "source_url": source.source_url,
                 "subdir": source.subdir,
@@ -538,7 +560,8 @@ class SkillRepository:
                 "total_bytes": total_bytes,
                 "size_warning": total_bytes >= 100 * 1024 * 1024,
                 "warnings": parsed.warnings,
-                "exists": self._target_exists(source),
+                "exists": self._target_exists(source, local_dir_name or (item_name if source.provider == "local" else None)),
+                "local_dir_name": local_dir_name or (item_name if source.provider == "local" else ""),
                 **classify_repository(result.root),
             }
         finally:
@@ -559,6 +582,7 @@ class SkillRepository:
         tags: list[str] | None = None,
         library: str | None = None,
         local_dir_name: str | None = None,
+        item_name: str | None = None,
         progress: Callable[..., None] | None = None,
     ) -> dict[str, Any]:
         def report(percent: int | None, phase: str, detail: str = "") -> None:
@@ -572,6 +596,11 @@ class SkillRepository:
         if item_type == "project":
             mode = InstallMode.FULL.value
             fetcher_name = "git"
+        requested_name = str(item_name or "").strip()
+        if requested_name:
+            _validate_install_name(requested_name)
+        if local_dir_name:
+            _validate_install_name(local_dir_name)
         clean_tags = normalize_tags(tags) if tags is not None else None
         install_mode = self._mode(mode)
         report(4, "正在解析仓库地址")
@@ -586,16 +615,17 @@ class SkillRepository:
             except ValueError as exc:
                 raise ValidationError(str(exc)) from exc
             base = library_root(root, target_library)
+            requested_name = str(item_name or "").strip()
             if local_dir_name:
-                if "/" in local_dir_name or "\\" in local_dir_name or local_dir_name.startswith("."):
-                    raise ValidationError("local_dir_name 只能是目录名，不能包含路径分隔符。")
                 dir_name = local_dir_name
+            elif source.provider == "local" and requested_name:
+                dir_name = requested_name
             else:
                 dir_name = _dir_name_for(source)
             target = base / dir_name
             # 身份与归属分离：条目名 = 来源身份（作者/仓库[/子目录]），库归属单独存。
             # 同一技能装进多个库 = 同名不同库的多条记录（复合键不冲突）。
-            record_name = source.name
+            record_name = requested_name or (local_dir_name if source.provider == "local" and local_dir_name else source.name)
             existing = database.get_skill(record_name, target_library or None)
             if not existing and target.exists():
                 # 目录已存在但记录名不一致（上游改名后重装）：按目录认领旧记录
@@ -682,6 +712,7 @@ class SkillRepository:
                     description_zh=next_description_zh,
                     version=parsed.version,
                     name=record_name,
+                    source_type=source.provider,
                     tags=clean_tags if clean_tags is not None else (existing["tags"] if existing else []),
                     managed_files=managed_files,
                     scan=report_scan.to_dict(),
@@ -1095,10 +1126,10 @@ class SkillRepository:
         except ValidationError:
             return None
 
-    def _target_exists(self, source: SourceSpec) -> bool:
+    def _target_exists(self, source: SourceSpec, requested_dir_name: str | None = None) -> bool:
         try:
             root, database = self._storage()
-            dir_name = _dir_name_for(source)
+            dir_name = requested_dir_name or _dir_name_for(source)
             try:
                 known = bool(database.get_skill(source.name))
             except ConflictError:
@@ -1121,7 +1152,23 @@ class SkillRepository:
         progress: Callable[..., None] | None = None,
     ):
         config = self.config_store.load()
-        source = parse_source(source_value, ref=ref, subdir=subdir)
+        raw = str(source_value or "").strip()
+        candidate = Path(raw).expanduser()
+        if candidate.exists() or candidate.suffix.casefold() == ".zip":
+            if not candidate.exists():
+                raise ValidationError(f"本地来源不存在：{candidate}")
+            source = SourceSpec(
+                provider="local",
+                owner="local",
+                repo=candidate.stem if candidate.is_file() else candidate.name,
+                source_url=str(candidate.resolve()),
+                ref="LOCAL",
+                subdir="",
+            )
+            result = fetch_local(source)
+            parsed = parse_skill(result.root, result.commit_hash, result.commit_date)
+            return source, result, parsed
+        source = parse_source(raw, ref=ref, subdir=subdir)
         chosen = fetcher_name or config.fetcher
         fetcher = get_fetcher(chosen)
         fetch_kwargs: dict[str, Any] = {}
