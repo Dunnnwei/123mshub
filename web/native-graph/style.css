@@ -1,59 +1,123 @@
-:root { color-scheme: light; --bg:#F0F2F8; --sidebar:#E5E7ED; --surface:#FFFFFF; --raised:#FFFFFF; --ink:#2E3040; --muted:#585A68; --faint:#8A8C9A; --line:#D0D2DC; --strong:#B8BACA; --blue:#6366F1; --accent:#4F46E5; --selection:#E0E2FF; --dim:#E9ECF3; --edge:#C1C9D7; --user:#6366F1; --project:#7C3AED; --reference:#22C55E; --feedback:#F43F5E; --dur-1:120ms; --dur-2:180ms; --dur-3:220ms; --ease-standard:cubic-bezier(.22,1,.36,1); }
-:root[data-theme="dark"] { color-scheme: dark; --bg:#0B0E14; --sidebar:#0E172A; --surface:#131B2E; --raised:#1A243D; --ink:#DAE2FD; --muted:#94A3B8; --faint:#64748B; --line:#3B4968; --strong:#52627F; --blue:#6366F1; --accent:#A5B4FC; --selection:#2A2B63; --dim:#0F1830; --edge:#64748B; --user:#6366F1; --project:#7C3AED; --reference:#34D399; --feedback:#FB7185; --graph-bg:#101521; }
-* { box-sizing:border-box; }
-html, body { width:100%; height:100%; margin:0; overflow:hidden; background:var(--bg); color:var(--ink); font-family:system-ui,'Segoe UI','Microsoft YaHei',sans-serif; font-size:12px; transition:background-color var(--dur-2) ease-out,color var(--dur-2) ease-out; }
-.graph-shell { display:flex; flex-direction:column; gap:10px; height:100%; padding:0; }
-.heading { display:none; }
-.eyebrow { color:var(--blue); font-size:10px; font-weight:700; letter-spacing:1.2px; text-transform:uppercase; }
-h1 { margin:0 0 4px; font-size:20px; font-weight:700; letter-spacing:-.01em; }
-p { margin:0; color:var(--muted); font-size:11px; }
-/* v1.5.0：统计改为数字卡——视线先落在强数字，再是单位 */
-.stats { display:flex; align-items:center; gap:5px; color:var(--muted); white-space:nowrap; margin-left:auto; }
-.stats strong { color:var(--ink); font-size:14px; font-weight:700; font-variant-numeric:tabular-nums; margin-left:5px; }
-.stats span { font-size:12px; }
-.toolbar { display:flex; align-items:center; gap:8px; padding:8px 10px; border:1px solid var(--line); border-radius:12px; background:var(--surface); }
-/* v4 token：微交互 120ms 变色描边；:active 唯一许可的压感位移 */
-.toolbar button, .zoom-controls button, .node-browser button { border:1px solid var(--strong); border-radius:10px; background:var(--surface); color:var(--ink); min-height:30px; padding:0 10px; font-size:12px; cursor:pointer; transition:background var(--dur-1) ease,border-color var(--dur-1) ease,box-shadow var(--dur-1) ease; }
-.toolbar button:hover, .zoom-controls button:hover { border-color:var(--blue); }
-.toolbar button:focus-visible, .zoom-controls button:focus-visible, .node-browser button:focus-visible, .search:focus-within, .node-browser select:focus-visible, .toolbar input:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
-.toolbar button:active, .zoom-controls button:active { transform:translateY(1px); }
-.search { display:flex; align-items:center; gap:6px; flex:1; min-width:160px; color:var(--muted); }
-.search input { width:100%; border:0; outline:0; background:transparent; color:var(--ink); padding:6px 4px; font:inherit; }
-.search button { display:none; min-height:26px; padding:0 7px; }
-.search:has(input:not(:placeholder-shown)) button { display:block; }
-.tag-toggle { color:var(--muted); font-size:12px; white-space:nowrap; }
-.surface { position:relative; flex:1; min-height:320px; overflow:hidden; border:1px solid var(--line); border-radius:16px; background:var(--surface); }
-/* v1.5.0：暗色图谱画布加深到 #0a0f1d——节点霓虹色在深色底上层次更分明 */
-:root[data-theme="dark"] .surface { background:var(--graph-bg); border-color:rgba(99,102,241,.30); }
-.sigma-container { position:absolute; inset:0; }
-.message { position:absolute; inset:0; display:grid; place-items:center; color:var(--muted); pointer-events:none; }
-.message.hidden { display:none; }
-/* v1.5.0：tooltip/设置面板玻璃拟态（123UI glass token 的轻量化落地） */
-.tooltip { position:absolute; z-index:3; min-width:210px; padding:10px 12px; border:1px solid var(--line); border-radius:12px; background:color-mix(in srgb, var(--surface) 92%, transparent); backdrop-filter:blur(14px) saturate(1.15); -webkit-backdrop-filter:blur(14px) saturate(1.15); box-shadow:0 10px 24px rgba(0,0,0,.15); pointer-events:none; }
-.tooltip strong, .tooltip span { display:block; }
-.tooltip span { color:var(--muted); font-size:12px; margin-top:3px; }
-.zoom-controls { position:absolute; right:16px; bottom:16px; display:flex; gap:6px; }
-.zoom-controls button { width:34px; padding:0; font-size:18px; background:color-mix(in srgb, var(--surface) 82%, transparent); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); }
-.legend { position:absolute; left:16px; bottom:18px; display:flex; gap:12px; padding:7px 12px; border-radius:999px; border:1px solid var(--line); background:color-mix(in srgb, var(--surface) 80%, transparent); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); color:var(--muted); font-size:12px; pointer-events:none; }
-.legend span { display:inline-flex; align-items:center; gap:4px; }
-.legend i { display:inline-block; width:8px; height:8px; border-radius:50%; }
-.legend .user { background:var(--user); } .legend .project { background:var(--project); } .legend .reference { background:var(--reference); } .legend .feedback { background:var(--feedback); }
-.graph-settings { position:absolute; z-index:4; top:14px; right:14px; width:290px; padding:16px; border:1px solid var(--line); border-radius:16px; background:color-mix(in srgb, var(--surface) 88%, transparent); backdrop-filter:blur(18px) saturate(1.3); -webkit-backdrop-filter:blur(18px) saturate(1.3); box-shadow:0 16px 36px rgba(0,10,30,.18); }
-.graph-settings h2 { margin:0 0 12px; font-size:14px; }.graph-settings h3 { margin:12px 0 7px; color:var(--muted); font-size:10px; letter-spacing:.08em; text-transform:uppercase; }.graph-settings label { display:flex; align-items:center; gap:8px; min-height:28px; color:var(--muted); font-size:12px; }.graph-settings label span { flex:1; }.graph-settings input[type=range] { flex:1; accent-color:var(--blue); }.graph-settings output { min-width:32px; text-align:right; color:var(--ink); font-variant-numeric:tabular-nums; font-size:11px; }
-.node-browser { position:absolute; z-index:3; left:10px; top:10px; width:min(270px, calc(100% - 20px)); padding:7px 8px; border:1px solid var(--line); border-radius:10px; background:color-mix(in srgb, var(--surface) 94%, transparent); box-shadow:0 8px 18px rgba(0,0,0,.1); }
-.node-browser label { display:none; }
-.node-browser-row { display:flex; align-items:center; gap:6px; }
-.node-browser select { flex:1; min-width:0; min-height:28px; padding:0 6px; border:1px solid var(--strong); border-radius:7px; background:var(--surface); color:var(--ink); font:inherit; font-size:11px; }
-.node-browser button { min-height:28px; padding:0 8px; border-radius:7px; background:var(--blue); border-color:var(--blue); color:#fff; font-size:11px; }
-@media (prefers-reduced-motion: reduce) { .toolbar button, .zoom-controls button, .node-browser button, html, body { transition:none; } }
-@media (max-width:700px) { .graph-shell { padding:16px; } .heading { align-items:flex-start; flex-direction:column; } .toolbar { flex-wrap:wrap; } .search { flex-basis:100%; } }
-/* v1.7.3：设置面板"恢复默认"按钮 */
+:root {
+  color-scheme: light;
+  --bg: #FFFFFF;
+  --sidebar: #F5F5F5;
+  --surface: #FFFFFF;
+  --raised: #FFFFFF;
+  --ink: #161616;
+  --muted: #737377;
+  --faint: #808080;
+  --line: #E1E1E3;
+  --strong: #C8C8C8;
+  --blue: #6366F1;
+  --accent: #7C3AED;
+  --selection: #E9E7FF;
+  --dim: #F9F9F9;
+  --edge: #C8C8C8;
+  --user: #6366F1;
+  --project: #7C3AED;
+  --reference: #8B5CF6;
+  --feedback: #A78BFA;
+  --graph-bg: #FFFFFF;
+  --dur-1: 120ms;
+  --dur-2: 180ms;
+  --dur-3: 220ms;
+  --ease-standard: cubic-bezier(.22, 1, .36, 1);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0E0E0E;
+  --sidebar: #0A0A0A;
+  --surface: #141414;
+  --raised: #181818;
+  --ink: #EAEAEA;
+  --muted: #C8C8C8;
+  --faint: #808080;
+  --line: #2A2A2A;
+  --strong: #363636;
+  --blue: #6366F1;
+  --accent: #A78BFA;
+  --selection: #312E81;
+  --dim: #1E1E1E;
+  --edge: #363636;
+  --user: #818CF8;
+  --project: #A78BFA;
+  --reference: #7C3AED;
+  --feedback: #C4B5FD;
+  --graph-bg: #0E0E0E;
+}
+
+* { box-sizing: border-box; }
+html, body {
+  width: 100%; height: 100%; margin: 0; overflow: hidden;
+  background: var(--bg); color: var(--ink);
+  font-family: "IBM Plex Sans", system-ui, "Segoe UI", "Microsoft YaHei", sans-serif;
+  font-size: 12px;
+  transition: background-color var(--dur-2) ease-out, color var(--dur-2) ease-out;
+}
+.graph-shell { display: flex; flex-direction: column; gap: 10px; height: 100%; padding: 0; }
+.heading { display: none; }
+.eyebrow { color: var(--blue); font-size: 10px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; }
+h1 { margin: 0 0 4px; font-size: 20px; font-weight: 700; letter-spacing: -.01em; }
+p { margin: 0; color: var(--muted); font-size: 11px; }
+.stats { display: flex; align-items: center; gap: 5px; color: var(--muted); white-space: nowrap; margin-left: auto; }
+.stats strong { color: var(--ink); font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; margin-left: 5px; }
+.stats span { font-size: 12px; }
+.toolbar {
+  display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+  border: 1px solid var(--line); border-radius: 0; background: var(--surface);
+}
+.toolbar button, .zoom-controls button, .node-browser button {
+  border: 1px solid var(--strong); border-radius: 0; background: var(--surface); color: var(--ink);
+  min-height: 30px; padding: 0 10px; font-size: 12px; cursor: pointer;
+  transition: background-color var(--dur-1) ease, border-color var(--dur-1) ease, color var(--dur-1) ease, transform var(--dur-1) ease;
+}
+.toolbar button:hover, .zoom-controls button:hover { border-color: var(--accent); background: var(--dim); }
+.toolbar button:focus-visible, .zoom-controls button:focus-visible, .node-browser button:focus-visible,
+.search:focus-within, .node-browser select:focus-visible, .toolbar input:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px;
+}
+.toolbar button:active, .zoom-controls button:active, .node-browser button:active { transform: translateY(1px); }
+.search { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 160px; color: var(--muted); }
+.search input { width: 100%; border: 0; outline: 0; background: transparent; color: var(--ink); padding: 6px 4px; font: inherit; }
+.search button { display: none; min-height: 26px; padding: 0 7px; }
+.search:has(input:not(:placeholder-shown)) button { display: block; }
+.tag-toggle { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.surface { position: relative; flex: 1; min-height: 320px; overflow: hidden; border: 1px solid var(--line); border-radius: 0; background: var(--graph-bg); }
+.sigma-container { position: absolute; inset: 0; }
+.message { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); pointer-events: none; }
+.message.hidden { display: none; }
+.tooltip { position: absolute; z-index: 3; min-width: 210px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 0; background: var(--raised); color: var(--ink); pointer-events: none; }
+.tooltip strong, .tooltip span { display: block; }
+.tooltip span { color: var(--muted); font-size: 12px; margin-top: 3px; }
+.zoom-controls { position: absolute; right: 16px; bottom: 16px; display: flex; gap: 6px; }
+.zoom-controls button { width: 34px; padding: 0; font-size: 18px; }
+.legend { position: absolute; left: 16px; bottom: 18px; display: flex; gap: 12px; padding: 7px 12px; border-radius: 0; border: 1px solid var(--line); background: var(--raised); color: var(--muted); font-size: 12px; pointer-events: none; }
+.legend span { display: inline-flex; align-items: center; gap: 4px; }
+.legend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
+.legend .user { background: var(--user); } .legend .project { background: var(--project); }
+.legend .reference { background: var(--reference); } .legend .feedback { background: var(--feedback); }
+.graph-settings { position: absolute; z-index: 4; top: 14px; right: 14px; width: 290px; padding: 16px; border: 1px solid var(--line); border-radius: 0; background: var(--raised); color: var(--ink); }
+.graph-settings h2 { margin: 0 0 12px; font-size: 14px; }
+.graph-settings h3 { margin: 12px 0 7px; color: var(--muted); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
+.graph-settings label { display: flex; align-items: center; gap: 8px; min-height: 28px; color: var(--muted); font-size: 12px; }
+.graph-settings label span { flex: 1; }
+.graph-settings input[type=range] { flex: 1; accent-color: var(--blue); }
+.graph-settings output { min-width: 32px; text-align: right; color: var(--ink); font-variant-numeric: tabular-nums; font-size: 11px; }
+.node-browser { position: absolute; z-index: 3; left: 10px; top: 10px; width: min(270px, calc(100% - 20px)); padding: 7px 8px; border: 1px solid var(--line); border-radius: 0; background: var(--raised); }
+.node-browser label { display: none; }
+.node-browser-row { display: flex; align-items: center; gap: 6px; }
+.node-browser select { flex: 1; min-width: 0; min-height: 28px; padding: 0 6px; border: 1px solid var(--strong); border-radius: 0; background: var(--surface); color: var(--ink); font: inherit; font-size: 11px; }
+.node-browser button { min-height: 28px; padding: 0 8px; background: var(--blue); border-color: var(--blue); color: var(--ink); font-size: 11px; }
+@media (prefers-reduced-motion: reduce) { .toolbar button, .zoom-controls button, .node-browser button, html, body { transition: none; } }
+@media (max-width: 700px) { .graph-shell { padding: 16px; } .heading { align-items: flex-start; flex-direction: column; } .toolbar { flex-wrap: wrap; } .search { flex-basis: 100%; } }
 .graph-settings .settings-reset { margin-top: 14px; }
-.graph-settings .settings-reset button { width: 100%; min-height: 30px; border: 1px dashed var(--strong); border-radius: 10px; background: transparent; color: var(--muted); font: inherit; font-size: 12px; cursor: pointer; transition: color var(--dur-1) ease, border-color var(--dur-1) ease; }
-.graph-settings .settings-reset button:hover { color: var(--blue); border-color: var(--blue); border-style: solid; }
+.graph-settings .settings-reset button { width: 100%; min-height: 30px; border: 1px dashed var(--strong); border-radius: 0; background: transparent; color: var(--muted); font: inherit; font-size: 12px; cursor: pointer; transition: color var(--dur-1) ease, border-color var(--dur-1) ease; }
+.graph-settings .settings-reset button:hover { color: var(--ink); border-color: var(--accent); border-style: solid; }
 .graph-settings .settings-reset button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-/* v1.7.5 修复：设置面板底部"保存并关闭"主按钮（面板浮层会挡住工具栏"设置"按钮，需自带出口） */
 .graph-settings .settings-save { margin-top: 10px; }
-.graph-settings .settings-save button { width: 100%; min-height: 32px; border: none; border-radius: 10px; background: var(--blue); color: #FFFFFF; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; transition: filter var(--dur-1) ease; }
-.graph-settings .settings-save button:hover { filter: brightness(1.08); }
+.graph-settings .settings-save button { width: 100%; min-height: 32px; border: 1px solid var(--blue); border-radius: 0; background: var(--blue); color: var(--ink); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; transition: background-color var(--dur-1) ease, border-color var(--dur-1) ease, transform var(--dur-1) ease; }
+.graph-settings .settings-save button:hover { background: var(--strong); border-color: var(--strong); }
+.graph-settings .settings-save button:active { transform: translateY(1px); }
 .graph-settings .settings-save button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

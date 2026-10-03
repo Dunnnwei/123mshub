@@ -52,22 +52,18 @@ def _type_colors_cached() -> dict:
     不再每行扫描整份应用级联样式表（搜索/筛选热路径）。
     v1.10.0C 修复：TYPE_OPTIONS 是 (标签, token键) 对，原来按标签取色全部
     落空到 accent——分类胶囊失去四色区分。"""
-    stylesheet = QApplication.instance().styleSheet() if QApplication.instance() else ""
-    mode = "dark" if "#0B0E14" in stylesheet else "light"
-    palette = PALETTES.get(mode, {})
+    # Reuse the token-aware theme resolver; the canvas colors are intentionally
+    # neutral in v1.10.5 and must not be detected through a retired literal.
+    palette = _current_palette()
     return {value: palette.get(value, palette.get("accent", "#4F46E5")) for _label, value in TYPE_OPTIONS}
 
 
 def _type_pill_style(color: str) -> str:
-    """Return the compact, softly tinted category capsule from the Stitch table."""
-    raw = str(color).lstrip("#")
-    try:
-        r, g, b = (int(raw[index:index + 2], 16) for index in (0, 2, 4))
-    except (TypeError, ValueError):
-        r, g, b = 79, 70, 229
+    """Return a flat Mono Clean category label without translucent pill chrome."""
+    palette = _current_palette()
     return (
-        f"color:{color};border:1px solid rgba({r},{g},{b},0.45);"
-        f"background:rgba({r},{g},{b},0.12);border-radius:10px;"
+        f"color:{color};border:1px solid {color};"
+        f"background:{palette.get('inset', '#F9F9F9')};border-radius:0;"
         "font-size:10px;font-weight:650;padding:1px 0;"
     )
 

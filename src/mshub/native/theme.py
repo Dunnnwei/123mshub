@@ -1,12 +1,9 @@
 """123mshub Native design tokens shared by Qt and the local graph island.
 
-v1.10.0（Stitch 视觉移植）：配色与组件样式按 Stitch 两套设计系统重制——
-暗色走 Fluent Mica Utility（深海军蓝层阶 + 白 8% 描边），亮色走 Silk
-（冷灰粘土底 + 浅卡 + 顶部高光边）。
-v1.10.1（系统字体与视觉层级收口）：品牌主色从皇家蓝 #0156FC 换成 Stitch 的
-靛蓝 #6366F1 / 紫罗兰 #7C3AED 体系（亮色 Silk 令牌 + 暗色 Mica 令牌），
-图谱四分类色统一为 用户=靛蓝 / 项目=紫罗兰 / 参考=亮绿 / 反馈=亮红（列表胶囊
-与图谱节点/图例同一映射）；选中态从实底反白改为主题色浅染。token 键位不变。
+v1.11.0：令牌来自可复用的 ``123ui5.0``。结构、状态、字号、间距和动效
+继续遵循 Hermes Agent 的 ``Mono — Clean grayscale — minimal and focused``
+主题；品牌强调层使用 Indigo ``#6366F1`` 与 Violet ``#7C3AED``，并由同一
+份令牌源同时供 Qt、本地图谱和未来文件调用。
 """
 import json
 from pathlib import Path
@@ -14,8 +11,9 @@ from pathlib import Path
 from PySide6.QtCore import QObject, QSettings, Signal
 from PySide6.QtGui import QFontDatabase, QPalette
 from PySide6.QtWidgets import QApplication
+from ..ui5 import load_tokens as load_ui5_tokens
 
-DURATIONS = {"hover": 120, "fade": 180, "panel": 220}
+DURATIONS = {"hover": 120, "fade": 180, "panel": 220, "row": 100}
 
 # Stitch typography is deliberately compact. Keeping the scale here prevents
 # each native page from drifting toward a different dashboard size.
@@ -36,27 +34,142 @@ _TOKENS_PATH = Path(__file__).with_name("design_tokens.json")
 # ocr 审查修复：design_tokens.json 缺失/损坏时（打包或环境包部署异常）曾静默
 # 返回空 dict，下游 stylesheet()/graph_palette() 直接 KeyError 且远离根因。
 # 嵌一份与 json 同源的完整默认令牌作兜底：文件丢了 UI 也能起来（颜色不漂移）。
-_FALLBACK_TOKENS = {
-    "light": {"bg": "#E8EAF0", "sidebar": "#E5E7ED", "surface": "#F0F2F8", "raised": "#FFFFFF", "inset": "#E9ECF3",
-              "ink": "#2E3040", "muted": "#585A68", "faint": "#8A8C9A", "line": "#D0D2DC", "strong": "#B8BACA",
-              "action": "#6366F1", "on_action": "#FFFFFF", "accent": "#4F46E5", "selection": "#E0E2FF",
-              "error": "#DC2626", "error_soft": "#FEE2E2", "ok": "#047857", "ok_soft": "#D1FAE5",
-              "warning": "#B45309", "warning_soft": "#FEF3C7", "user": "#6366F1", "project": "#7C3AED",
-              "reference": "#22C55E", "feedback": "#F43F5E", "glass": "#EEF0F7", "action_hover": "#4F46E5",
-              "action_pressed": "#4338CA", "star_dot": "#6366F1", "star_bright": "#7C3AED", "sheet_alpha": 216},
-    "dark": {"bg": "#0B0E14", "sidebar": "#0E172A", "surface": "#131B2E", "raised": "#1A243D", "inset": "#0F1830",
-             "ink": "#DAE2FD", "muted": "#94A3B8", "faint": "#64748B", "line": "#232D45", "graph_line": "#465574", "strong": "#33415E",
-             "action": "#6366F1", "on_action": "#FFFFFF", "accent": "#A5B4FC", "selection": "#2A2B63",
-             "error": "#F87171", "error_soft": "#3D242A", "ok": "#34D399", "ok_soft": "#17392F",
-             "warning": "#FBBF24", "warning_soft": "#40341F", "user": "#6366F1", "project": "#7C3AED",
-             "reference": "#34D399", "feedback": "#FB7185", "glass": "#1A243D", "action_hover": "#818CF8",
-             "action_pressed": "#4F46E5", "star_dot": "#6366F1", "star_bright": "#A5B4FC", "sheet_alpha": 218},
+_FALLBACK_TOKENS = json.loads(r'''
+{
+  "meta": {
+    "name": "123ui5.0",
+    "version": "5.0.0",
+    "source": "Hermes Mono Clean + Indigo/Violet brand seeds",
+    "seed": {
+      "indigo": "#6366F1",
+      "violet": "#7C3AED"
+    }
+  },
+  "primitive": {
+    "indigo_500": "#6366F1",
+    "indigo_600": "#4F46E5",
+    "indigo_700": "#4338CA",
+    "indigo_100": "#E0E7FF",
+    "violet_600": "#7C3AED",
+    "violet_700": "#6D28D9",
+    "violet_300": "#C4B5FD",
+    "violet_100": "#EDE9FE",
+    "white": "#FFFFFF",
+    "black_950": "#0E0E0E",
+    "gray_50": "#F9F9F9",
+    "gray_100": "#F5F5F5",
+    "gray_200": "#E1E1E3",
+    "gray_300": "#C8C8C8",
+    "gray_700": "#363636",
+    "gray_800": "#2A2A2A",
+    "gray_900": "#1E1E1E",
+    "red_600": "#B94A3A",
+    "green_600": "#3D7A62",
+    "amber_600": "#956D24"
+  },
+  "light": {
+    "bg": "#FFFFFF",
+    "sidebar": "#F5F5F5",
+    "surface": "#FFFFFF",
+    "raised": "#FFFFFF",
+    "inset": "#F9F9F9",
+    "ink": "#161616",
+    "muted": "#737377",
+    "faint": "#808080",
+    "line": "#E1E1E3",
+    "strong": "#C8C8C8",
+    "action": "#6366F1",
+    "on_action": "#FFFFFF",
+    "accent": "#7C3AED",
+    "selection": "#E9E7FF",
+    "error": "#B94A3A",
+    "error_soft": "#F5E6E3",
+    "ok": "#3D7A62",
+    "ok_soft": "#E6F2EB",
+    "warning": "#956D24",
+    "warning_soft": "#FBF2DA",
+    "user": "#6366F1",
+    "project": "#7C3AED",
+    "reference": "#8B5CF6",
+    "feedback": "#A78BFA",
+    "glass": "#F5F5F5",
+    "action_hover": "#4F46E5",
+    "action_pressed": "#4338CA",
+    "accent_hover": "#6D28D9",
+    "star_dot": "#6366F1",
+    "star_bright": "#7C3AED",
+    "graph_line": "#C8C8C8",
+    "action_gradient_start": "#6366F1",
+    "action_gradient_end": "#7C3AED",
+    "sheet_alpha": 244
+  },
+  "dark": {
+    "bg": "#0E0E0E",
+    "sidebar": "#0A0A0A",
+    "surface": "#141414",
+    "raised": "#181818",
+    "inset": "#1E1E1E",
+    "ink": "#EAEAEA",
+    "muted": "#C8C8C8",
+    "faint": "#808080",
+    "line": "#2A2A2A",
+    "strong": "#363636",
+    "action": "#6366F1",
+    "on_action": "#FFFFFF",
+    "accent": "#A78BFA",
+    "selection": "#312E81",
+    "error": "#A84040",
+    "error_soft": "#2A1A1A",
+    "ok": "#8DD4AA",
+    "ok_soft": "#203429",
+    "warning": "#E0BA6A",
+    "warning_soft": "#3D321B",
+    "user": "#818CF8",
+    "project": "#A78BFA",
+    "reference": "#7C3AED",
+    "feedback": "#C4B5FD",
+    "glass": "#262626",
+    "action_hover": "#818CF8",
+    "action_pressed": "#4F46E5",
+    "accent_hover": "#C4B5FD",
+    "star_dot": "#818CF8",
+    "star_bright": "#C4B5FD",
+    "graph_line": "#363636",
+    "action_gradient_start": "#6366F1",
+    "action_gradient_end": "#7C3AED",
+    "sheet_alpha": 248
+  },
+  "typography": {
+    "font_primary": "system",
+    "font_cjk": "system",
+    "font_mono": "system",
+    "display_px": 20,
+    "brand_px": 14,
+    "body_px": 12,
+    "row_px": 12,
+    "meta_px": 11,
+    "micro_px": 10,
+    "section_px": 14,
+    "nav_px": 13,
+    "nav_weight": 700,
+    "count_px": 10,
+    "count_weight": 400
+  },
+  "motion": {
+    "hover_ms": 120,
+    "fade_ms": 180,
+    "panel_ms": 220,
+    "row_ms": 100,
+    "easing": "cubic-bezier(.22, 1, .36, 1)"
+  }
 }
+
+''')
 
 
 def _load_tokens() -> dict:
     try:
-        loaded = json.loads(_TOKENS_PATH.read_text(encoding="utf-8"))
+        loaded = load_ui5_tokens()
         if not isinstance(loaded, dict) or not loaded.get("light") or not loaded.get("dark"):
             raise ValueError("design tokens 不完整")
         return loaded
@@ -102,8 +215,11 @@ PALETTES.setdefault("dark", {})
 def current_palette() -> dict:
     """v1.8.0（审查 UI 项）：视图层行内样式的取色入口——亮暗跟随应用样式表。"""
     app = QApplication.instance()
-    stylesheet = app.styleSheet() if app else ""
-    mode = "dark" if "#0B0E14" in stylesheet else "light"
+    stylesheet = (app.styleSheet() if app else "").upper()
+    # Theme detection must follow the token rather than a historical literal;
+    # v1.10.5 intentionally moves both canvas colors to neutral grays.
+    dark_marker = str(PALETTES.get("dark", {}).get("bg", "")).upper()
+    mode = "dark" if dark_marker and dark_marker in stylesheet else "light"
     return PALETTES.get(mode, {})
 
 def graph_palette(mode):
@@ -117,6 +233,8 @@ def graph_palette(mode):
         "line": token.get("graph_line", token["line"]),
         "accent": token["accent"],
         "selection": token["selection"],
+        "action_gradient_start": token.get("action_gradient_start", token["action"]),
+        "action_gradient_end": token.get("action_gradient_end", token["accent"]),
         "types": {key: token[key] for key in ("user", "project", "reference", "feedback")},
     }
 
@@ -130,34 +248,38 @@ def _rgba(hex_color: str, alpha: int) -> str:
 def starfield_colors(mode: str) -> tuple[str, str, str, bool]:
     """兼容旧工作区接口；v1.10.0D 的原生画布使用静态 Silk/Mica 底色。"""
     token = PALETTES["dark" if mode == "dark" else "light"]
-    bright_default = "#A5B4FC" if mode == "dark" else "#7C3AED"
-    return token["bg"], token.get("star_dot", "#6366F1"), token.get("star_bright", bright_default), mode == "dark"
+    bright_default = "#D0D0D0" if mode == "dark" else "#B0B0B0"
+    return token["bg"], token.get("star_dot", "#808080"), token.get("star_bright", bright_default), mode == "dark"
 
 
 def stylesheet(mode):
     # Use the platform font selected by Qt.  The explicit fallbacks keep the
     # graph WebEngine and early-import QSS deterministic on Windows.
     family = system_font_family()
-    font_stack = f"'{family}', 'Segoe UI', 'Microsoft YaHei', sans-serif"
+    font_stack = f"'IBM Plex Sans', '{family}', 'Segoe UI', 'Microsoft YaHei', sans-serif"
+    mono_stack = "'IBM Plex Mono', 'Cascadia Mono', 'Consolas', monospace"
     p = PALETTES[mode]
     dark = mode == "dark"
-    # 内容区悬浮页板：点阵背景透出的一层半透明卡（Stitch 的 Mica 质感近似——
-    # Qt 无 backdrop-blur，用高不透明度近似磨砂）
-    sheet = _rgba(p["surface"], int(p.get("sheet_alpha", 216)))
-    sidebar_fill = _rgba(p["sidebar"], 235)
-    job_card = _rgba(p["raised"], dark and 200 or 178)
-    agent_grad = "qlineargradient(x1:0 y1:0, x2:1 y2:1, stop:0 #6366F1, stop:0.55 #6156EA, stop:1 #7C3AED)"
-    eyebrow_bg = _rgba(p["action"], 36)
-    eyebrow_line = _rgba(p["action"], 92)
-    stat_bg = _rgba(p["action"], 20)
-    danger_line = _rgba(p["error"], 120)
-    ghost_ink = "#FFFFFF" if dark else p["ink"]
-    ghost_line = "rgba(255,255,255,0.75)" if dark else "rgba(46,48,64,0.45)"
-    ghost_hover = "rgba(255,255,255,0.10)" if dark else p["selection"]
-    # Silk 亮色的"挤压凸起"暗示：顶边白高光 + 其余细线（暗色用顶边微光）
-    card_top = "#FFFFFF" if not dark else "rgba(255,255,255,0.06)"
-    # v1.10.0C：选中态 = 主题色浅染（Stitch 选中行是 primary-fixed 淡底，不再实底反白）
-    selected_tint = _rgba(p["action"], 30 if not dark else 46)
+    # Mono uses solid surfaces.  Only the small branded Agent entry point uses
+    # the Indigo-to-Violet gradient; page surfaces remain flat and focused.
+    sheet = p["surface"]
+    sidebar_fill = p["sidebar"]
+    agent_grad = (
+        f"qlineargradient(x1:0, y1:0, x2:1, y2:1, "
+        f"stop:0 {p.get('action_gradient_start', p['action'])}, "
+        f"stop:1 {p.get('action_gradient_end', p['accent'])})"
+    )
+    eyebrow_bg = p["inset"]
+    eyebrow_line = p["line"]
+    stat_bg = p["inset"]
+    danger_line = p["error"]
+    ghost_ink = p["ink"]
+    ghost_line = p["line"]
+    ghost_hover = p["selection"]
+    card_top = p["surface"]
+    # Row selection is deliberately more legible than v1.10.5's translucent
+    # indigo tint.  Focus still belongs to a border, while rows use a fill.
+    selected_tint = p["selection"]
     nav_selected = (
         f"background: {p['raised']}; color: {p['ink']}; border: 1px solid {p['strong']};"
         if dark else
@@ -172,17 +294,17 @@ QWidget#pageArea {{ background: transparent; }}
 /* 页面根透明——透出 #pageSheet 的半透明层（各页内部卡片自带上色不受影响） */
 QStackedWidget#pages > QWidget {{ background: transparent; }}
 /* v1.10.0B（Stitch 结构）：页头横向信息带——独立底色+描边，与内容区分层 */
-QFrame#headerBand {{ background: {p['surface']}; border: 1px solid {p['line']}; border-top: 1px solid {card_top}; border-radius: 16px; }}
+QFrame#headerBand {{ background: {p['surface']}; border: 1px solid {p['line']}; border-top: 1px solid {card_top}; border-radius: 0; }}
 QFrame#headerBand QLabel#title {{ font-size: {TYPOGRAPHY['display']}px; line-height: 24px; font-weight: 700; letter-spacing: -0.2px; }}
 QFrame#headerDivider {{ background: {p['line']}; border: none; }}
 /* v1.10.0B：品牌版本胶囊（Stitch 名字旁 mono 小胶囊） */
-QLabel#versionPill {{ color: {p['accent']}; background: {eyebrow_bg}; border: 1px solid {eyebrow_line}; border-radius: 10px; min-height: 20px; padding: 1px 6px; font-size: {TYPOGRAPHY['micro']}px; font-weight: 600; }}
+QLabel#versionPill {{ color: {p['accent']}; background: {eyebrow_bg}; border: 1px solid {eyebrow_line}; border-radius: 0; min-height: 20px; padding: 1px 6px; font-size: {TYPOGRAPHY['micro']}px; font-weight: 600; }}
 /* v1.10.0B（Stitch 结构）：记忆列表表格卡 */
-QFrame#listCard {{ background: {p['surface']}; border: 1px solid {p['line']}; border-top: 1px solid {card_top}; border-radius: 16px; }}
-QWidget#listHeader {{ background: {p['inset']}; border: none; border-bottom: 1px solid {p['line']}; border-top-left-radius: 15px; border-top-right-radius: 15px; }}
+QFrame#listCard {{ background: {p['surface']}; border: 1px solid {p['line']}; border-top: 1px solid {card_top}; border-radius: 0; }}
+QWidget#listHeader {{ background: {p['inset']}; border: none; border-bottom: 1px solid {p['line']}; border-top-left-radius: 0; border-top-right-radius: 0; }}
 QWidget#listHeader QLabel {{ color: {p['muted']}; font-size: {TYPOGRAPHY['meta']}px; font-weight: 600; background: transparent; }}
 QHeaderView#listHeaderView {{ background: transparent; border: none; }}
-QHeaderView#listHeaderView::section {{ background: transparent; color: #6366F1; padding: 7px 10px; border: none; border-bottom: 1px solid {p['line']}; font-size: {TYPOGRAPHY['meta']}px; font-weight: 700; }}
+QHeaderView#listHeaderView::section {{ background: transparent; color: {p['accent']}; padding: 7px 10px; border: none; border-bottom: 1px solid {p['line']}; font-size: {TYPOGRAPHY['meta']}px; font-weight: 700; }}
 QListWidget#memoryList {{ background: transparent; border: none; padding: 0; }}
 QListWidget#memoryList::item {{ background: transparent; border: none; border-bottom: 1px solid {_rgba(p['line'], 120)}; border-radius: 0; padding: 0; margin: 0; }}
 QListWidget#memoryList::item:hover {{ background: {_rgba(p['action'], 14)}; }}
@@ -194,22 +316,22 @@ QLabel#rowCol {{ color: {p['muted']}; font-size: {TYPOGRAPHY['meta']}px; backgro
 QLabel#rowTime {{ color: {p['faint']}; font-size: {TYPOGRAPHY['meta']}px; background: transparent; }}
 QLabel, QCheckBox, QRadioButton {{ background: transparent; }}
 /* v1.7.4：侧边栏浮动面板；v1.10.0 换 Stitch Mica 半透明层阶 */
-QFrame#sidebar {{ background: {sidebar_fill}; border: 1px solid {p['line']}; border-radius: 16px; }}
-QFrame#pageSheet {{ background: {sheet}; border: 1px solid {p['line']}; border-radius: 16px; }}
-QFrame#surface, QFrame#emptyCard, QGroupBox {{ background: {p['surface']}; border: 1px solid {p['line']}; border-top: 1px solid {card_top}; border-radius: 12px; }}
+QFrame#sidebar {{ background: {sidebar_fill}; border: 1px solid {p['line']}; border-radius: 0; }}
+QFrame#pageSheet {{ background: {sheet}; border: 1px solid {p['line']}; border-radius: 0; }}
+QFrame#surface, QFrame#emptyCard, QGroupBox {{ background: {p['surface']}; border: 1px solid {p['line']}; border-top: 1px solid {card_top}; border-radius: 0; }}
 QWidget#memoryRow {{ background: transparent; }}
 QFrame#emptyCard {{ border: 1px dashed {p['strong']}; }}
 QGroupBox {{ margin-top: 14px; padding: 16px; }}
 QGroupBox::title {{ subcontrol-origin: margin; left: 16px; color: {p['ink']}; font-size: 12px; font-weight: 700; }}
 QLineEdit, QTextEdit, QTextBrowser, QPlainTextEdit, QComboBox {{
  background: {p['inset']}; color: {p['ink']}; border: 1px solid {p['line']};
- border-radius: 12px; padding: 6px 10px; font-size: 12px; selection-background-color: {p['selection']};
+ border-radius: 0; padding: 6px 10px; font-size: 12px; selection-background-color: {p['selection']};
  selection-color: {p['ink']}; placeholder-text-color: {p['faint']};
 }}
 QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus, QComboBox:focus {{ border: 2px solid {p['accent']}; padding: 6px 9px; }}
 QComboBox::drop-down {{ width: 24px; border: none; }}
 QComboBox QAbstractItemView {{ background: {p['raised']}; color: {p['ink']}; selection-background-color: {p['selection']}; }}
-QPushButton, QToolButton {{ min-height: 30px; padding: 0 12px; border-radius: 12px;
+QPushButton, QToolButton {{ min-height: 30px; padding: 0 12px; border-radius: 0;
  border: 1px solid {p['line']}; background: {p['surface']}; color: {p['ink']}; font-size: {TYPOGRAPHY['body']}px; font-weight: 500; }}
 QPushButton:hover, QToolButton:hover {{ background: {p['raised']}; border-color: {p['strong']}; }}
 QPushButton:focus, QToolButton:focus {{ border: 2px solid {p['accent']}; }}
@@ -221,8 +343,8 @@ QPushButton#primary:focus {{ border: 2px solid {p['ink']}; }}
 QPushButton#primary:pressed {{ background: {p['action_pressed']}; }}
 QPushButton#primary:disabled {{ background: {p['strong']}; color: {p['faint']}; }}
 /* v1.10.0C（Stitch Silk）：Agent 连接提示词——靛蓝→紫罗兰动能渐变，智能体专属签名色 */
-QPushButton#agentButton {{ background: {agent_grad}; color: #FFFFFF; border: 1px solid rgba(255,255,255,0.22); font-weight: 700; }}
-QPushButton#agentButton:hover {{ border: 1px solid rgba(255,255,255,0.42); }}
+QPushButton#agentButton {{ background: {agent_grad}; color: {p['on_action']}; border: 1px solid {p['action']}; font-weight: 700; }}
+QPushButton#agentButton:hover {{ border: 1px solid {p['strong']}; }}
 QPushButton#agentButton:pressed {{ background: {p['action_pressed']}; }}
 QPushButton#agentButton:disabled {{ background: {p['strong']}; color: {p['faint']}; border-color: {p['line']}; }}
 /* v1.7.5：幽灵按钮（描边空心）；暗色白字白边、亮色同构换墨色 */
@@ -231,26 +353,29 @@ QPushButton#ghost:hover {{ background: {ghost_hover}; border-color: {p['accent']
 QPushButton#ghost:pressed {{ background: {p['selection']}; }}
 QPushButton#ghost:disabled {{ color: {p['faint']}; border-color: {p['line']}; }}
 QPushButton#danger {{ color: {p['error']}; border-color: {danger_line}; background: {p['error_soft']}; font-weight: 600; }}
-QPushButton#metric {{ color: {p['accent']}; border: 1px solid {eyebrow_line}; border-radius: 15px; font-size: {TYPOGRAPHY['body']}px; font-weight: 600; min-height: 30px; padding: 3px 12px; background: {stat_bg}; }}
+QPushButton#metric {{ color: {p['accent']}; border: 1px solid {eyebrow_line}; border-radius: 0; font-size: {TYPOGRAPHY['body']}px; font-weight: 600; min-height: 30px; padding: 3px 12px; background: {stat_bg}; }}
 QPushButton#metric:hover {{ background: {eyebrow_bg}; }}
-QLabel#badge {{ color: {p['accent']}; background: {eyebrow_bg}; border: 1px solid {eyebrow_line}; border-radius: 10px; padding: 2px 11px; font-size: 11px; font-weight: 600; }}
-QLabel#error, QLabel#inboxWarning {{ color: {p['error']}; background: {p['error_soft']}; border-radius: 10px; padding: 8px; }}
+QLabel#badge {{ color: {p['accent']}; background: {eyebrow_bg}; border: 1px solid {eyebrow_line}; border-radius: 0; padding: 2px 11px; font-size: 11px; font-weight: 600; }}
+QLabel#error, QLabel#inboxWarning {{ color: {p['error']}; background: {p['error_soft']}; border-radius: 0; padding: 8px; }}
 QListWidget {{ background: transparent; border: none; outline: none; padding: 4px; }}
-QListWidget::item {{ padding: 10px; border-radius: 12px; margin: 3px 0; }}
+QListWidget::item {{ padding: 10px; border-radius: 0; margin: 3px 0; }}
 QListWidget::item:hover {{ background: {p['surface']}; }}
 QListWidget::item:selected {{ background: {p['selection']}; color: {p['ink']}; }}QLabel#brandName {{ background: transparent; font-family: {font_stack}; font-size: {TYPOGRAPHY['brand']}px; font-weight: 700; }}
 /* Primary navigation follows the system font and gets one additional size step. */
 QListWidget#nav {{ background: transparent; border: none; outline: none; padding: 0; }}
 QListWidget#nav:focus {{ border: none; outline: none; }}
-QListWidget#nav::item {{ padding: 5px 8px; border-radius: 12px; border: 1px solid transparent; font-family: {font_stack}; font-size: {TYPOGRAPHY['nav']}px; font-weight: 700; }}
+QListWidget#nav::item {{ padding: 5px 8px; border-radius: 0; border: 1px solid transparent; font-family: {font_stack}; font-size: {TYPOGRAPHY['nav']}px; font-weight: 700; }}
 /* v1.10.0C（Stitch）：导航选中 = 浅色浮起胶囊（亮白/暗 slate）+ 主题色描边，不再实底反白 */
 QListWidget#nav::item:selected {{ {nav_selected} }}
 /* v1.10.0B：行样式已上移至 #listCard 表格卡区（旧独立行卡样式退役） */
 
 /* v1.10.0（Stitch 需求 4）：后台任务 = 悬浮圆角卡——去掉旧版 border-top 分隔与
    卡下衬底，直接浮在侧栏底色上（卡片自带半透明填充+描边+独立投影） */
-QFrame#jobPanel {{ background: {job_card}; border: 1px solid {p['line']}; border-top: 1px solid {card_top}; border-radius: 14px; }}
-QFrame#jobPanel QLabel#jobTitle {{ color: {p['ink']}; font-size: {TYPOGRAPHY['body']}px; font-weight: 700; }}
+/* v1.10.5：后台任务只保留内容与状态，不再给标题/图标/箭头套一层深浅
+   不同的卡片底色；任务行本身仍使用透明表格和共享选中染色。 */
+QFrame#jobPanel {{ background: transparent; border: none; border-radius: 0; }}
+QWidget#jobHeader, QFrame#jobPanel QLabel#jobTitle, QWidget#jobActivityIcon,
+QFrame#jobPanel QWidget#jobActions {{ background: transparent; }}
 QTableWidget#jobTable {{ background: transparent; border: none; }}
 QTableWidget#jobTable QHeaderView::section {{ background: transparent; border: none; border-bottom: 1px solid {p['line']}; }}
 QTableWidget#jobTable::item:selected {{ color: {p['error']}; background: {selected_tint}; }}
@@ -263,33 +388,33 @@ QPushButton#jobClear:hover, QPushButton#jobAction:hover {{ color: {p['accent']};
 QPushButton#jobClear:pressed, QPushButton#jobAction:pressed {{ color: {p['action']}; }}
 QPushButton#jobClear:disabled, QPushButton#jobAction:disabled {{ color: {p['faint']}; }}
 QTableWidget#jobTable QHeaderView::section {{ padding: 4px 6px; }}
-QTableView {{ background: {p['surface']}; alternate-background-color: {p['inset']}; gridline-color: {p['line']}; border: 1px solid {p['line']}; border-radius: 12px; selection-background-color: {p['selection']}; selection-color: {p['ink']}; }}
+QTableView {{ background: {p['surface']}; alternate-background-color: {p['inset']}; gridline-color: {p['line']}; border: 1px solid {p['line']}; border-radius: 0; selection-background-color: {p['selection']}; selection-color: {p['ink']}; }}
 /* v1.6.0：技能库/安全中心加行高（原来压得太紧难以操作） */
 QTableView::item {{ padding: 8px 10px; font-size: {TYPOGRAPHY['body']}px; }}
-QHeaderView::section {{ background: {p['raised']}; color: #6366F1; padding: 7px 10px; border: none; border-bottom: 1px solid {p['line']}; font-size: {TYPOGRAPHY['meta']}px; font-weight: 700; }}
-QWidget#listHeader QLabel {{ color: #6366F1; font-weight: 700; }}
+QHeaderView::section {{ background: {p['raised']}; color: {p['accent']}; padding: 7px 10px; border: none; border-bottom: 1px solid {p['line']}; font-size: {TYPOGRAPHY['meta']}px; font-weight: 700; }}
+QWidget#listHeader QLabel {{ color: {p['accent']}; font-weight: 700; }}
 /* v1.10.0（Stitch）：页头 eyebrow 从纯文字改为发光胶囊（含色点由文本自带） */
-QLabel#eyebrow {{ color: {p['accent']}; background: {eyebrow_bg}; border: 1px solid {eyebrow_line}; border-radius: 9px; padding: 2px 10px; font-size: {TYPOGRAPHY['micro']}px; font-weight: 700; }}
+QLabel#eyebrow {{ color: {p['accent']}; background: {eyebrow_bg}; border: 1px solid {eyebrow_line}; border-radius: 0; padding: 2px 10px; font-size: {TYPOGRAPHY['micro']}px; font-weight: 700; }}
 QLabel#muted, QLabel#status {{ color: {p['muted']}; font-size: {TYPOGRAPHY['meta']}px; font-weight: 400; }}
 /* v1.9.0（需求 1）：设置保存成功反馈——皇家蓝加粗强调 */
 QLabel#statusSaved {{ color: {p['action']}; font-size: {TYPOGRAPHY['body']}px; font-weight: 700; }}
 QLabel#faint {{ color: {p['faint']}; font-size: {TYPOGRAPHY['meta']}px; font-weight: 400; }}
 QLabel#title {{ color: {p['ink']}; font-family: {font_stack}; font-size: {TYPOGRAPHY['display']}px; font-weight: 700; }}
-QTabWidget::pane {{ border: 1px solid {p['line']}; border-radius: 14px; padding: 16px; background: {p['surface']}; }}
-QTabBar::tab {{ padding: 8px 16px; margin: 0 4px 6px 0; border: 1px solid {p['line']}; border-radius: 12px; color: {p['muted']}; background: {p['inset']}; font-size: 12px; font-weight: 500; }}
+QTabWidget::pane {{ border: 1px solid {p['line']}; border-radius: 0; padding: 16px; background: {p['surface']}; }}
+QTabBar::tab {{ padding: 8px 16px; margin: 0 4px 6px 0; border: 1px solid {p['line']}; border-radius: 0; color: {p['muted']}; background: {p['inset']}; font-size: 12px; font-weight: 500; }}
 QTabBar::tab:selected {{ color: {p['accent']}; background: {p['selection']}; border-color: {eyebrow_line}; font-weight: 600; }}
 QDockWidget {{ border: 1px solid {p['line']}; }}
 QDockWidget::title {{ background: {p['glass']}; padding: 8px 12px; color: {p['muted']}; }}
 QToolTip {{ background: {p['raised']}; color: {p['ink']}; border: 1px solid {p['line']}; padding: 8px 10px; }}
 QScrollBar:vertical {{ width: 8px; background: transparent; margin: 0; }}
 QScrollBar:horizontal {{ height: 8px; background: transparent; margin: 0; }}
-QScrollBar::handle {{ background: {p['strong']}; border-radius: 4px; min-height: 24px; min-width: 24px; }}
+QScrollBar::handle {{ background: {p['strong']}; border-radius: 2px; min-height: 24px; min-width: 24px; }}
 QScrollBar::handle:hover {{ background: {p['faint']}; }}
 QScrollBar::add-line, QScrollBar::sub-line {{ width: 0; height: 0; }}
 QScrollBar::add-page, QScrollBar::sub-page {{ background: transparent; }}
-QCheckBox::indicator {{ width: 16px; height: 16px; border: 1px solid {p['strong']}; border-radius: 4px; background: {p['inset']}; }}
+QCheckBox::indicator {{ width: 16px; height: 16px; border: 1px solid {p['strong']}; border-radius: 0; background: {p['inset']}; }}
 /* 勾选态 = 实心主题色方框；白描边保证在浅染选中行上仍清晰可辨 */
-QCheckBox::indicator:checked {{ background: {p['action']}; border: 2px solid #FFFFFF; }}
+QCheckBox::indicator:checked {{ background: {p['action']}; border: 2px solid {p['on_action']}; }}
 QCheckBox:focus {{ outline: 2px solid {p['accent']}; }}
 /* v1.7.4：浮动侧栏与内容区分隔条透明（拖拽区仍在）；悬停淡色提示可拖。 */
 QSplitter::handle {{ background: transparent; }}
@@ -297,24 +422,31 @@ QSplitter::handle:hover {{ background: {p['selection']}; }}
 QSplitter#descSplitter::handle {{ background: {p['line']}; }}
 /* v1.9.1：侧栏内导航/任务面板垂直分隔条；v1.10.0 悬浮卡化后透明（卡缘即界线） */
 QSplitter#jobSplitter::handle {{ background: transparent; }}
+QSplitter#jobSplitter {{ background: transparent; }}
 QTableWidget, QTableView {{ alternate-background-color: {p['inset']}; selection-background-color: {p['selection']}; selection-color: {p['ink']}; outline: none; }}
 /* v1.10.0C：表格选中行整行主题色浅染（技能仓库/安全中心统一），文字保持墨色 */
 QTableWidget::item:selected, QTableView::item:selected {{ background: {selected_tint}; color: {p['ink']}; border: none; }}
-QTableWidget:focus, QTableView:focus, QListWidget#memoryList:focus, QTabWidget:focus {{ border: 2px solid {p['accent']}; }}
+QTableWidget:focus, QTableView:focus, QTabWidget:focus {{ border: 2px solid {p['accent']}; }}
+/* The memory list communicates selection with the row tint; a second focus
+   rectangle around the whole list is a competing selection language. */
+QListWidget#memoryList:focus {{ border: none; outline: none; }}
+/* The task chevron is a transparent icon hit target, including keyboard focus. */
+QToolButton#jobToggle, QToolButton#jobToggle:hover, QToolButton#jobToggle:pressed,
+QToolButton#jobToggle:checked, QToolButton#jobToggle:focus {{ background: transparent; border: none; outline: none; }}
 QListWidget#nav:focus::item:selected {{ border: 2px solid {p['accent']}; }}
 QPlainTextEdit, QTextBrowser {{ font-family: {font_stack}; }}
 QGroupBox {{ color: {p['ink']}; }}
-QProgressBar {{ min-height: 6px; max-height: 6px; border: 0; border-radius: 3px; background: {p['line']}; text-align: center; }}
-QProgressBar::chunk {{ border-radius: 3px; background: {p['action']}; }}
+QProgressBar {{ min-height: 6px; max-height: 6px; border: 0; border-radius: 0; background: {p['line']}; text-align: center; }}
+QProgressBar::chunk {{ border-radius: 0; background: {p['action']}; }}
 QStatusBar {{ background: transparent; color: {p['muted']}; border: none; font-size: 11px; }}
 QToolButton#iconButton {{ min-width: 32px; max-width: 32px; padding: 0; }}
-QToolButton#jobToggle {{ min-width: 30px; max-width: 30px; min-height: 28px; max-height: 28px; padding: 0; border-radius: 8px; qproperty-toolButtonStyle: ToolButtonIconOnly; }}
+QToolButton#jobToggle {{ min-width: 30px; max-width: 30px; min-height: 28px; max-height: 28px; padding: 0; border-radius: 0; qproperty-toolButtonStyle: ToolButtonIconOnly; }}
 QLabel#jobActivityIcon {{ background: transparent; }}
 QLabel#sectionTitle {{ color: {p['ink']}; font-size: {TYPOGRAPHY['section']}px; font-weight: 700; }}
 QLabel#helper {{ color: {p['faint']}; font-size: {TYPOGRAPHY['meta']}px; font-weight: 400; }}
-QLabel#statusOk {{ color: {p['ok']}; background: {p['ok_soft']}; border-radius: 8px; padding: 6px 10px; }}
-QLabel#statusWarning {{ color: {p['warning']}; background: {p['warning_soft']}; border-radius: 8px; padding: 6px 10px; }}
-QLabel#statusError {{ color: {p['error']}; background: {p['error_soft']}; border-radius: 8px; padding: 6px 10px; }}
+QLabel#statusOk {{ color: {p['ok']}; background: {p['ok_soft']}; border-radius: 0; padding: 6px 10px; }}
+QLabel#statusWarning {{ color: {p['warning']}; background: {p['warning_soft']}; border-radius: 0; padding: 6px 10px; }}
+QLabel#statusError {{ color: {p['error']}; background: {p['error_soft']}; border-radius: 0; padding: 6px 10px; }}
 QToolButton, QPushButton, QComboBox, QLineEdit, QPlainTextEdit, QTextEdit, QTextBrowser, QListWidget, QTableWidget {{
   selection-background-color: {p['selection']}; selection-color: {p['ink']};
 }}

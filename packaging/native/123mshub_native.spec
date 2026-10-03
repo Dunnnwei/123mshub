@@ -25,6 +25,7 @@ icon_root = project_root / "packaging/native/icons"
 datas = graph_datas + [
     (str(project_root / "README.md"), "."),
     (str(src_root / "mshub/native/design_tokens.json"), "mshub/native"),
+    (str(src_root / "mshub/ui5/tokens.json"), "mshub/ui5"),
 ] + [
     (str(icon_root / name), "mshub/native/icons")
     for name in ("NEWmshublogo.ico", "new123uilogo.ico", "MATERIAL-SYMBOLS-LICENSE.txt")

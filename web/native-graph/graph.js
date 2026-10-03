@@ -3,9 +3,10 @@ import FA2LayoutSync from 'graphology-layout-forceatlas2'
 import FA2Layout from 'graphology-layout-forceatlas2/worker'
 import Sigma from 'sigma'
 import { drawDiscNodeLabel, NodeCircleProgram } from 'sigma/rendering'
-import { rankedTypeColors } from './colors.js'
 
-const colors = { user: '#6366F1', project: '#7C3AED', reference: '#22C55E', feedback: '#F43F5E' }
+// 123ui5.0 uses Indigo/Violet as a restrained category ladder while the
+// Hermes Mono surfaces and low-contrast edges keep the graph focused.
+const colors = { user: '#6366F1', project: '#7C3AED', reference: '#8B5CF6', feedback: '#A78BFA' }
 const typeLabels = { user: '用户', project: '项目', reference: '参考', feedback: '反馈' }
 const programs = { user: NodeCircleProgram, project: NodeCircleProgram, reference: NodeCircleProgram, feedback: NodeCircleProgram }
 const settingsKey = 'mshub.memoryGraph.settings.v1'
@@ -18,7 +19,7 @@ let hovered = null
 let hoveredNeighbors = new Set()
 let raw = { nodes: [], edges: [] }
 let query = ''
-let theme = { background: '#FFFFFF', label: '#171B23', dimNode: '#F3F5F8', dimEdge: '#E2E6EE', focusEdge: '#C1C9D7' }
+let theme = { background: '#FFFFFF', label: '#161616', dimNode: '#E1E1E3', dimEdge: '#C8C8C8', focusEdge: '#C8C8C8' }
 let paletteFromBridge = null
 // v1.7.3：默认值提为常量，"恢复默认"按钮直接引用（mergeSettings 的基底也换成它，
 // 否则用当前值当基底会把已改的设置"固化"进恢复结果）
@@ -91,11 +92,15 @@ function parseColor(value) { const text = String(value || '').trim(); const hex 
 function mix(fg, amount, bg) { const a = parseColor(fg) || [166,166,166]; const b = parseColor(bg) || [255,255,255]; const v = Math.max(0, Math.min(1, Number(amount) || 0)); return `#${a.map((x, i) => Math.round(x * v + b[i] * (1 - v)).toString(16).padStart(2,'0')).join('')}` }
 function refreshTheme() {
   const dark = document.documentElement.dataset.theme === 'dark'
-  const bg = paletteFromBridge?.background || (dark ? '#131B2E' : '#F0F2F8')
-  const label = paletteFromBridge?.label || (dark ? '#DAE2FD' : '#2E3040')
-  Object.assign(colors, rankedTypeColors(raw.nodes, dark))
+  const bg = paletteFromBridge?.canvas || (dark ? '#0E0E0E' : '#FFFFFF')
+  const label = paletteFromBridge?.label || (dark ? '#EAEAEA' : '#161616')
+  const bridgeTypes = paletteFromBridge?.types && typeof paletteFromBridge.types === 'object' ? paletteFromBridge.types : null
+  const brandTypes = dark
+    ? { user: '#818CF8', project: '#A78BFA', reference: '#7C3AED', feedback: '#C4B5FD' }
+    : { user: '#6366F1', project: '#7C3AED', reference: '#8B5CF6', feedback: '#A78BFA' }
+  Object.assign(colors, bridgeTypes || brandTypes)
   for (const [type, color] of Object.entries(colors)) document.documentElement.style.setProperty(`--${type}`, color)
-  theme = { background: bg, label, dimNode: mix('#A6A6A6', .1, bg), dimEdge: mix('#8C8C8C', dark ? .22 : .12, bg), focusEdge: paletteFromBridge?.line || (dark ? '#465574' : '#D0D2DC') }
+  theme = { background: bg, label, dimNode: paletteFromBridge?.inset || (dark ? '#1E1E1E' : '#F9F9F9'), dimEdge: paletteFromBridge?.line || (dark ? '#2A2A2A' : '#E1E1E3'), focusEdge: paletteFromBridge?.line || (dark ? '#363636' : '#C8C8C8') }
   if (graph) graph.forEachNode((id) => graph.setNodeAttribute(id, 'color', colors[graph.getNodeAttribute(id, 'type')] || colors.reference))
   renderer?.setSetting('labelColor', { color: theme.label })
   renderer?.refresh()
@@ -107,7 +112,7 @@ function nodeMatch(data) { const q = query.trim().toLocaleLowerCase(); if (!q) r
 // size 同理：呼吸引擎已把收放值写进 graphology 的 size 属性，reducer 只在
 // 漂移未接管时（大图/关开关）兜底用静态公式，否则尊重已写入的呼吸 size。
 function nodeReducer(node, data) { const focused = !hovered || node === hovered || hoveredNeighbors.has(node); const match = nodeMatch(data); const dimmed = !focused || !match; const degree = graph?.degree(node) || 0; const staticSize = (4 + Math.sqrt(degree) * 2) * Number(graphSettings.nodeScale || 1); const size = floatBase.has(node) && Number.isFinite(data.size) ? data.size : staticSize; return { ...data, size, color: dimmed ? theme.dimNode : data.color, label: dimmed ? null : data.label, forceLabel: node === hovered } }
-function edgeReducer(edge, data) { const [source, target] = graph.extremities(edge); const linked = hovered && (source === hovered || target === hovered); const color = linked ? mix(graph.getNodeAttributes(hovered)?.color || '#A6A6A6', .6, theme.background) : (hovered ? theme.dimEdge : (data.kind === '共同标签' ? mix('#B4B4B4', .3, theme.background) : theme.focusEdge)); return { ...data, color, size: linked ? 1.6 : 1 } }
+function edgeReducer(edge, data) { const [source, target] = graph.extremities(edge); const linked = hovered && (source === hovered || target === hovered); const color = linked ? mix(graph.getNodeAttributes(hovered)?.color || '#6366F1', .6, theme.background) : (hovered ? theme.dimEdge : (data.kind === '共同标签' ? mix('#7C3AED', .3, theme.background) : theme.focusEdge)); return { ...data, color, size: linked ? 1.6 : 1 } }
 // v1.6.0：悬停标签去掉背景描边（暗色模式下浅色描边导致看不清），改为放大加粗
 // 注意：sigma 的 drawLabel data 没有 node 字段，用 data.forceLabel 判断（nodeReducer 里已设置）
 function drawLabel(context, data, settings) {
@@ -183,10 +188,10 @@ renderer.getMouseCaptor().on('mousedown', () => { pointerHeld = true }); rendere
 // 每帧调 updateFloatScale 实时跟踪缩放比，动画全程连续。
 }
 function render(data) { raw = data; syncGraph(data); $('#node-count').textContent = String(graph.order); $('#edge-count').textContent = String(graph.size); // v1.7.2：仓库已配置但没有任何记忆时，给出下一步指引而不是卡在"正在读取"
-  if (graph.order === 0) message.textContent = '仓库中暂无记忆条目：在「记忆仓库」新建或导入后，这里会展示关系图。'; message.classList.toggle('hidden', graph.order > 0); refreshTheme(); if (!renderer) { renderer = new Sigma(graph, $('#sigma-container'), { renderLabels: true, labelRenderedSizeThreshold: Number(graphSettings.labelThreshold || 8), labelFont: 'system-ui, Segoe UI, Microsoft YaHei, sans-serif', labelSize: 12, labelWeight: '500', labelColor: { color: theme.label }, defaultNodeColor: '#A6A6A6', defaultEdgeColor: theme.focusEdge, defaultNodeType: 'circle', nodeProgramClasses: programs, defaultDrawNodeLabel: drawLabel, defaultDrawNodeHover: drawHover, nodeReducer, edgeReducer, hideEdgesOnMove: graph.size > 8000, stagePadding: 28, zIndex: true }); bindRenderer() } else renderer.setGraph(graph); startLayout(); window.mshubGraphReady = true; window.mshubGraphNodeCount = graph.order; window.mshubGraphEdgeCount = graph.size }
+  if (graph.order === 0) message.textContent = '仓库中暂无记忆条目：在「记忆仓库」新建或导入后，这里会展示关系图。'; message.classList.toggle('hidden', graph.order > 0); refreshTheme(); if (!renderer) { renderer = new Sigma(graph, $('#sigma-container'), { renderLabels: true, labelRenderedSizeThreshold: Number(graphSettings.labelThreshold || 8), labelFont: 'IBM Plex Sans, system-ui, Segoe UI, Microsoft YaHei, sans-serif', labelSize: 12, labelWeight: '500', labelColor: { color: theme.label }, defaultNodeColor: '#6366F1', defaultEdgeColor: theme.focusEdge, defaultNodeType: 'circle', nodeProgramClasses: programs, defaultDrawNodeLabel: drawLabel, defaultDrawNodeHover: drawHover, nodeReducer, edgeReducer, hideEdgesOnMove: graph.size > 8000, stagePadding: 28, zIndex: true }); bindRenderer() } else renderer.setGraph(graph); startLayout(); window.mshubGraphReady = true; window.mshubGraphNodeCount = graph.order; window.mshubGraphEdgeCount = graph.size }
 function load() { if (!bridge) return; message.textContent = '正在读取记忆关系…'; message.classList.remove('hidden'); const kinds = $('#include-tags').checked ? 'link,tag' : 'link'; bridge.getGraph(kinds, (payload) => { let data = null; try { data = JSON.parse(payload) } catch (error) { message.textContent = `图谱数据解析失败：${error}`; return } // v1.7.2：仓库未配置/读取失败时返回带 unavailable 标记的结构化载荷，给出人话提示而不是 JSON 报错
   if (data && data.unavailable) { message.textContent = data.unavailable === 'repo-not-set' ? '尚未配置仓库路径，记忆图示暂无法显示。请先在「设置选项 → 仓库与语言」选择仓库根目录并保存。' : `仓库读取失败：${data.message || '未知错误'}`; return } render(data) }) }
-window.mshubSetTheme = (mode) => { const value = mode === 'dark' ? 'dark' : 'light'; document.documentElement.dataset.theme = value; document.body.dataset.theme = value; const meta = document.querySelector('meta[name="theme-color"]'); if (meta) meta.content = value === 'dark' ? '#0B0E14' : '#F0F2F8'; refreshTheme() }
+window.mshubSetTheme = (mode) => { const value = mode === 'dark' ? 'dark' : 'light'; document.documentElement.dataset.theme = value; document.body.dataset.theme = value; const meta = document.querySelector('meta[name="theme-color"]'); if (meta) meta.content = value === 'dark' ? '#0E0E0E' : '#FFFFFF'; refreshTheme() }
 window.mshubSetPalette = (payload) => { try { paletteFromBridge = typeof payload === 'string' ? JSON.parse(payload) : payload; window.mshubSetTheme(paletteFromBridge.theme); } catch {} }
 window.mshubSetGraphSettings = (payload) => { try { graphSettings = mergeSettings(typeof payload === 'string' ? JSON.parse(payload) : payload); saveSettings(); load() } catch {} }
 // ---- v1.5.0 呼吸引擎 ----------------------------------------------------

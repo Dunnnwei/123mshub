@@ -73,19 +73,34 @@ let loadSequence = 0
 let hoveredNeighbors = new Set()
 let themeObserver = null
 let graphTheme = {
-  background: '#171717',
-  label: '#d8d8d8',
-  dimNode: '#232323',
-  dimEdge: '#222222',
-  focusEdge: '#4a4a4a',
-  tagEdge: '#3f3f3f',
+  background: '#0E0E0E',
+  label: '#EAEAEA',
+  dimNode: '#1E1E1E',
+  dimEdge: '#2A2A2A',
+  focusEdge: '#363636',
+  tagEdge: '#312E81',
 }
 
-const typeColors = {
-  user: '#a78bfa',
-  project: '#6ea8fe',
-  reference: '#77c5d5',
-  feedback: '#e3a85b',
+const typeColors = reactive({
+  user: '#818CF8',
+  project: '#A78BFA',
+  reference: '#7C3AED',
+  feedback: '#C4B5FD',
+})
+
+const TYPE_COLORS = {
+  light: {
+    user: '#6366F1',
+    project: '#7C3AED',
+    reference: '#8B5CF6',
+    feedback: '#A78BFA',
+  },
+  dark: {
+    user: '#818CF8',
+    project: '#A78BFA',
+    reference: '#7C3AED',
+    feedback: '#C4B5FD',
+  },
 }
 const typeLabels = {
   user: '用户',
@@ -141,15 +156,21 @@ function blendToBackground(foreground, ratio, background) {
 function refreshGraphTheme() {
   if (!surfaceRef.value) return
   const styles = getComputedStyle(surfaceRef.value)
-  const background = styles.backgroundColor || '#171717'
-  const label = styles.getPropertyValue('--graph-label').trim() || '#d8d8d8'
+  const background = styles.backgroundColor || '#0E0E0E'
+  const label = styles.getPropertyValue('--graph-label').trim() || '#EAEAEA'
+  const palette = document.documentElement.dataset.theme === 'light' ? TYPE_COLORS.light : TYPE_COLORS.dark
+  Object.assign(typeColors, palette)
+  graph?.forEachNode((id, attributes) => {
+    const color = typeColors[attributes.type]
+    if (color) graph.setNodeAttribute(id, 'color', color)
+  })
   graphTheme = {
     background,
     label,
-    dimNode: blendToBackground('#a6a6a6', 0.10, background),
-    dimEdge: blendToBackground('#8c8c8c', 0.12, background),
-    focusEdge: blendToBackground('#8c8c8c', 0.45, background),
-    tagEdge: blendToBackground('#b4b4b4', 0.30, background),
+    dimNode: blendToBackground('#7C3AED', 0.24, background),
+    dimEdge: blendToBackground(document.documentElement.dataset.theme === 'light' ? '#8B5CF6' : '#A78BFA', 0.28, background),
+    focusEdge: blendToBackground(document.documentElement.dataset.theme === 'light' ? '#6366F1' : '#818CF8', 0.58, background),
+    tagEdge: blendToBackground(document.documentElement.dataset.theme === 'light' ? '#7C3AED' : '#C4B5FD', 0.42, background),
   }
   if (renderer) renderer.setSetting('labelColor', { color: graphTheme.label })
 }
@@ -270,7 +291,7 @@ function edgeReducer(edge, data) {
   const color = !queryMatch
     ? graphTheme.dimEdge
     : linkedToHovered
-      ? blendToBackground(hoveredNode?.color || '#a6a6a6', 0.60, graphTheme.background)
+      ? blendToBackground(hoveredNode?.color || '#808080', 0.60, graphTheme.background)
       : hovered.value
         ? graphTheme.dimEdge
         : data.kind === '共同标签' ? graphTheme.tagEdge : graphTheme.focusEdge
@@ -302,9 +323,9 @@ function drawMemoryHover(context, data) {
   context.save()
   context.beginPath()
   context.arc(data.x, data.y, data.size + 5, 0, Math.PI * 2)
-  context.fillStyle = 'rgba(180,180,180,.16)'
-  context.shadowBlur = 14
-  context.shadowColor = data.color || '#a6a6a6'
+  context.fillStyle = graphTheme.dimNode
+  context.shadowBlur = 0
+  context.shadowColor = 'transparent'
   context.fill()
   context.restore()
 }
@@ -536,14 +557,14 @@ async function load() {
     if (!renderer && containerRef.value && graph) {
       renderer = new Sigma(graph, containerRef.value, {
         renderLabels: true,
-        labelFont: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+        labelFont: 'IBM Plex Sans, -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif',
         labelSize: 12,
         labelWeight: '500',
         labelColor: { color: graphTheme.label },
         labelRenderedSizeThreshold: Number(labelThreshold.value),
         labelDensity: 0.8,
         labelGridCellSize: 80,
-        defaultNodeColor: '#a6a6a6',
+        defaultNodeColor: '#808080',
         defaultEdgeColor: graphTheme.focusEdge,
         defaultNodeType: 'circle',
         // Sigma treats the node `type` attribute as a renderer key. The

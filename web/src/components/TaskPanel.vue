@@ -1,15 +1,21 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import {
   CheckCircle2, ChevronDown, CircleAlert, Download, ListChecks, RefreshCw, ShieldCheck, X,
 } from '@lucide/vue'
 import { clearFinishedJobs, dismissJob, jobStore } from '../jobStore'
 
 const emit = defineEmits(['view-scan'])
-const collapsed = ref(false)
+const collapsed = ref(true)
 
 const hasItems = computed(() => jobStore.items.length > 0)
 const hasFinished = computed(() => jobStore.items.some((job) => job.status !== 'running'))
+
+// Keep the idle surface compact, then reveal the four-row task area when the
+// first background task arrives. A user's manual collapse remains respected.
+watch(() => jobStore.items.length, (count, previous) => {
+  if (count > 0 && previous === 0) collapsed.value = false
+})
 
 const kindConfig = {
   install: { icon: Download, label: '入库' },

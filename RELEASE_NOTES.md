@@ -1,3 +1,34 @@
+# 123 MSHub v1.11.0（2026-10-03）：123ui5.0 Indigo/Violet 主题系统
+
+## 交付摘要
+
+- 在 Hermes Agent `Mono — Clean grayscale — minimal and focused` 结构基线上引入可复用的 `123ui5.0` 主题令牌，使用 `#6366F1` Indigo 与 `#7C3AED` Violet 作为品牌强调种子。
+- 保留 v1.10.6 的页面路由、字号、间距、选择/焦点分工、任务面板行为、搜索图标定位、图谱动效与本地 `file://`/`qrc://` 资源协议；只更新品牌强调、图谱类别和有限的 Agent 入口渐变。
+- Python/Qt、Web/Vite、本地图谱和未来页面均可从同一套 `123ui5.0` 令牌调用；语义错误、成功、警告和表面仍保持独立令牌。
+- 版本面同步到 `pyproject.toml`、`src/mshub/__init__.py`、`web/package.json` 和 lockfile。完整包、SHA256、包校验和最终 EXE smoke 见 [v1.11.0 验收报告](docs/ui-redesign/v1.11.0/v1.11.0-验收报告.md)。
+
+## 设计系统
+
+- 规范与导出包：[design-system/123ui5.0](design-system/123ui5.0/MASTER.md)
+- 实施方案：[v1.11.0-实施方案](docs/ui-redesign/v1.11.0-实施方案.md)
+- 主题调用：`from mshub.ui5 import theme_tokens, action_gradient`
+- 独立系统包：`release/123ui5.0.zip`，哈希见 `release/123ui5.0-SHA256.txt`
+
+# 123 MSHub v1.10.6（2026-10-03）：Hermes Mono Clean 灰阶主题适配
+
+本版以本机 Hermes Agent 的 **Mono — Clean grayscale — minimal and focused** 源码主题为视觉依据，将暗色原始令牌、桌面明色推导、零圆角平面结构、状态焦点规则和克制动效同步到 123mshub 的原生 Qt 壳、保留 Web 前端与本地图谱岛。全部记忆、技能、安全、设置、编辑、导入、后台任务、图谱数据协议和页面排版保持不变。
+
+- 新增先行规范：[Hermes-Mono-Clean-UI规范](docs/ui-redesign/v1.10.6/Hermes-Mono-Clean-UI规范.md)；记录 Hermes 源码路径、两套色板、组件状态、动效和验收边界。
+- 亮色主题改为 `#FFFFFF / #F5F5F5 / #F9F9F9` 的 Mono 明灰层级；暗色主题采用 `#0E0E0E / #0A0A0A / #141414 / #1E1E1E` 的 Mono 深灰层级，动作与选择使用 `#9A9A9A`、`#D8D8D8`/`#505050`。
+- 原生壳、图谱岛和 Web 前端取消蓝紫渐变、玻璃/阴影叠加和装饰圆角；列表、任务标题/图标/箭头和浮层统一用平面结构线表达层级，保留真实风险的 Hermes 暗红语义。
+- 任务面板继续默认收起、首任务自动展开；记忆行以整行灰阶选择表达，列表自身焦点框和任务箭头焦点框保持隐藏，设置与编辑输入仍保留边框焦点。
+- 搜索框前缀图标继续由透明独立控件按实际高度垂直居中；技能/安全列表委托绘制继续与记忆仓库共享字号。
+- 版本面同步到 `pyproject.toml`、`src/mshub/__init__.py`、`web/package.json` 和 lockfile。完整包、SHA256、包校验、UI 证据和最终 EXE 烟测见 [v1.10.6 验收报告](docs/ui-redesign/v1.10.6/v1.10.6-验收报告.md)。
+
+# 123 MSHub v1.10.5（2026-10-03）：任务面板、列表字号与主题底色收口
+
+本版完成后台任务默认收起/首任务四行展开、技能与安全列表字号统一、记忆/技能搜索图标居中、记忆列表焦点框移除、选中浅染对比增强，以及亮色 `#E5E5E7` / 暗色 `#18181B` 中性背景。完整记录见 [v1.10.5 验收报告](docs/ui-redesign/v1.10.5-验收报告.md)，发布包说明见 [release/release-notes-v1.10.5.md](release/release-notes-v1.10.5.md)。
+
 # 123 MSHub v1.10.4（2026-10-02）：统一列表呈现与后台任务重试体验
 
 - **摘要主题适配**：技能、记忆和安全列表的圆角摘要提示显式读取应用主题令牌；亮色模式使用浅色卡片和深色文字，暗色模式保持深色卡片和浅色文字，标签与完整说明均可换行阅读。

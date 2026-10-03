@@ -586,7 +586,7 @@ class MetadataDialog(QDialog):
         if geometry:
             self.restoreGeometry(geometry)
             # v1.10.3 saved a narrower single-column form.  Keep the user's
-            # position, but give the v1.10.4 two-column form enough room.
+            # position, but give the v1.10.5 two-column form enough room.
             if self.width() < 780 or self.height() < 560:
                 self.resize(max(820, self.width()), max(620, self.height()))
         else:

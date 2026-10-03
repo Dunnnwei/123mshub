@@ -9,7 +9,7 @@ QTableWidget API while giving it the same visual contract as the memory list.
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, QRect, QTimer
+from PySide6.QtCore import QEvent, Qt, QRect, QTimer
 from PySide6.QtGui import QColor, QFont, QPainter, QPen
 from PySide6.QtWidgets import (
     QFrame,
@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .theme import current_palette, system_font_family
+from .theme import TYPOGRAPHY, current_palette, system_font_family
 
 
 SECONDARY_ROLE = Qt.ItemDataRole.UserRole + 10
@@ -40,10 +40,14 @@ class ListTableDelegate(QStyledItemDelegate):
         selected = bool(option.state & QStyle.StateFlag.State_Selected)
         rect = option.rect
         if selected:
-            painter.fillRect(rect, QColor(tokens["selection"]))
+            # Hermes Mono uses a single, neutral row fill for selection.  The
+            # delegate paints over the table stylesheet, so use the same token
+            # as the memory list instead of the platform's selected-cell stripe.
+            selection = QColor(tokens["selection"])
+            painter.fillRect(rect, selection)
         elif option.state & QStyle.StateFlag.State_MouseOver:
             hover = QColor(tokens["action"])
-            hover.setAlpha(18)
+            hover.setAlpha(26)
             painter.fillRect(rect, hover)
         # The memory rows use one quiet bottom rule rather than a grid or a
         # leading accent bar.  Drawing it per cell makes the rule continuous
@@ -57,18 +61,23 @@ class ListTableDelegate(QStyledItemDelegate):
             return
         margin = 10
         text_rect = rect.adjusted(margin, 3, -margin, -3)
-        primary = QFont(self._font_family, 11)
+        # QFont(family, size) takes a *point* size.  That made these two pages
+        # visibly larger than the memory list on Windows DPI scales.  Bind the
+        # shared design tokens as pixel sizes instead.
+        primary = QFont(self._font_family)
+        primary.setPixelSize(TYPOGRAPHY["meta"])
         primary.setWeight(QFont.Weight.Normal)
         color = QColor(tokens["muted"])
         secondary = str(index.data(SECONDARY_ROLE) or "")
         if index.column() == 1 and secondary:
-            primary.setPointSize(12)
+            primary.setPixelSize(TYPOGRAPHY["row"])
             primary.setWeight(QFont.Weight.Bold)
             painter.setFont(primary)
             painter.setPen(QColor(tokens["ink"]))
             first = QRect(text_rect.left(), text_rect.top(), text_rect.width(), 18)
             painter.drawText(first, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, value)
-            sub = QFont(self._font_family, 10)
+            sub = QFont(self._font_family)
+            sub.setPixelSize(TYPOGRAPHY["meta"])
             sub.setWeight(QFont.Weight.Normal)
             painter.setFont(sub)
             painter.setPen(color)
@@ -169,6 +178,14 @@ class ListTableCard(QFrame):
     def resizeEvent(self, event) -> None:  # noqa: N802
         super().resizeEvent(event)
         QTimer.singleShot(0, self.sync_header)
+
+    def eventFilter(self, watched, event) -> bool:  # noqa: N802
+        # A direct table resize (including the viewport shrinking when its
+        # vertical scrollbar appears) does not resize the wrapper frame. Keep
+        # the visible Hermes header exactly aligned with the scroll viewport.
+        if watched in (self.table, self.table.viewport()) and event.type() == QEvent.Type.Resize:
+            QTimer.singleShot(0, self.sync_header)
+        return super().eventFilter(watched, event)
 
     def showEvent(self, event) -> None:  # noqa: N802
         super().showEvent(event)

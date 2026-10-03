@@ -1,20 +1,8 @@
-"""v1.10.0D（Stitch Silk/Mica）：统一静态画布背景。
+"""v1.10.6 Hermes Mono：统一静态画布背景。
 
-用户提供了参考 SVG（pattern-organic-478055.svg：1920×1080、922 颗 #0156FC 点、
-半径 2.2~3.6、透明度 0.2、有机聚簇分布），并明确"代码更轻量就换代码"——本模块
-用**值噪声密度场 + 种子随机抖动网格**程序化复刻该形态：
-
-- 分布：44px 基准网格、±13px 抖动，仅保留噪声值高于阈值的点 → 天然聚簇与留白，
-  与参考图同量级的密度（1280×820 约 500 颗，1920×1080 约 900 颗）；
-- 呼吸：与记忆图示（sigma.js）同一节奏体系——亮度周期 3.5~5.5s、半径周期
-  4.1~7.0s，每颗点独立相位（哈希派生），半径脉动 ±30%；
-- 性能：20fps 定时器仅在可见时运转；静态底色+暗角按尺寸缓存为 QPixmap，
-  每帧只画点；窗口隐藏即停表。
-
-v1.10.0C 的点阵背景属于另一套视觉语言，会把模板中的软质留白变成动态
-装饰。本版本保留这个承载控件和 ``set_colors`` 接口，改为纯色画布，让
-Silk/Mica 的层级、阴影和控件按模板成为视觉重点。图谱页自身的闲置微动
-仍由 Web 图谱控制，不受此画布调整影响。
+保留历史 ``set_colors`` 接口和可见性生命周期，画布自身采用 Hermes Agent
+``Mono Clean`` 的中性色底。图谱页的闲置微动仍由 Web 图谱控制，原有窗口布局
+与功能入口不变。
 """
 from __future__ import annotations
 
@@ -66,9 +54,9 @@ class StarfieldBackground(QWidget):
         self._dots: list[tuple[float, float, float, float, float, float, float, bool]] = []
         self._base_pixmap: QPixmap | None = None
         self._t0 = time.monotonic()
-        self._base = QColor("#0B0E14")
-        self._dot = QColor("#6366F1")
-        self._bright = QColor("#A5B4FC")
+        self._base = QColor("#0E0E0E")
+        self._dot = QColor("#808080")
+        self._bright = QColor("#B0B0B0")
         self._dark_mode = True
         self._timer = QTimer(self)
         self._timer.setInterval(50)  # 20fps：呼吸周期 3.5~7s，足够顺滑

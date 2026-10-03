@@ -19,6 +19,7 @@ import SecurityView from './components/SecurityView.vue'
 import SettingsView from './components/SettingsView.vue'
 import SkillRow from './components/SkillRow.vue'
 import TaskPanel from './components/TaskPanel.vue'
+import { UI5_VERSION, themeTokens } from './ui5/tokens'
 
 const loading = ref(true)
 const fatalError = ref('')
@@ -64,8 +65,10 @@ watch(effectiveLocale, (locale) => {
 }, { immediate: true })
 
 function syncThemeMeta() {
+  const palette = themeTokens(theme.value)
+  document.documentElement.dataset.ui5 = UI5_VERSION
   document.querySelector('meta[name="theme-color"]')
-    ?.setAttribute('content', theme.value === 'dark' ? '#030711' : '#F7F5F2')
+    ?.setAttribute('content', palette.bg)
 }
 
 function toggleTheme() {

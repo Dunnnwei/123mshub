@@ -1,0 +1,37 @@
+{
+  "version": "1.10.6",
+  "frozen_modules_match_source": {
+    "mshub": true,
+    "mshub.native.main_window": true,
+    "mshub.native.shell_widgets": true,
+    "mshub.native.navigation_symbols": true,
+    "mshub.native.column_resize": true,
+    "mshub.native.list_table": true,
+    "mshub.native.ui": true,
+    "mshub.native.ui_icons": true,
+    "mshub.native.starfield": true,
+    "mshub.native.graph_bridge": true,
+    "mshub.native.job_controller": true,
+    "mshub.native.theme": true,
+    "mshub.native.i18n": true,
+    "mshub.native.views.skill_view": true,
+    "mshub.native.views.memory_view": true
+  },
+  "packaged_assets_match_source": {
+    "NEWmshublogo.ico": true,
+    "new123uilogo.ico": true,
+    "MATERIAL-SYMBOLS-LICENSE.txt": true
+  },
+  "graph_assets_match_source": {
+    "index.html": true,
+    "assets/index-DZdgZYOr.css": true,
+    "assets/index-W2_E__U0.js": true
+  },
+  "zip_crc": "pass",
+  "zip_exe_matches_onedir": true,
+  "zip_entries": 212,
+  "exe_sha256": "283f26629e1ff6777dbd0a850dd123650141f0ee720f7e120e51ed2df9733ae1",
+  "zip_sha256": "71956a66004dd4c106e81d7bcfd63aa2204e9d921c66661972835624c638e085",
+  "exe_bytes": 8932202,
+  "zip_bytes": 164084071
+}

@@ -43,6 +43,7 @@ $internal = Join-Path $root "_internal"
 foreach ($required in @(
     (Join-Path $root "123mshub.exe"),
     (Join-Path $internal "mshub\native\graph\index.html"),
+    (Join-Path $internal "mshub\ui5\tokens.json"),
     (Join-Path $internal "PySide6\QtWebEngineProcess.exe"),
     (Join-Path $internal "PySide6\resources\icudtl.dat"),
     (Join-Path $internal "PySide6\resources\qtwebengine_resources.pak"),

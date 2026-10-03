@@ -104,7 +104,7 @@ class MainWindow(QMainWindow):
         self.language.apply(self.facade.config().language)
 
     def _build_ui(self) -> None:
-        # v1.10.0D（Stitch）：Silk/Mica 画布承载侧栏与内容浮层；页面本身不改变业务路由。
+        # v1.10.6（Hermes Mono）：灰阶画布承载侧栏与内容；页面本身不改变业务路由。
         container = StarfieldBackground()
         container.set_colors(*starfield_colors(self.theme.effective_mode))
         outer = QHBoxLayout(container)
@@ -120,10 +120,11 @@ class MainWindow(QMainWindow):
         self.sidebar.setMinimumWidth(236)
         # v1.7.2：上限从 236 放宽，配合 QSplitter 支持鼠标拖宽侧栏
         self.sidebar.setMaximumWidth(560)
-        # v1.7.4：柔和低透明度投影（QSS 不支持 box-shadow，用图形效果实现）
+        # Hermes Mono is flat; keep the effect object for the existing theme
+        # hook but make it visually inert instead of adding a second elevation language.
         self.sidebar_shadow = QGraphicsDropShadowEffect(self.sidebar)
-        self.sidebar_shadow.setBlurRadius(32)
-        self.sidebar_shadow.setOffset(0, 6)
+        self.sidebar_shadow.setBlurRadius(0)
+        self.sidebar_shadow.setOffset(0, 0)
         self.sidebar.setGraphicsEffect(self.sidebar_shadow)
         sidebar_layout = QVBoxLayout(self.sidebar)
         sidebar_layout.setContentsMargins(12, 18, 12, 12)
@@ -176,18 +177,21 @@ class MainWindow(QMainWindow):
         self.nav.currentRowChanged.connect(self._navigate)
         # v1.9.1（需求 C）：nav 不再直接进侧栏布局，与任务面板组成垂直 QSplitter（见下）
         # v1.6.0：后台任务移到导航栏下半部分（原来在底部 dock 太矮看不清）
-        # v1.10.0（Stitch 需求 4）：悬浮圆角卡——QSS 填充+描边+圆角（theme.py
-        # #jobPanel），配独立小投影；旧版 border-top 衬底已删，直接浮在侧栏上
+        # v1.10.6（Hermes Mono）：后台任务保持透明平面；旧版背景和投影都不再
+        # 干扰标题、活动图标与箭头的视觉中心。
         self.job_panel = QFrame()
         self.job_panel.setObjectName("jobPanel")
         self.job_shadow = QGraphicsDropShadowEffect(self.job_panel)
-        self.job_shadow.setBlurRadius(24)
-        self.job_shadow.setOffset(0, 4)
+        self.job_shadow.setBlurRadius(0)
+        self.job_shadow.setOffset(0, 0)
         self.job_panel.setGraphicsEffect(self.job_shadow)
         job_layout = QVBoxLayout(self.job_panel)
         job_layout.setContentsMargins(10, 10, 10, 10)
         job_layout.setSpacing(6)
-        self._jobs_collapsed = False
+        # v1.10.5：后台任务面板默认只留标题行；第一次出现任务时由
+        # _refresh_jobs 自动展开到四行任务的可读高度。
+        self._jobs_collapsed = True
+        self._jobs_had_rows = False
         # Keep the header as a fixed, single visual row.  The body below it is
         # the only area that changes when the panel expands, so the collapsed
         # card cannot overlap the splitter arrow or its neighbours.
@@ -278,6 +282,11 @@ class MainWindow(QMainWindow):
         self.job_splitter.addWidget(self.job_panel)
         self.job_splitter.setStretchFactor(0, 1)
         self.job_splitter.setStretchFactor(1, 0)
+        self.job_toggle.blockSignals(True)
+        self.job_toggle.setChecked(self._jobs_collapsed)
+        self.job_toggle.blockSignals(False)
+        self.job_panel.setMinimumHeight(54)
+        self.job_panel.setMaximumHeight(54)
         sidebar_layout.addWidget(self.job_splitter, 1)
         # v1.6.0：删除"数据只保存在本机仓库..."提示，"关于"移到设置页
         # v1.7.2：侧栏与内容区改为 QSplitter——支持鼠标拖动分隔条调整侧栏宽度
@@ -398,11 +407,10 @@ class MainWindow(QMainWindow):
         """v1.7.4：浮动侧栏投影颜色随主题；v1.10.0 任务悬浮卡投影同走这里。"""
         if not hasattr(self, "sidebar_shadow"):
             return
-        dark = mode == "dark"
-        color = QColor(0, 0, 0, 150) if dark else QColor(23, 27, 35, 60)
+        color = QColor(0, 0, 0, 0)
         self.sidebar_shadow.setColor(color)
         if hasattr(self, "job_shadow"):
-            self.job_shadow.setColor(QColor(0, 0, 0, 130) if dark else QColor(23, 27, 35, 45))
+            self.job_shadow.setColor(QColor(0, 0, 0, 0))
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
@@ -439,13 +447,18 @@ class MainWindow(QMainWindow):
     # ---- v1.10.0：后台任务面板高度三修复（默认可见五项 / 记忆用户调整 / 收起降到最低） ----
 
     def _job_panel_height(self) -> int:
-        """用户记忆的任务面板高度；无记忆或越界时用紧凑默认 132px。"""
+        """用户记忆的任务面板高度；新用户默认看到四行任务。"""
         value = self._ui_settings().value("jobPanel/height")
         try:
             panel = int(value)
         except (TypeError, ValueError):
             panel = 0
-        return panel if 44 <= panel <= 720 else 132
+        return panel if 44 <= panel <= 720 else self._job_auto_height()
+
+    @staticmethod
+    def _job_auto_height() -> int:
+        """Header + four 32px rows + action line + layout spacing/margins."""
+        return 216
 
     def _apply_job_layout(self, panel_height: int | None = None) -> None:
         """按像素精确分配导航/任务面板高度——显示后调用（此时分隔条总高已知）。
@@ -466,7 +479,7 @@ class MainWindow(QMainWindow):
         # 首次显示布局稳定后应用任务面板布局（singleShot(0) 等布局结算完成）
         if not getattr(self, "_job_layout_applied", False):
             self._job_layout_applied = True
-            QTimer.singleShot(0, self._apply_job_layout)
+            QTimer.singleShot(0, lambda: self._apply_job_layout(54 if self._jobs_collapsed else self._job_panel_height()))
 
     def _save_job_layout(self) -> None:
         if not self._jobs_collapsed:
@@ -476,10 +489,21 @@ class MainWindow(QMainWindow):
         if not hasattr(self, "job_table"):
             return
         rows = self.jobs.list()
+        has_rows = bool(rows)
+        # Expand only on a transition from no rows to rows. This gives a new
+        # task immediate visibility without undoing a deliberate user collapse
+        # while an existing task list is still present.
+        if has_rows and not self._jobs_had_rows and self._jobs_collapsed:
+            self._jobs_had_rows = True
+            # The first task gets the explicit four-row affordance even when
+            # an older settings file contains a smaller historical height.
+            self._jobs_expanded_height = self._job_auto_height()
+            self._toggle_jobs(False)
+            return
+        self._jobs_had_rows = has_rows
         self.job_activity_icon.set_running(any(j["status"] == "running" for j in rows))
         self._update_job_toggle()
         has_finished = any(j["status"] != "running" for j in rows)
-        has_rows = bool(rows)
         body_visible = has_rows and not self._jobs_collapsed
         self.job_empty.setVisible(not has_rows and not self._jobs_collapsed)
         self.job_table.setVisible(body_visible)
@@ -593,6 +617,10 @@ class MainWindow(QMainWindow):
 
     def _toggle_jobs(self, collapsed: bool) -> None:
         self._jobs_collapsed = bool(collapsed)
+        if self.job_toggle.isChecked() != self._jobs_collapsed:
+            self.job_toggle.blockSignals(True)
+            self.job_toggle.setChecked(self._jobs_collapsed)
+            self.job_toggle.blockSignals(False)
         self._update_job_toggle()
         if collapsed:
             # v1.10.0：收起 = 面板真降到最低（只留标题行），导航区即时放大；
@@ -609,7 +637,7 @@ class MainWindow(QMainWindow):
             self.job_panel.setMinimumHeight(120)
             self.job_panel.setMaximumHeight(16777215)
             self.job_splitter.handle(1).setEnabled(True)
-            self._apply_job_layout(getattr(self, "_jobs_expanded_height", 0) or None)
+            self._apply_job_layout(getattr(self, "_jobs_expanded_height", 0) or self._job_panel_height())
         self._refresh_jobs()
 
     def _update_job_toggle(self) -> None:
@@ -807,10 +835,15 @@ class MainWindow(QMainWindow):
     def _theme_changed(self, mode: str) -> None:
         self.state.update(theme=mode)
         self._apply_sidebar_shadow(mode)
-        # v1.10.0（Stitch）：点阵底板换色 + 图标重染
+        # v1.10.6（Hermes Mono）：画布换色 + 图标重染
         if hasattr(self, "workspace"):
             self.workspace.set_colors(*starfield_colors(mode))
         decorate_controls(self, PALETTES.get(mode, {}))
+        if hasattr(self, "memory_page"):
+            # Category labels carry an inline token style; refresh them when
+            # the application theme changes so no row keeps the other theme's
+            # inset surface.
+            self.memory_page._paint_selected_rows()
         self._update_job_toggle()
         self.job_activity_icon.update()
         icon = apply_brand_icon(mode)

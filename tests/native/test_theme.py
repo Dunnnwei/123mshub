@@ -11,9 +11,9 @@ def test_theme_controller_persists_and_applies(qapp: QApplication, tmp_path) -> 
     settings = QSettings(str(tmp_path / "settings.ini"), QSettings.Format.IniFormat)
     controller = ThemeController(settings)
     assert controller.apply("dark") == "dark"
-    assert "#0B0E14" in qapp.styleSheet()
+    assert "#0E0E0E" in qapp.styleSheet()
     assert controller.apply("light") == "light"
-    assert "#E8EAF0" in qapp.styleSheet()
+    assert "#FFFFFF" in qapp.styleSheet()
     assert LIGHT_QSS and DARK_QSS
 
 

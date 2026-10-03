@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
 def show_toast(anchor: QWidget, text: str, duration_ms: int = 1500) -> None:
     """v1.7.5：小型「已复制」浮框——出现在触发按钮正下方，自动消失。
 
-    QLabel 直接挂在窗口上、鼠标穿透、不抢焦点；固定深色圆角胶囊样式，
+    QLabel 直接挂在窗口上、鼠标穿透、不抢焦点；使用当前 Mono 主题的扁平提示层，
     亮暗主题下都可读。同页连续点击会先关上一个，不叠加。
     """
     window = anchor.window()
@@ -27,9 +27,11 @@ def show_toast(anchor: QWidget, text: str, duration_ms: int = 1500) -> None:
     toast.setAlignment(Qt.AlignmentFlag.AlignCenter)
     toast.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
     toast.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
+    from .theme import current_palette
+    palette = current_palette()
     toast.setStyleSheet(
-        "QLabel#mshubToast { background: rgba(23,27,35,.92); color:#FFFFFF;"
-        " border-radius:14px; padding:7px 18px; font-size:12px; font-weight:600; }"
+        f"QLabel#mshubToast {{ background: {palette['raised']}; color:{palette['ink']};"
+        f" border:1px solid {palette['line']}; border-radius:0; padding:7px 18px; font-size:12px; font-weight:600; }}"
     )
     toast.adjustSize()
     top_left = anchor.mapTo(window, QPoint(anchor.width() // 2 - toast.width() // 2, anchor.height() + 8))
@@ -91,7 +93,7 @@ class RichHoverToolTip(QObject):
         tip.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         tip.setStyleSheet(
             f"QFrame#richHoverTooltip {{ background: {palette['raised']}; color: {palette['ink']}; "
-            f"border: 1px solid {palette['line']}; border-radius: 10px; padding: 8px; }}"
+            f"border: 1px solid {palette['line']}; border-radius: 0; padding: 8px; }}"
         )
         label = QLabel(text, tip)
         label.setTextFormat(Qt.TextFormat.PlainText)

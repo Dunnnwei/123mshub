@@ -14,10 +14,10 @@
 """
 from __future__ import annotations
 
-from PySide6.QtCore import QByteArray, QSize, Qt
+from PySide6.QtCore import QByteArray, QObject, QEvent, QSize, Qt, QTimer
 from PySide6.QtGui import QIcon, QPainter, QPixmap
 from PySide6.QtSvg import QSvgRenderer
-from PySide6.QtWidgets import QAbstractButton, QLineEdit, QWidget
+from PySide6.QtWidgets import QAbstractButton, QLineEdit, QToolButton, QWidget
 
 _S = 'stroke="COLOR" stroke-width="1.8" fill="none"'
 _CAP = f'{_S} stroke-linecap="round"'
@@ -89,6 +89,31 @@ _ICON_TEXTS: dict[str, str] = {
 _ICON_CACHE: dict[tuple[str, str, int], QIcon] = {}
 
 
+class _SearchIconPositioner(QObject):
+    """Keep a leading search icon optically centered in a QLineEdit."""
+
+    def __init__(self, edit: QLineEdit, button: QToolButton) -> None:
+        super().__init__(edit)
+        self.edit = edit
+        self.button = button
+        self.reposition()
+
+    def reposition(self) -> None:
+        # A fixed 20px hit box removes style-dependent QToolButton padding from
+        # the equation.  The 16px glyph is then centered in the actual edit
+        # height, including Windows high-DPI styles and theme changes.
+        size = QSize(20, 20)
+        self.button.setFixedSize(size)
+        self.button.move(6, max(0, (self.edit.height() - size.height()) // 2))
+        self.button.raise_()
+
+    def eventFilter(self, obj, event) -> bool:  # noqa: N802 - Qt virtual method name
+        if obj is self.edit and event.type() in (QEvent.Type.Resize, QEvent.Type.Show, QEvent.Type.StyleChange, QEvent.Type.FontChange):
+            self.reposition()
+            QTimer.singleShot(0, self.reposition)
+        return super().eventFilter(obj, event)
+
+
 def tinted_icon(name: str, color: str, size: int = 24) -> QIcon:
     key = (name, color, size)
     cached = _ICON_CACHE.get(key)
@@ -113,7 +138,7 @@ def _button_tint(button: QAbstractButton, palette: dict) -> str:
     """按按钮角色选图标色：主按钮/幽灵白字白图标，危险红，普通弱化灰。"""
     name = button.objectName() or ""
     if name in {"primary", "ghost", "agentButton"}:
-        return "#FFFFFF" if name != "ghost" else str(palette.get("ink", "#FFFFFF"))
+        return str(palette.get("ink", "#FFFFFF")) if name == "ghost" else str(palette.get("on_action", "#FFFFFF"))
     if name == "danger":
         return str(palette.get("error", "#FFAAA3"))
     return str(palette.get("muted", "#94A3B8"))
@@ -134,11 +159,25 @@ def decorate_controls(root: QWidget, palette: dict) -> None:
         hint = f'{edit.placeholderText() or ""} {edit.accessibleName() or ""}'
         if "搜索" in hint or "search" in hint.lower():
             if edit.property("mshubSearchIcon") is None:
-                from PySide6.QtWidgets import QLineEdit as _QLE
-
-                action = edit.addAction(
-                    tinted_icon("search", str(palette.get("faint", "#94A3B8")), 16),
-                    _QLE.ActionPosition.LeadingPosition,
-                )
-                action.setObjectName("searchLeading")
+                # QAction placement varies by the active Windows style and was
+                # one or two pixels low in the search fields.  A transparent
+                # child hit target gives the icon an explicit vertical center
+                # while leaving the line edit's clear action untouched.
+                button = QToolButton(edit)
+                button.setObjectName("searchLeading")
+                button.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+                button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+                button.setIcon(tinted_icon("search", str(palette.get("faint", "#94A3B8")), 16))
+                button.setIconSize(QSize(16, 16))
+                button.setStyleSheet("QToolButton#searchLeading { background: transparent; border: none; padding: 0; }")
+                edit.setTextMargins(28, 0, 0, 0)
+                positioner = _SearchIconPositioner(edit, button)
+                edit.installEventFilter(positioner)
+                edit._mshub_search_positioner = positioner
+                edit._mshub_search_button = button
                 edit.setProperty("mshubSearchIcon", True)
+            else:
+                button = getattr(edit, "_mshub_search_button", None)
+                if button is not None:
+                    button.setIcon(tinted_icon("search", str(palette.get("faint", "#808080")), 16))
+                    getattr(edit, "_mshub_search_positioner", None) and edit._mshub_search_positioner.reposition()

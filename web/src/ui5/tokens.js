@@ -1,0 +1,144 @@
+// Generated from src/mshub/ui5/tokens.json; keep this file framework-free.
+export const UI5_VERSION = '5.0.0'
+export const TOKENS = {
+  "meta": {
+    "name": "123ui5.0",
+    "version": "5.0.0",
+    "source": "Hermes Mono Clean + Indigo/Violet brand seeds",
+    "seed": {
+      "indigo": "#6366F1",
+      "violet": "#7C3AED"
+    }
+  },
+  "primitive": {
+    "indigo_500": "#6366F1",
+    "indigo_600": "#4F46E5",
+    "indigo_700": "#4338CA",
+    "indigo_100": "#E0E7FF",
+    "violet_600": "#7C3AED",
+    "violet_700": "#6D28D9",
+    "violet_300": "#C4B5FD",
+    "violet_100": "#EDE9FE",
+    "white": "#FFFFFF",
+    "black_950": "#0E0E0E",
+    "gray_50": "#F9F9F9",
+    "gray_100": "#F5F5F5",
+    "gray_200": "#E1E1E3",
+    "gray_300": "#C8C8C8",
+    "gray_700": "#363636",
+    "gray_800": "#2A2A2A",
+    "gray_900": "#1E1E1E",
+    "red_600": "#B94A3A",
+    "green_600": "#3D7A62",
+    "amber_600": "#956D24"
+  },
+  "light": {
+    "bg": "#FFFFFF",
+    "sidebar": "#F5F5F5",
+    "surface": "#FFFFFF",
+    "raised": "#FFFFFF",
+    "inset": "#F9F9F9",
+    "ink": "#161616",
+    "muted": "#737377",
+    "faint": "#808080",
+    "line": "#E1E1E3",
+    "strong": "#C8C8C8",
+    "action": "#6366F1",
+    "on_action": "#FFFFFF",
+    "accent": "#7C3AED",
+    "selection": "#E9E7FF",
+    "error": "#B94A3A",
+    "error_soft": "#F5E6E3",
+    "ok": "#3D7A62",
+    "ok_soft": "#E6F2EB",
+    "warning": "#956D24",
+    "warning_soft": "#FBF2DA",
+    "user": "#6366F1",
+    "project": "#7C3AED",
+    "reference": "#8B5CF6",
+    "feedback": "#A78BFA",
+    "glass": "#F5F5F5",
+    "action_hover": "#4F46E5",
+    "action_pressed": "#4338CA",
+    "accent_hover": "#6D28D9",
+    "star_dot": "#6366F1",
+    "star_bright": "#7C3AED",
+    "graph_line": "#C8C8C8",
+    "action_gradient_start": "#6366F1",
+    "action_gradient_end": "#7C3AED",
+    "sheet_alpha": 244
+  },
+  "dark": {
+    "bg": "#0E0E0E",
+    "sidebar": "#0A0A0A",
+    "surface": "#141414",
+    "raised": "#181818",
+    "inset": "#1E1E1E",
+    "ink": "#EAEAEA",
+    "muted": "#C8C8C8",
+    "faint": "#808080",
+    "line": "#2A2A2A",
+    "strong": "#363636",
+    "action": "#6366F1",
+    "on_action": "#FFFFFF",
+    "accent": "#A78BFA",
+    "selection": "#312E81",
+    "error": "#A84040",
+    "error_soft": "#2A1A1A",
+    "ok": "#8DD4AA",
+    "ok_soft": "#203429",
+    "warning": "#E0BA6A",
+    "warning_soft": "#3D321B",
+    "user": "#818CF8",
+    "project": "#A78BFA",
+    "reference": "#7C3AED",
+    "feedback": "#C4B5FD",
+    "glass": "#262626",
+    "action_hover": "#818CF8",
+    "action_pressed": "#4F46E5",
+    "accent_hover": "#C4B5FD",
+    "star_dot": "#818CF8",
+    "star_bright": "#C4B5FD",
+    "graph_line": "#363636",
+    "action_gradient_start": "#6366F1",
+    "action_gradient_end": "#7C3AED",
+    "sheet_alpha": 248
+  },
+  "typography": {
+    "font_primary": "system",
+    "font_cjk": "system",
+    "font_mono": "system",
+    "display_px": 20,
+    "brand_px": 14,
+    "body_px": 12,
+    "row_px": 12,
+    "meta_px": 11,
+    "micro_px": 10,
+    "section_px": 14,
+    "nav_px": 13,
+    "nav_weight": 700,
+    "count_px": 10,
+    "count_weight": 400
+  },
+  "motion": {
+    "hover_ms": 120,
+    "fade_ms": 180,
+    "panel_ms": 220,
+    "row_ms": 100,
+    "easing": "cubic-bezier(.22, 1, .36, 1)"
+  }
+}
+
+export function themeTokens(mode = 'light') {
+  const value = String(mode).toLowerCase() === 'dark' ? 'dark' : 'light'
+  return { ...TOKENS[value] }
+}
+
+export function actionGradient(mode = 'light') {
+  const palette = themeTokens(mode)
+  return `linear-gradient(135deg, ${palette.action_gradient_start}, ${palette.action_gradient_end})`
+}
+
+export function cssVariables(mode = 'light') {
+  return Object.fromEntries(Object.entries(themeTokens(mode)).map(([key, value]) => [`--ui5-${key.replaceAll('_', '-')}`, String(value)]))
+}

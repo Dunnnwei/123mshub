@@ -29,8 +29,9 @@ def test_graph_first_visit_auto_refreshes_once(qapp, native_facade) -> None:
 def test_job_panel_default_keeps_five_nav_items(qapp, native_facade) -> None:
     window = MainWindow(native_facade)
     _show(window, qapp)
-    # 默认面板紧凑（≤200px），导航区足够放下五个完整条目（每项约 40px）
-    assert window.job_panel.height() <= 200
+    # v1.10.5 默认只保留标题行，导航区足够放下五个完整条目。
+    assert window._jobs_collapsed is True
+    assert window.job_panel.height() <= 60
     assert window.nav.height() >= 5 * 38
     window.close()
 
@@ -38,6 +39,10 @@ def test_job_panel_default_keeps_five_nav_items(qapp, native_facade) -> None:
 def test_job_panel_collapse_shrinks_and_expand_restores(qapp, native_facade) -> None:
     window = MainWindow(native_facade)
     _show(window, qapp)
+    assert window._jobs_collapsed is True
+    window.job_toggle.setChecked(False)  # 展开
+    for _ in range(10):
+        qapp.processEvents()
     expanded = window.job_panel.height()
     window.job_toggle.setChecked(True)  # 收起
     for _ in range(10):
@@ -62,6 +67,9 @@ def test_job_panel_height_persists_across_restart(qapp, native_facade, tmp_path)
     window = MainWindow(native_facade)
     # 注入同一份设置（构造后、显示前替换 _ui_settings 的读取源）
     window._ui_settings = lambda: settings  # type: ignore[method-assign]
+    # Default is collapsed in v1.10.5; explicitly expand to validate the
+    # user's persisted height rather than the startup state.
+    window._toggle_jobs(False)
     _show(window, qapp)
     assert abs(window.job_panel.height() - 200) <= 8, "重启后应恢复用户调过的面板高度"
     window.close()

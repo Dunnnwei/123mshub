@@ -1,4 +1,4 @@
-"""v1.10.4 regression coverage for the unified native lists and task panel."""
+"""v1.10.4 regression coverage retained for the unified native lists and task panel."""
 
 from __future__ import annotations
 
@@ -71,6 +71,9 @@ def test_unified_list_card_merges_description_and_preserves_drag_width(qapp, nat
     page = window.skills_page
     page.items = [_skill(str(index)) for index in range(30)]
     page._apply_rows()
+    # The geometry contract is about the visible skills page; keep the test
+    # independent from MainWindow's default memory route.
+    window.nav.setCurrentRow(2)
     _show(window, qapp)
     assert page.table.isColumnHidden(3)
     assert page.table.item(0, 1).data(Qt.ItemDataRole.UserRole + 10)

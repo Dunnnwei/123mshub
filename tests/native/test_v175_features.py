@@ -35,8 +35,8 @@ def test_secondary_actions_are_ghost_buttons(qapp, native_facade: MemoryFacade):
     window.close()
 
 
-def _wait_for(qapp, predicate, timeout=2000):
-    """v1.8.0：copy_agent_prompt 改后台线程，回 GUI 线程是排队信号——轮询等待。"""
+def _wait_for(qapp, predicate, timeout=5000):
+    """copy_agent_prompt 回 GUI 线程是排队信号；允许冷线程池完成。"""
     from PySide6.QtCore import QEventLoop, QTimer
 
     loop = QEventLoop()
