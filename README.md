@@ -17,11 +17,15 @@ Claude Desktop、Cursor 等）管理两类共享资产：
 读共享记忆、用共享技能库、投递新记忆的完整协议。程序只做管理与审查，
 不管同步——同步、迁移、复制由你自己的工具搞定（网盘、NAS、U 盘都行）。
 
-![记忆图示 · 暗色主题](docs/images/screenshot-graph-dark.png)
+![记忆仓库 · v1.11.1 暗色主题](docs/images/screenshot-memory-dark.png)
 
-![记忆仓库 · 亮色主题](docs/images/screenshot-memory-light.png)
+![记忆图示 · v1.11.1 暗色主题](docs/images/screenshot-graph-dark.png)
 
-![技能仓库 · 亮色主题](docs/images/screenshot-skills-light.png)
+![技能仓库 · v1.11.1 暗色主题](docs/images/screenshot-skills-dark.png)
+
+![安全中心 · v1.11.1 暗色主题](docs/images/screenshot-security-dark.png)
+
+![设置选项 · v1.11.1 暗色主题](docs/images/screenshot-settings-dark.png)
 
 ---
 
