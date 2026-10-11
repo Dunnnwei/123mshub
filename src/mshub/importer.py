@@ -633,7 +633,140 @@ class ImportService:
             f"失败 {len(result['memory_failed']) + len(result['skills_failed']) + len(result['errors'])}"
         )
         report_progress(100, "导入完成", result["summary"])
+        if not result["errors"]:
+            # v1.11.2：成功导入即记住来源，供启动时后台自动同步复用
+            try:
+                self.config_store.save({"last_import_source": str(source_value)})
+            except Exception:
+                pass
         return result
+
+    # ------------------------------------------------- 启动自动同步（v1.11.2）
+
+    _SYNC_STATE_NAME = "sync-state.json"
+
+    def sync_memory_incremental(self, source_value: str, *, dry_run: bool = False) -> dict[str, Any]:
+        """从外部来源增量同步记忆条目（只动记忆，技能仍走手动导入）。
+
+        冲突策略（来源权威、保护本地编辑）：
+        - 本地没有 → 导入新条目；
+        - 内容一致 → 跳过；
+        - 来源内容相对上次同步有变化 → 覆盖本地（总机收编后的更新）；
+        - 来源没变而本地被编辑过 → 保留本地（记入 protected，不覆盖）。
+        状态存 <私有区>/sync-state.json：name → 上次同步时的来源 content_key。
+        dry_run=True 只统计待变更数量，不写任何文件。
+        """
+        result: dict[str, Any] = {
+            "imported": [], "updated": [], "skipped": 0, "protected": [],
+            "errors": [], "changed": 0, "dry_run": bool(dry_run),
+        }
+        source = Path(source_value).expanduser()
+        if not source.is_dir():
+            result["errors"].append(f"来源目录不可达：{source_value}")
+            return result
+        report = self._scan_internal(source_value)
+        if not report.memory_items:
+            return result
+        memory_root = self.memory._ensure_layout()
+        notes_dir = self.memory._notes_dir(memory_root)
+        state_path = self.memory._private_root(memory_root) / self._SYNC_STATE_NAME
+        source_key = _canonical_identity(str(source.resolve()))
+        state_sources: dict[str, Any] = {}
+        try:
+            import json as _json
+
+            state_sources = _json.loads(state_path.read_text(encoding="utf-8-sig")).get("sources") or {}
+        except (OSError, ValueError):
+            pass
+        synced_keys: dict[str, str] = dict(state_sources.get(source_key) or {})
+        original_keys = dict(synced_keys)
+        wrote = False
+        for candidate in report.memory_items:
+            name = sanitize_name(str(candidate.fields.get("name") or "").strip() or candidate.path.stem)
+            source_content = _memory_content_key(candidate.body, candidate.fields.get("type"))
+            target = notes_dir / f"{name}.md"
+            if not target.exists():
+                if dry_run:
+                    result["imported"].append(name)
+                    continue
+                batch: dict[str, Any] = {
+                    "memory_imported": 0, "memory_skipped_same": [],
+                    "memory_skipped_duplicate": [], "memory_duplicate_details": [],
+                }
+                try:
+                    self._import_memory_entry(notes_dir, candidate, batch)
+                    if batch.get("memory_imported"):
+                        result["imported"].append(name)
+                        if source_content:
+                            synced_keys[name] = source_content
+                        wrote = True
+                    else:
+                        result["skipped"] += 1
+                except Exception as exc:
+                    result["errors"].append(f"{name}: {exc}")
+                continue
+            local_key = ""
+            try:
+                local = parse_entry_file(target)
+                local_key = _memory_content_key(local.body, local.type)
+            except (OSError, ValueError):
+                pass
+            if source_content and source_content == local_key:
+                result["skipped"] += 1
+                synced_keys[name] = source_content
+                continue
+            if source_content and synced_keys.get(name) == source_content:
+                # 来源与上次同步一致而本地不同：本地编辑过，保护不动
+                result["protected"].append(name)
+                continue
+            if dry_run:
+                result["updated"].append(name)
+                continue
+            try:
+                entry = self._sync_entry_from_candidate(candidate, name)
+                _write_text_atomic(target, entry.full_text())
+                result["updated"].append(name)
+                synced_keys[name] = source_content
+                wrote = True
+            except Exception as exc:
+                result["errors"].append(f"{name}: {exc}")
+        result["changed"] = len(result["imported"]) + len(result["updated"])
+        # 状态落盘条件：写入了条目，或本轮把"内容一致"基线补记进了状态
+        # （手动导入过的条目首次同步全 skipped 时也必须落盘，否则之后本地
+        # 编辑会被误判为"来源更新"而覆盖——v1.11.2 修复）。
+        if dry_run or (not wrote and synced_keys == original_keys):
+            return result
+        try:
+            import json as _json
+
+            state_sources[source_key] = synced_keys
+            state_path.parent.mkdir(parents=True, exist_ok=True)
+            state_path.write_text(
+                _json.dumps({"sources": state_sources}, ensure_ascii=False, indent=1),
+                encoding="utf-8",
+            )
+        except OSError:
+            pass
+        self.memory._reconcile_cache(memory_root)
+        self.memory.rebuild_index(memory_root)
+        return result
+
+    def _sync_entry_from_candidate(self, candidate: MemoryCandidate, name: str) -> "MemoryEntry":
+        """覆盖更新用：按来源字段重建条目（标题缺失时用 title_hint/原名，不调 AI）。"""
+        raw_name = str(candidate.fields.get("name") or "").strip() or candidate.path.stem
+        tags_field = candidate.fields.get("tags")
+        return MemoryEntry(
+            name=name,
+            title=str(candidate.fields.get("title") or "").strip() or candidate.title_hint or raw_name,
+            description=str(candidate.fields.get("description") or "").strip(),
+            type=normalize_type(candidate.fields.get("type")),
+            source=normalize_source(candidate.fields.get("source") or "imported"),
+            created=normalize_date(candidate.fields.get("created")),
+            updated=normalize_date(candidate.fields.get("updated") or candidate.fields.get("created")),
+            tags=[str(tag).strip() for tag in tags_field if str(tag).strip()][:12]
+            if isinstance(tags_field, list) else [],
+            body=candidate.body,
+        )
 
     # ------------------------------------------------------------- 内部
 

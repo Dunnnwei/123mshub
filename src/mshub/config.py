@@ -36,6 +36,10 @@ class AppConfig:
     secrets_backend: str = "keyring"
     # v1.9.1：启动 8 秒后后台检查新版本（失败静默，发现新版仅轻提示，不自动下载）
     auto_check_updates: bool = True
+    # v1.11.2：启动自动同步——记住上次成功导入的来源目录，启动后后台增量同步记忆
+    last_import_source: str = ""
+    # v1.11.2：开关默认开；来源为空或目录不可达时自动跳过，不影响启动
+    auto_sync_on_startup: bool = True
 
     def public_dict(self) -> dict[str, Any]:
         return asdict(self)

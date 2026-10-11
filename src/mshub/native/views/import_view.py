@@ -36,14 +36,23 @@ class ImportDialog(QDialog):
         self.scan()
 
     def scan(self):
-        self.scan_button.setEnabled(False); self.status.setText("正在扫描（只读）…")
+        self.scan_button.setEnabled(False); self._set_scan_status("正在扫描（只读）…")
         self.scope.call("scan", self.facade.scan_import, self._show_scan, self._scan_failed, self.source)
 
     def _show_scan(self, result):
-        self.scan_button.setEnabled(True); self.import_button.setEnabled(True); self.preview.setPlainText(self._format(result)); self.status.setText("扫描完成；检查预览后确认导入")
+        self.scan_button.setEnabled(True); self.import_button.setEnabled(True); self.preview.setPlainText(self._format(result)); self._set_scan_status("扫描完成；检查预览后确认导入")
 
     def _scan_failed(self, message):
-        self.scan_button.setEnabled(True); self.import_button.setEnabled(False); self.status.setText(f"扫描失败：{message}")
+        self.scan_button.setEnabled(True); self.import_button.setEnabled(False); self._set_scan_status(f"扫描失败：{message}", error=True)
+
+    def _set_scan_status(self, text: str, error: bool = False):
+        """v1.11.2：失败提示切 #statusError 红字（与各编辑窗口同款）。"""
+        self.status.setText(text)
+        desired = "statusError" if error else "status"
+        if self.status.objectName() != desired:
+            self.status.setObjectName(desired)
+            self.status.style().unpolish(self.status)
+            self.status.style().polish(self.status)
 
     @staticmethod
     def _format(result):
@@ -60,7 +69,7 @@ class ImportDialog(QDialog):
         return "\n".join(lines)
 
     def start_import(self):
-        self.import_button.setEnabled(False); self.scan_button.setEnabled(False); self.status.setText("已提交后台任务；关闭此窗口不影响导入。")
+        self.import_button.setEnabled(False); self.scan_button.setEnabled(False); self._set_scan_status("已提交后台任务；关闭此窗口不影响导入。")
         include_memory, include_skills = self.memory.isChecked(), self.skills.isChecked()
         self.jobs.submit("import", f"导入 {self.source.name or self.source}", lambda report: self.facade.run_import(self.source, include_memory=include_memory, include_skills=include_skills, progress=report), progress=True)
         self.accept()

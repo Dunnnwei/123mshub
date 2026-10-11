@@ -209,6 +209,17 @@ class SettingsPage(AdaptivePage):
         )
         self.auto_check.toggled.connect(self._auto_check_toggled)
         version_row.addWidget(self.auto_check)
+        # v1.11.2：启动自动同步记忆开关——增量拉取上次导入来源，无更新完全静默
+        self.auto_sync = QCheckBox("启动时自动同步记忆来源")
+        self.auto_sync.setToolTip(
+            "启动约 2 秒后在后台检查上次导入的来源目录（如总机 D:\\MSH）：\n"
+            "· 只增量同步记忆条目，技能与程序仍走手动导入；\n"
+            "· 没有更新时完全静默，不影响打开速度；\n"
+            "· 来源的新增与更新会覆盖同名条目；你本地改过而来源未变的条目保留本地版。\n"
+            "· 来源目录不可达（如 NAS 离线）时自动跳过。"
+        )
+        self.auto_sync.toggled.connect(self._auto_sync_toggled)
+        version_row.addWidget(self.auto_sync)
         self.upgrade_button = button("检查更新", self.check_upgrade)
         self.upgrade_button.setToolTip(
             "连接 GitHub 检查新版本；发现新版本可一键升级：\n"
@@ -254,6 +265,10 @@ class SettingsPage(AdaptivePage):
         self.auto_check.blockSignals(True)
         self.auto_check.setChecked(bool(getattr(config, "auto_check_updates", True)))
         self.auto_check.blockSignals(False)
+        # v1.11.2：自动同步开关同样只随一次性配置读取回填
+        self.auto_sync.blockSignals(True)
+        self.auto_sync.setChecked(bool(getattr(config, "auto_sync_on_startup", True)))
+        self.auto_sync.blockSignals(False)
         backend = str(getattr(config, "secrets_backend", "keyring") or "keyring")
         self.secrets_backend_label.setText(
             "⚠ 系统钥匙串不可用：密钥仅保存在内存，重启后需重新填写" if backend == "memory" else ""
@@ -273,6 +288,15 @@ class SettingsPage(AdaptivePage):
             self.statusMessage.emit("已保存启动检查设置")
         except Exception as exc:
             self._set_status(f"保存启动检查设置失败：{exc}")
+
+    def _auto_sync_toggled(self, checked: bool):
+        """v1.11.2：自动同步开关即时落盘（与启动检查同款单字段更新）。"""
+        try:
+            self.facade.save_config({"auto_sync_on_startup": bool(checked)})
+            self._set_status("已保存启动同步设置", emphasis=True)
+            self.statusMessage.emit("已保存启动同步设置")
+        except Exception as exc:
+            self._set_status(f"保存启动同步设置失败：{exc}")
 
     def choose_repo(self):
         value = QFileDialog.getExistingDirectory(self, "选择 123 MSHub 仓库", self.repo_edit.text())

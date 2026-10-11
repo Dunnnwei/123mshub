@@ -221,6 +221,10 @@ class MemoryFacade:
     def run_import(self, source: Path, **kwargs):
         return self.importer.run(source, **kwargs)
 
+    def sync_memory_incremental(self, source: str, *, dry_run: bool = False):
+        """v1.11.2：启动自动同步——只读 dry_run 供 GUI 预判，正式执行写增量。"""
+        return self.importer.sync_memory_incremental(source, dry_run=dry_run)
+
     @staticmethod
     def ai_presets():
         return list(AI_PROVIDER_PRESETS)
