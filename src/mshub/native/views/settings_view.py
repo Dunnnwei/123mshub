@@ -70,6 +70,21 @@ class SettingsPage(AdaptivePage):
         memory_label = QLabel("记忆库位置覆盖")
         memory_label.setToolTip(memory_tip)
         form.addRow(memory_label, self.memory_edit)
+        # v1.11.2：自动同步的显式来源（旧版升级用户没有"上次导入"记录，全靠这里引导）
+        self.sync_source_edit = QLineEdit()
+        sync_tip = (
+            "启动时自动增量同步记忆的外部来源目录（如总机 D:\\MSH）。\n"
+            "留空时跟随上次手动导入的来源；两者都为空则不同步。\n"
+            "只同步记忆条目：来源新增/更新会覆盖同名条目，"
+            "你本地改过而来源未变的条目保留本地版；来源不可达时自动跳过。"
+        )
+        self.sync_source_edit.setToolTip(sync_tip)
+        sync_row = QHBoxLayout()
+        sync_row.addWidget(self.sync_source_edit)
+        sync_row.addWidget(button("选择…", self.choose_sync_source))
+        sync_label = QLabel("自动同步来源")
+        sync_label.setToolTip(sync_tip)
+        form.addRow(sync_label, sync_row)
         # v1.7.2：抓取方式改为中文可读选项（数据值仍是 archive/git，存量配置无缝兼容），
         # 字段名改为"技能下载方式"并补悬停注解
         self.fetcher = QComboBox()
@@ -248,6 +263,7 @@ class SettingsPage(AdaptivePage):
         config = self.original
         self.repo_edit.setText(config.repo_root)
         self.memory_edit.setText(config.memory_root_override)
+        self.sync_source_edit.setText(str(getattr(config, "auto_sync_source", "") or ""))
         self.fetcher.setCurrentIndex(max(0, self.fetcher.findData(config.fetcher)))
         self.language.setCurrentIndex(max(0, self.language.findData(config.language)))
         self.theme_combo.setCurrentIndex(max(0, self.theme_combo.findData(self.theme.mode)))
@@ -297,6 +313,12 @@ class SettingsPage(AdaptivePage):
             self.statusMessage.emit("已保存启动同步设置")
         except Exception as exc:
             self._set_status(f"保存启动同步设置失败：{exc}")
+
+    def choose_sync_source(self):
+        """v1.11.2：浏览选择自动同步来源目录（总机仓库根，含 memory.md + brain\）。"""
+        value = QFileDialog.getExistingDirectory(self, "选择自动同步来源目录", self.sync_source_edit.text() or self.repo_edit.text())
+        if value:
+            self.sync_source_edit.setText(value)
 
     def choose_repo(self):
         value = QFileDialog.getExistingDirectory(self, "选择 123 MSHub 仓库", self.repo_edit.text())
@@ -381,6 +403,7 @@ class SettingsPage(AdaptivePage):
             base = self.ai_base_url.text().strip()
             validate_endpoint(base)
             updates = {"memory_root_override": self.memory_edit.text().strip(),
+                "auto_sync_source": self.sync_source_edit.text().strip(),
                 "fetcher": self.fetcher.currentData() or "archive", "language": self.language.currentData(),
                 "proxy": self.proxy.text().strip(), "mirrors": self.mirrors.toPlainText().splitlines(),
                 "ai_base_url": base, "ai_model": self.ai_model.currentText().strip()}

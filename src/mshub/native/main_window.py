@@ -403,6 +403,8 @@ class MainWindow(QMainWindow):
         self.security_page.refresh()
         if self.graph_page is not None:
             self.graph_page.refresh_graph()
+        # v1.11.2：保存设置后立即尝试同步一次——刚填好「自动同步来源」不必等下次启动
+        QTimer.singleShot(600, self._startup_auto_sync)
 
     def _apply_sidebar_shadow(self, mode: str) -> None:
         """v1.7.4：浮动侧栏投影颜色随主题；v1.10.0 任务悬浮卡投影同走这里。"""
@@ -721,7 +723,8 @@ class MainWindow(QMainWindow):
             return
         if not getattr(config, "auto_sync_on_startup", True):
             return
-        source_text = str(getattr(config, "last_import_source", "") or "").strip()
+        # 显式配置的来源优先；旧版升级用户没有"上次导入"记录，靠设置页引导
+        source_text = str(getattr(config, "auto_sync_source", "") or "").strip() or             str(getattr(config, "last_import_source", "") or "").strip()
         if not source_text or not Path(source_text).is_dir():
             return
         source = Path(source_text)

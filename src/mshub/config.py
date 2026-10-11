@@ -38,6 +38,9 @@ class AppConfig:
     auto_check_updates: bool = True
     # v1.11.2：启动自动同步——记住上次成功导入的来源目录，启动后后台增量同步记忆
     last_import_source: str = ""
+    # v1.11.2：显式同步来源（设置页可填，如总机 D:\MSH）；优先于 last_import_source，
+    # 解决旧版升级用户从未在新版导入过、来源为空导致自动同步空转的问题
+    auto_sync_source: str = ""
     # v1.11.2：开关默认开；来源为空或目录不可达时自动跳过，不影响启动
     auto_sync_on_startup: bool = True
 
