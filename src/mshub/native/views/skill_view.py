@@ -209,7 +209,14 @@ class SkillsPage(ShiftRangeCheckMixin, CheckableTableMixin, AdaptivePage):
         label_controls(self)
         super().showEvent(event)
 
-    def _set_status(self, text): self.status.setText(text)
+    def _set_status(self, text, error: bool = False):
+        """v1.11.2：error=True 时切 #statusError 红字（与记忆页同款）。"""
+        self.status.setText(text)
+        desired = "statusError" if error else "status"
+        if self.status.objectName() != desired:
+            self.status.setObjectName(desired)
+            self.status.style().unpolish(self.status)
+            self.status.style().polish(self.status)
 
     def refresh(self, *_): self._timer.start()
 
@@ -220,7 +227,7 @@ class SkillsPage(ShiftRangeCheckMixin, CheckableTableMixin, AdaptivePage):
             self.totalChanged.emit(len(rows))
             self.items = [row for row in rows if (not provider or row.get("provider") == provider) and (not category or row.get("item_type") == category) and (not query or self._matches_query(row, query))]
             self._apply_rows()
-        self.scope.call("list", self.facade.skills, done, lambda msg: self._set_status(f"技能列表读取失败：{msg}"))
+        self.scope.call("list", self.facade.skills, done, lambda msg: self._set_status(f"技能列表读取失败：{msg}", error=True))
 
     def _apply_rows(self):
         self.invalidate_shift_anchor()  # v1.9.1：行号即将重建，旧 Shift 锚点作废（审查 P1-3）
@@ -515,7 +522,7 @@ class SkillsPage(ShiftRangeCheckMixin, CheckableTableMixin, AdaptivePage):
         if not item: return
         from PySide6.QtWidgets import QApplication
         try: QApplication.clipboard().setText(self.facade.skill_install_prompt(item["name"], item.get("library", ""))); self._set_status("指定技能提示词已复制")
-        except Exception as exc: self._set_status(f"复制失败：{exc}")
+        except Exception as exc: self._set_status(f"复制失败：{exc}", error=True)
 
     def copy_install_prompt(self): self.copy_skill_prompt()
 
@@ -614,18 +621,27 @@ class MetadataDialog(QDialog):
         self.translate_button.setEnabled(True)
         self.ai_description_button.setEnabled(True)
         self.ai_description_button.setText("AI说明")
-        self.name.setText(str(item.get("name") or "")); self.directory.setText(Path(str(item.get("local_dir") or "")).name); self.provider.setCurrentIndex(max(0, self.provider.findData(item.get("provider", "github")))); self.source.setText(str(item.get("source_url") or "")); self.library.setCurrentIndex(max(0, self.library.findData(item.get("library", "skills")))); self.version.setText(str(item.get("version") or "")); self.tags.setText(", ".join(item.get("tags") or [])); self.description.setPlainText(str(item.get("description") or "")); self.description_zh.setPlainText(str(item.get("description_zh") or "")); self.translate_status.clear(); self._directory_hint(); self._source_hint(); self.setWindowTitle(f"编辑技能信息 · {item.get('name', '')}")
+        self.name.setText(str(item.get("name") or "")); self.directory.setText(Path(str(item.get("local_dir") or "")).name); self.provider.setCurrentIndex(max(0, self.provider.findData(item.get("provider", "github")))); self.source.setText(str(item.get("source_url") or "")); self.library.setCurrentIndex(max(0, self.library.findData(item.get("library", "skills")))); self.version.setText(str(item.get("version") or "")); self.tags.setText(", ".join(item.get("tags") or [])); self.description.setPlainText(str(item.get("description") or "")); self.description_zh.setPlainText(str(item.get("description_zh") or "")); self.translate_status.clear(); self.translate_status.setObjectName("muted"); self._directory_hint(); self._source_hint(); self.setWindowTitle(f"编辑技能信息 · {item.get('name', '')}")
+
+    def _translate_status(self, text: str, error: bool = False):
+        """v1.11.2：失败/校验类提示切 #statusError 红字，正常提示回到 muted 灰。"""
+        self.translate_status.setText(text)
+        desired = "statusError" if error else "muted"
+        if self.translate_status.objectName() != desired:
+            self.translate_status.setObjectName(desired)
+            self.translate_status.style().unpolish(self.translate_status)
+            self.translate_status.style().polish(self.translate_status)
 
     def _directory_hint(self):
         value = self.directory.text().strip(); self.directory.setStyleSheet(f"color:{_current_palette().get('error', '#B42318')}" if "/" in value or "\\" in value or value.startswith(".") else "")
 
     def _source_hint(self):
         value = self.source.text().strip()
-        if not value: self.source_hint.setText("本地自研不需要远程来源"); return
+        if not value: self.source_hint.setText("本地自研不需要远程来源"); self.source_hint.setObjectName("muted"); self.source_hint.style().unpolish(self.source_hint); self.source_hint.style().polish(self.source_hint); return
         try:
             from ...urltool import parse_source
-            parsed = parse_source(value); self.source_hint.setText(f"作者 {parsed.owner} · 仓库 {parsed.repo} · 分支 {parsed.ref or 'HEAD'} · 子目录 {parsed.subdir or '根目录'}")
-        except Exception as exc: self.source_hint.setText(f"地址待修正：{exc}")
+            parsed = parse_source(value); self.source_hint.setText(f"作者 {parsed.owner} · 仓库 {parsed.repo} · 分支 {parsed.ref or 'HEAD'} · 子目录 {parsed.subdir or '根目录'}"); self.source_hint.setObjectName("muted"); self.source_hint.style().unpolish(self.source_hint); self.source_hint.style().polish(self.source_hint)
+        except Exception as exc: self.source_hint.setText(f"地址待修正：{exc}"); self.source_hint.setObjectName("statusError"); self.source_hint.style().unpolish(self.source_hint); self.source_hint.style().polish(self.source_hint)
 
     @staticmethod
     def _looks_chinese(text: str) -> bool:
@@ -642,7 +658,7 @@ class MetadataDialog(QDialog):
         zh = self.description_zh.toPlainText().strip()
         en = self.description.toPlainText().strip()
         if not zh and not en:
-            self.translate_status.setText("请先在任意一侧填写说明，再点「自动翻译」。"); return
+            self._translate_status("请先在任意一侧填写说明，再点「自动翻译」。", error=True); return
         moved = ""
         if not zh and self._looks_chinese(en):
             # 说明原文是中文：先整体移到左栏，稍后翻译英文填右栏
@@ -654,24 +670,24 @@ class MetadataDialog(QDialog):
             moved = "检测到左栏是英文说明，已移到右栏；"
         elif zh and en and not self._looks_chinese(zh) and self._looks_chinese(en):
             self.description_zh.setPlainText(en); self.description.setPlainText(zh)
-            self.translate_status.setText("两侧说明语言装反，已交换为「左中文 / 右英文」。"); return
+            self._translate_status("两侧说明语言装反，已交换为「左中文 / 右英文」。"); return
         zh = self.description_zh.toPlainText().strip()
         en = self.description.toPlainText().strip()
         zh_cn = self._looks_chinese(zh)
         en_cn = self._looks_chinese(en)
         if zh and en and zh_cn and not en_cn:
-            self.translate_status.setText("两侧说明已分别是中文/英文，无需翻译；如需重译请先清空对应一侧。"); return
+            self._translate_status("两侧说明已分别是中文/英文，无需翻译；如需重译请先清空对应一侧。"); return
         # 翻译方向：左栏是中文 → 译英文；否则用右栏（英文）译中文。
         if zh and zh_cn:
             text, target = zh, "en"
         elif en:
             text, target = en, "zh"
         else:
-            self.translate_status.setText("请先在任意一侧填写说明，再点「自动翻译」。"); return
+            self._translate_status("请先在任意一侧填写说明，再点「自动翻译」。", error=True); return
         name = str(self.item.get("name") or "")
         facade = self.page.facade
         self.translate_button.setEnabled(False)
-        self.translate_status.setText(f"{moved}正在调用 AI 翻译…")
+        self._translate_status(f"{moved}正在调用 AI 翻译…")
 
         def done(job):
             # ocr 审查修复：编辑窗是复用单例——翻译期间用户切换到另一条技能时，
@@ -680,10 +696,10 @@ class MetadataDialog(QDialog):
                 return
             self.translate_button.setEnabled(True)
             if job.get("status") == "error":
-                self.translate_status.setText(f"翻译失败：{job.get('error') or '未知错误'}"); return
+                self._translate_status(f"翻译失败：{job.get('error') or '未知错误'}", error=True); return
             translated = str(job.get("result") or "").strip()
             if not translated:
-                self.translate_status.setText("翻译失败：接口没有返回译文。"); return
+                self._translate_status("翻译失败：接口没有返回译文。", error=True); return
             # 只在目标侧为空或语言不对时回填；用户在翻译期间手填的正确内容优先
             if target == "zh":
                 current = self.description_zh.toPlainText().strip()
@@ -693,7 +709,7 @@ class MetadataDialog(QDialog):
                 current = self.description.toPlainText().strip()
                 if not current or self._looks_chinese(current):
                     self.description.setPlainText(translated)
-            self.translate_status.setText("翻译完成：左栏中文说明 / 右栏英文说明；确认内容后点「保存」。")
+            self._translate_status("翻译完成：左栏中文说明 / 右栏英文说明；确认内容后点「保存」。")
 
         # text/target/facade are immutable for this job.  The controller can
         # therefore retry it from the task panel without reading a later form
@@ -709,7 +725,7 @@ class MetadataDialog(QDialog):
         self._ai_request_id = request_id
         self.ai_description_button.setEnabled(False)
         self.ai_description_button.setText("生成中…")
-        self.translate_status.setText("正在读取技能材料并调用 AI 说明…")
+        self._translate_status("正在读取技能材料并调用 AI 说明…")
 
         def done(job):
             self.ai_description_button.setEnabled(True)
@@ -718,15 +734,15 @@ class MetadataDialog(QDialog):
                     (str(self.item.get("name") or ""), str(self.item.get("library") or "")) != identity):
                 return
             if job.get("status") == "error":
-                self.translate_status.setText(f"AI说明失败：{job.get('error') or '未知错误'}")
+                self._translate_status(f"AI说明失败：{job.get('error') or '未知错误'}", error=True)
                 return
             result = job.get("result") or {}
             if not isinstance(result, dict) or not result.get("zh") or not result.get("en"):
-                self.translate_status.setText("AI说明失败：接口没有返回完整的中英文说明。")
+                self._translate_status("AI说明失败：接口没有返回完整的中英文说明。", error=True)
                 return
             self.description_zh.setPlainText(str(result["zh"]).strip())
             self.description.setPlainText(str(result["en"]).strip())
-            self.translate_status.setText("AI说明已填入中英文两栏，请检查后点「保存」。")
+            self._translate_status("AI说明已填入中英文两栏，请检查后点「保存」。")
 
         self.page.jobs.submit(
             "ai", f"AI说明 {name}",
@@ -882,7 +898,7 @@ class SecurityPage(ShiftRangeCheckMixin, CheckableTableMixin, AdaptivePage):
         self._apply({"items": self.items})
 
     def refresh(self):
-        self.scope.call("list", self.facade.skills, self._apply, lambda msg: self.status.setText(f"读取失败：{msg}"))
+        self.scope.call("list", self.facade.skills, self._apply, lambda msg: self._set_status(f"读取失败：{msg}", error=True))
 
     def _visible_items(self):
         items = self.items

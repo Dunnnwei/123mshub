@@ -109,7 +109,11 @@ p { margin: 0; color: var(--muted); font-size: 11px; }
 .node-browser label { display: none; }
 .node-browser-row { display: flex; align-items: center; gap: 6px; }
 .node-browser select { flex: 1; min-width: 0; min-height: 28px; padding: 0 6px; border: 1px solid var(--strong); border-radius: 0; background: var(--surface); color: var(--ink); font: inherit; font-size: 11px; }
-.node-browser button { min-height: 28px; padding: 0 8px; background: var(--blue); border-color: var(--blue); color: var(--ink); font-size: 11px; }
+/* v1.11.2：实心 indigo 底上一律白字——亮色模式 var(--ink)=#161616 对比度不足。
+ * ⚠ 打包产物（src/mshub/native/graph/assets/）是 v1.11.1 原版 + 本条 color 的原位文本补丁，
+ * 不要重跑 vite build 重建——web/node_modules 的图谱依赖已相对 v1.11.1 漂移，重建会
+ * 改变图谱渲染（2026-10-11 事故：JS 191KB→195KB，字体/布局随之变化被用户打回）。 */
+.node-browser button { min-height: 28px; padding: 0 8px; background: var(--blue); border-color: var(--blue); color: #FFFFFF; font-size: 11px; }
 @media (prefers-reduced-motion: reduce) { .toolbar button, .zoom-controls button, .node-browser button, html, body { transition: none; } }
 @media (max-width: 700px) { .graph-shell { padding: 16px; } .heading { align-items: flex-start; flex-direction: column; } .toolbar { flex-wrap: wrap; } .search { flex-basis: 100%; } }
 .graph-settings .settings-reset { margin-top: 14px; }

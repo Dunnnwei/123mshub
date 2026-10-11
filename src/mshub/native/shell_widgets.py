@@ -7,6 +7,8 @@ from .theme import TYPOGRAPHY, current_palette, system_font_family
 
 
 NAV_COUNT_ROLE = Qt.ItemDataRole.UserRole + 2
+# v1.11.2：告警型数字标记——安全中心待处理数 >0 时红色；普通总数徽章保持灰色
+NAV_COUNT_ALERT_ROLE = Qt.ItemDataRole.UserRole + 3
 
 
 class NavigationDelegate(QStyledItemDelegate):
@@ -44,7 +46,10 @@ class NavigationDelegate(QStyledItemDelegate):
             font.setPixelSize(TYPOGRAPHY["count"])
             font.setWeight(QFont.Weight.Normal)
             painter.setFont(font)
-            painter.setPen(QColor(palette["muted"]))
+            # v1.11.2：告警型数字（安全中心待处理）>0 红色；普通总数徽章保持灰
+            pending = count if isinstance(count, int) else 0
+            alert = bool(index.data(NAV_COUNT_ALERT_ROLE)) and pending > 0
+            painter.setPen(QColor(palette["error"] if alert else palette["muted"]))
             painter.drawText(content, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight, str(count))
         painter.restore()
 

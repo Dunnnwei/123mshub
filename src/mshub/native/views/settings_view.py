@@ -70,6 +70,21 @@ class SettingsPage(AdaptivePage):
         memory_label = QLabel("记忆库位置覆盖")
         memory_label.setToolTip(memory_tip)
         form.addRow(memory_label, self.memory_edit)
+        # v1.11.2：自动同步的显式来源（旧版升级用户没有"上次导入"记录，全靠这里引导）
+        self.sync_source_edit = QLineEdit()
+        sync_tip = (
+            "启动时自动增量同步记忆的外部来源目录（如总机 D:\\MSH）。\n"
+            "留空时跟随上次手动导入的来源；两者都为空则不同步。\n"
+            "只同步记忆条目：来源新增/更新会覆盖同名条目，"
+            "你本地改过而来源未变的条目保留本地版；来源不可达时自动跳过。"
+        )
+        self.sync_source_edit.setToolTip(sync_tip)
+        sync_row = QHBoxLayout()
+        sync_row.addWidget(self.sync_source_edit)
+        sync_row.addWidget(button("选择…", self.choose_sync_source))
+        sync_label = QLabel("自动同步来源")
+        sync_label.setToolTip(sync_tip)
+        form.addRow(sync_label, sync_row)
         # v1.7.2：抓取方式改为中文可读选项（数据值仍是 archive/git，存量配置无缝兼容），
         # 字段名改为"技能下载方式"并补悬停注解
         self.fetcher = QComboBox()
@@ -209,6 +224,17 @@ class SettingsPage(AdaptivePage):
         )
         self.auto_check.toggled.connect(self._auto_check_toggled)
         version_row.addWidget(self.auto_check)
+        # v1.11.2：启动自动同步记忆开关——增量拉取上次导入来源，无更新完全静默
+        self.auto_sync = QCheckBox("启动时自动同步记忆来源")
+        self.auto_sync.setToolTip(
+            "启动约 2 秒后在后台检查上次导入的来源目录（如总机 D:\\MSH）：\n"
+            "· 只增量同步记忆条目，技能与程序仍走手动导入；\n"
+            "· 没有更新时完全静默，不影响打开速度；\n"
+            "· 来源的新增与更新会覆盖同名条目；你本地改过而来源未变的条目保留本地版。\n"
+            "· 来源目录不可达（如 NAS 离线）时自动跳过。"
+        )
+        self.auto_sync.toggled.connect(self._auto_sync_toggled)
+        version_row.addWidget(self.auto_sync)
         self.upgrade_button = button("检查更新", self.check_upgrade)
         self.upgrade_button.setToolTip(
             "连接 GitHub 检查新版本；发现新版本可一键升级：\n"
@@ -237,6 +263,7 @@ class SettingsPage(AdaptivePage):
         config = self.original
         self.repo_edit.setText(config.repo_root)
         self.memory_edit.setText(config.memory_root_override)
+        self.sync_source_edit.setText(str(getattr(config, "auto_sync_source", "") or ""))
         self.fetcher.setCurrentIndex(max(0, self.fetcher.findData(config.fetcher)))
         self.language.setCurrentIndex(max(0, self.language.findData(config.language)))
         self.theme_combo.setCurrentIndex(max(0, self.theme_combo.findData(self.theme.mode)))
@@ -254,6 +281,10 @@ class SettingsPage(AdaptivePage):
         self.auto_check.blockSignals(True)
         self.auto_check.setChecked(bool(getattr(config, "auto_check_updates", True)))
         self.auto_check.blockSignals(False)
+        # v1.11.2：自动同步开关同样只随一次性配置读取回填
+        self.auto_sync.blockSignals(True)
+        self.auto_sync.setChecked(bool(getattr(config, "auto_sync_on_startup", True)))
+        self.auto_sync.blockSignals(False)
         backend = str(getattr(config, "secrets_backend", "keyring") or "keyring")
         self.secrets_backend_label.setText(
             "⚠ 系统钥匙串不可用：密钥仅保存在内存，重启后需重新填写" if backend == "memory" else ""
@@ -273,6 +304,27 @@ class SettingsPage(AdaptivePage):
             self.statusMessage.emit("已保存启动检查设置")
         except Exception as exc:
             self._set_status(f"保存启动检查设置失败：{exc}")
+
+    def _auto_sync_toggled(self, checked: bool):
+        """v1.11.2：自动同步开关即时落盘（与启动检查同款单字段更新）。"""
+        try:
+            self.facade.save_config({"auto_sync_on_startup": bool(checked)})
+            self._set_status("已保存启动同步设置", emphasis=True)
+            self.statusMessage.emit("已保存启动同步设置")
+        except Exception as exc:
+            self._set_status(f"保存启动同步设置失败：{exc}")
+
+    def choose_sync_source(self):
+        """v1.11.3 修复：浏览选择后即时落盘（与勾选开关同款），避免"选了但没保存"静默失效。"""
+        value = QFileDialog.getExistingDirectory(self, "选择自动同步来源目录", self.sync_source_edit.text() or self.repo_edit.text())
+        if value:
+            self.sync_source_edit.setText(value)
+            try:
+                self.facade.save_config({"auto_sync_source": value})
+                self._set_status("已保存自动同步来源，稍后自动同步一次", emphasis=True)
+                self.statusMessage.emit("已保存自动同步来源")
+            except Exception as exc:
+                self._set_status(f"保存同步来源失败：{exc}")
 
     def choose_repo(self):
         value = QFileDialog.getExistingDirectory(self, "选择 123 MSHub 仓库", self.repo_edit.text())
@@ -357,6 +409,7 @@ class SettingsPage(AdaptivePage):
             base = self.ai_base_url.text().strip()
             validate_endpoint(base)
             updates = {"memory_root_override": self.memory_edit.text().strip(),
+                "auto_sync_source": self.sync_source_edit.text().strip(),
                 "fetcher": self.fetcher.currentData() or "archive", "language": self.language.currentData(),
                 "proxy": self.proxy.text().strip(), "mirrors": self.mirrors.toPlainText().splitlines(),
                 "ai_base_url": base, "ai_model": self.ai_model.currentText().strip()}

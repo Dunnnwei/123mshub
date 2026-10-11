@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QByteArray, QEvent, QObject, QSize, Qt, QSettings, QTimer
@@ -42,7 +43,7 @@ from .i18n import LanguageController, localize
 from .branding import apply_brand_icon, show_about
 from .ui import label_controls, show_toast
 from .ui_icons import decorate_controls, tinted_icon
-from .shell_widgets import NAV_COUNT_ROLE, NavigationDelegate, TaskActivityIcon
+from .shell_widgets import NAV_COUNT_ALERT_ROLE, NAV_COUNT_ROLE, NavigationDelegate, TaskActivityIcon
 from .navigation_symbols import STITCH_NAV_SVGS
 from .. import __version__
 if TYPE_CHECKING:
@@ -310,7 +311,7 @@ class MainWindow(QMainWindow):
         self.settings_page = SettingsPage(self.facade, self.theme, self.runner, self.jobs, self.language)
         self.memory_page.totalChanged.connect(lambda total: self._set_nav_count("memory", total))
         self.skills_page.totalChanged.connect(self._set_asset_counts)
-        self.security_page.pendingChanged.connect(lambda pending: self._set_nav_count("security", pending))
+        self.security_page.pendingChanged.connect(lambda pending: self._set_nav_count("security", pending, alert=True))
         for page in (self.memory_page, self.graph_placeholder, self.skills_page, self.security_page, self.settings_page):
             self.pages.addWidget(page)
         # v1.10.0（Stitch）：内容区整体坐在半透明页板上浮于点阵背景
@@ -402,6 +403,8 @@ class MainWindow(QMainWindow):
         self.security_page.refresh()
         if self.graph_page is not None:
             self.graph_page.refresh_graph()
+        # v1.11.2：保存设置后立即尝试同步一次——刚填好「自动同步来源」不必等下次启动
+        QTimer.singleShot(600, self._startup_auto_sync)
 
     def _apply_sidebar_shadow(self, mode: str) -> None:
         """v1.7.4：浮动侧栏投影颜色随主题；v1.10.0 任务悬浮卡投影同走这里。"""
@@ -647,11 +650,13 @@ class MainWindow(QMainWindow):
         self.job_toggle.setProperty("direction", "up" if collapsed else "down")
         self.job_toggle.setToolTip("展开后台任务" if collapsed else "收起后台任务")
 
-    def _set_nav_count(self, key: str, total: int) -> None:
+    def _set_nav_count(self, key: str, total: int, *, alert: bool = False) -> None:
         for index in range(self.nav.count()):
             item = self.nav.item(index)
             if item.data(Qt.ItemDataRole.UserRole) == key:
                 item.setData(NAV_COUNT_ROLE, max(0, int(total)))
+                # v1.11.2：告警型数字（安全中心待处理）>0 时导航上以红色突出
+                item.setData(NAV_COUNT_ALERT_ROLE, bool(alert))
                 item.setToolTip(f"{item.text()} · {max(0, int(total))}")
                 break
 
@@ -706,6 +711,43 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(500, self._prewarm_graph_page)
         # v1.7.2：未配置仓库路径 / AI 密钥时弹窗说明哪些功能不可用 + 三步上手流程。
         QTimer.singleShot(600, self._maybe_show_setup_hint)
+        # v1.11.2：启动后后台自动同步上次导入来源的记忆——dry_run 预判，无变化完全
+        # 静默；有变化才以任务形式提交（单线程队列，与手动导入互斥），完成自动刷新。
+        QTimer.singleShot(2200, self._startup_auto_sync)
+
+    def _startup_auto_sync(self) -> None:
+        """v1.11.2：只读预判外部来源是否有记忆更新；失败静默，绝不影响启动。"""
+        try:
+            config = self.facade.config()
+        except Exception:
+            return
+        if not getattr(config, "auto_sync_on_startup", True):
+            return
+        # 显式配置的来源优先；旧版升级用户没有"上次导入"记录，靠设置页引导
+        source_text = str(getattr(config, "auto_sync_source", "") or "").strip() or             str(getattr(config, "last_import_source", "") or "").strip()
+        if not source_text or not Path(source_text).is_dir():
+            return
+        source = Path(source_text)
+        handle = self.runner.submit(self.facade.sync_memory_incremental, source_text, dry_run=True)
+        handle.signals.finished.connect(
+            lambda _identifier, payload: self._auto_sync_apply(payload, source_text, source)
+        )
+        handle.signals.failed.connect(lambda _identifier, _payload: None)
+
+    def _auto_sync_apply(self, payload: object, source_text: str, source: Path) -> None:
+        result = payload if isinstance(payload, dict) else {}
+        if not result.get("changed"):
+            # v1.11.3 修复：无更新也报告一次——同步在跑但不可见，用户无从分辨"没配好"
+            self.statusBar().showMessage(f"自动同步完成：来源无更新（{source.name}）", 8000)
+            return
+        self.jobs.submit(
+            "import", f"自动同步记忆 · {source.name or source}",
+            lambda: self.facade.sync_memory_incremental(source_text),
+        )
+        self.statusBar().showMessage(
+            f"检测到来源记忆更新：新增 {len(result.get('imported') or [])} 条、"
+            f"更新 {len(result.get('updated') or [])} 条，已提交后台同步"
+        )
 
     def show_after_graph_prewarm(self, timeout_ms: int = 2800) -> None:
         """v1.8.1：显示前预创建图谱页，把 Chromium 冷启动引起的顶层窗口原生重建

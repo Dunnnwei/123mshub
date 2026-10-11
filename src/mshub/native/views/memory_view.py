@@ -182,7 +182,16 @@ class MemoryPage(ShiftRangeCheckMixin, AdaptivePage):
     def _set_editor_enabled(self, enabled):
         for widget in (self.name_edit, self.title_edit, self.description_edit, self.type_edit, self.tags_edit, self.body_edit, self.save_button, self.delete_button, self.hard_delete_button): widget.setEnabled(enabled)
 
-    def _set_status(self, text): self.status.setText(text); self.statusMessage.emit(text)
+    def _set_status(self, text, error: bool = False):
+        """v1.11.2：error=True 时切 #statusError 红字——校验/保存失败不再用灰字，避免错过。"""
+        self.status.setText(text)
+        desired = "statusError" if error else "status"
+        if self.status.objectName() != desired:
+            self.status.setObjectName(desired)
+            # objectName 动态切换不会自动重算 QSS，必须手动重抛样式
+            self.status.style().unpolish(self.status)
+            self.status.style().polish(self.status)
+        self.statusMessage.emit(text)
 
     def can_close_editor(self) -> bool:
         """Guard the modeless editor without losing an uncommitted draft."""
@@ -197,7 +206,7 @@ class MemoryPage(ShiftRangeCheckMixin, AdaptivePage):
 
     def _refresh_now(self):
         rid = self._request_id; query = self.search.text().strip(); type_filter = str(self.type_filter.currentData() or ""); sort = str(self.sort.currentData() or "updated")
-        self.scope.call("list", self.facade.list_entries, lambda result: self._apply_listing(result) if rid == self._request_id else None, lambda msg: self._set_status(f"读取失败：{msg}"), query=query, type_filter=type_filter, sort=sort)
+        self.scope.call("list", self.facade.list_entries, lambda result: self._apply_listing(result) if rid == self._request_id else None, lambda msg: self._set_status(f"读取失败：{msg}", error=True), query=query, type_filter=type_filter, sort=sort)
 
     def refresh_sync(self):
         self._timer.stop(); result = self.facade.list_entries(query=self.search.text().strip(), type_filter=str(self.type_filter.currentData() or ""), sort=str(self.sort.currentData() or "updated")); self._apply_listing(result); return result
@@ -442,7 +451,7 @@ class MemoryPage(ShiftRangeCheckMixin, AdaptivePage):
             # ocr 审查修复：加载失败时编辑器停在"全字段禁用"状态无法输入——
             # 恢复可用让用户可以改投别的条目或直接重试
             self._set_editor_enabled(True)
-            self._set_status(f"详情读取失败：{msg}")
+            self._set_status(f"详情读取失败：{msg}", error=True)
             self.detail_title.setText("读取失败")
         self.scope.call("detail", self.facade.get_entry, done, failed, name)
 
@@ -528,9 +537,9 @@ class MemoryPage(ShiftRangeCheckMixin, AdaptivePage):
     def _payload(self): return {"name": self.name_edit.text().strip(), "title": self.title_edit.text().strip(), "description": self.description_edit.text().strip(), "type": self.type_edit.currentData() or "reference", "tags": [x.strip() for x in self.tags_edit.text().replace("，", ",").split(",") if x.strip()], "body": self.body_edit.toPlainText()}
 
     def save_current(self):
-        if not self.title_edit.text().strip(): self._set_status("请先填写标题"); return
+        if not self.title_edit.text().strip(): self._set_status("请先填写标题", error=True); return
         payload = self._payload(); old = self._current_name; fn = self.facade.create_entry if self._creating else self.facade.update_entry; args = (payload,) if self._creating else (old, payload); self._set_status("保存中…")
-        self.scope.call("save", fn, lambda result: (self._apply_detail(result), self.refresh(), self._set_status("已保存")), lambda msg: self._set_status(f"保存失败：{msg}"), *args)
+        self.scope.call("save", fn, lambda result: (self._apply_detail(result), self.refresh(), self._set_status("已保存")), lambda msg: self._set_status(f"保存失败：{msg}", error=True), *args)
 
     def save_current_sync(self):
         result = self.facade.create_entry(self._payload()) if self._creating else self.facade.update_entry(self._current_name, self._payload()); self._apply_detail(result); self.refresh_sync(); return result
@@ -538,7 +547,7 @@ class MemoryPage(ShiftRangeCheckMixin, AdaptivePage):
     def delete_current(self):
         if not self._current_name: return
         if QMessageBox.question(self, "确认软删除", f"将「{self.detail_title.text()}」移入 memory-trash？") != QMessageBox.StandardButton.Yes: return
-        self.scope.call("delete", self.facade.delete_entry, lambda _result: (self._set_editor_enabled(False), self.refresh(), self._set_status("已移入 memory-trash")), lambda msg: self._set_status(f"删除失败：{msg}"), self._current_name)
+        self.scope.call("delete", self.facade.delete_entry, lambda _result: (self._set_editor_enabled(False), self.refresh(), self._set_status("已移入 memory-trash")), lambda msg: self._set_status(f"删除失败：{msg}", error=True), self._current_name)
 
     def hard_delete_current(self):
         """v1.9.0（需求 3）：彻底删除——直接删除条目文件，不进回收目录、不可恢复。"""
@@ -558,7 +567,7 @@ class MemoryPage(ShiftRangeCheckMixin, AdaptivePage):
             self._set_editor_enabled(False); self.refresh(); self._set_status(f"已彻底删除「{name}」（不可恢复）")
 
         def failed(msg):
-            self._set_status(f"彻底删除失败：{msg}")
+            self._set_status(f"彻底删除失败：{msg}", error=True)
 
         self.scope.call("delete", lambda: self.facade.delete_entry(name, hard=True), done, failed)
 
@@ -579,7 +588,7 @@ class MemoryPage(ShiftRangeCheckMixin, AdaptivePage):
             # 标脏的话，焦点在编辑器外时关闭窗口不会弹"放弃修改"确认，AI 内容静默丢失
             self._dirty = True
             self._set_status("AI 草稿已填入空位，请确认后保存")
-        self.scope.call("ai", self.facade.ai_draft, done, lambda msg: self._set_status(f"AI 草稿失败：{msg}"), body)
+        self.scope.call("ai", self.facade.ai_draft, done, lambda msg: self._set_status(f"AI 草稿失败：{msg}", error=True), body)
 
     def copy_prompt(self):
         # v1.7.5：统一走右上角「Agent连接提示词」——复制成功在按钮下方弹「已复制」小框
@@ -626,7 +635,7 @@ class MemoryPage(ShiftRangeCheckMixin, AdaptivePage):
             failed = result.get("failed", result.get("errors", []))
             self._set_status(f"已 {len(updated) if isinstance(updated, list) else updated} 条，失败 {len(failed)} 条")
             self.refresh()
-        self.scope.call("batch", fn, done, lambda msg: self._set_status(f"批量操作失败：{msg}"), *args, **kwargs)
+        self.scope.call("batch", fn, done, lambda msg: self._set_status(f"批量操作失败：{msg}", error=True), *args, **kwargs)
         self._set_status("批量操作执行中…")
 
     def _panel_dialog_active(self, attr: str) -> bool:
@@ -667,7 +676,7 @@ class MemoryPage(ShiftRangeCheckMixin, AdaptivePage):
                 parts["left"].setCurrentRow(0)
             self._register_panel_dialog("_inbox_dialog", dialog)
 
-        self.scope.call("inbox", self.facade.list_inbox, done, lambda msg: self._set_status(f"投递箱读取失败：{msg}"))
+        self.scope.call("inbox", self.facade.list_inbox, done, lambda msg: self._set_status(f"投递箱读取失败：{msg}", error=True))
 
     def _build_inbox_dialog(self):
         dialog = QDialog(self)
@@ -730,14 +739,14 @@ class MemoryPage(ShiftRangeCheckMixin, AdaptivePage):
             try:
                 self.facade.admit_inbox(str(value.get("file")), {"title": parts["title"].text().strip(), "name": parts["name"].text().strip(), "type": parts["typ"].currentData(), "tags": [x.strip() for x in parts["tags"].text().split(",") if x.strip()], "description": parts["desc"].text().strip()})
                 left.takeItem(left.currentRow()); self.refresh(); self._set_status("已收编")
-            except Exception as exc: self._set_status(f"收编失败：{exc}")
+            except Exception as exc: self._set_status(f"收编失败：{exc}", error=True)
 
         def discard_one():
             value = selected()
             if not value: return
             try:
                 self.facade.discard_inbox(str(value.get("file"))); left.takeItem(left.currentRow()); self.refresh(); self._set_status("已丢弃")
-            except Exception as exc: self._set_status(f"丢弃失败：{exc}")
+            except Exception as exc: self._set_status(f"丢弃失败：{exc}", error=True)
 
         def discard_all():
             if QMessageBox.question(dialog, "全部丢弃", "将全部投递移入回收区？") == QMessageBox.StandardButton.Yes:
@@ -770,7 +779,7 @@ class MemoryPage(ShiftRangeCheckMixin, AdaptivePage):
         if self._panel_dialog_active("_reports_dialog"):
             return
         try: data = self.facade.tidy_reports(); reports = data.get("items") or []
-        except Exception as exc: self._set_status(str(exc)); return
+        except Exception as exc: self._set_status(str(exc), error=True); return
         dialog = QDialog(self); dialog.setWindowTitle("整理日报"); dialog.resize(900, 600); layout = QHBoxLayout(dialog); files = QListWidget(); content = QTextBrowser(); layout.addWidget(files); layout.addWidget(content, 1)
         for report in reports: row = QListWidgetItem(str(report.get("file") or report)); row.setData(Qt.ItemDataRole.UserRole, report.get("file") if isinstance(report, dict) else str(report)); files.addItem(row)
         def show(item):
@@ -790,7 +799,7 @@ class MemoryPage(ShiftRangeCheckMixin, AdaptivePage):
             QApplication.clipboard().setText(str(text)); self._set_status("值守提示词已复制")
 
         self._set_status("正在生成值守提示词…")
-        self.scope.call("duty", self.facade.duty_prompt, done, lambda msg: self._set_status(f"复制失败：{msg}"))
+        self.scope.call("duty", self.facade.duty_prompt, done, lambda msg: self._set_status(f"复制失败：{msg}", error=True))
 
     def show_index(self):
         if self._panel_dialog_active("_index_dialog"):
@@ -801,4 +810,4 @@ class MemoryPage(ShiftRangeCheckMixin, AdaptivePage):
             dialog = QDialog(self); dialog.setWindowTitle("MEMORY.md（只读索引源文件）"); dialog.resize(900, 650); layout = QVBoxLayout(dialog); note = QLabel(str(data.get("note") or "索引由程序维护，手动修改会被覆盖。")); note.setObjectName("muted"); layout.addWidget(note); view = QPlainTextEdit(); view.setReadOnly(True); view.setFont(QFont(system_font_family(), 9)); view.setPlainText(str(data.get("content") or "")); layout.addWidget(view)
             self._register_panel_dialog("_index_dialog", dialog)
 
-        self.scope.call("index", self.facade.index_file, done, lambda msg: self._set_status(f"索引读取失败：{msg}"))
+        self.scope.call("index", self.facade.index_file, done, lambda msg: self._set_status(f"索引读取失败：{msg}", error=True))

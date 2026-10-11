@@ -346,3 +346,94 @@ class TestImportApi:
         response = client.post("/api/migration/scan", json={"path": str(tmp_path)})
         assert response.status_code == 400
         assert "仓库根" in response.json()["detail"]
+
+
+class TestSyncIncremental:
+    """v1.11.2：启动自动同步——增量、dry_run、本地编辑保护与来源覆盖。"""
+
+    def test_run_records_last_import_source(self, service: ImportService, tmp_path: Path) -> None:
+        source = tmp_path / "dsh"
+        _make_dsh(source)
+        service.run(str(source))
+        assert service.config_store.load().last_import_source == str(source)
+
+    def test_sync_imports_new_and_then_quiet(self, service: ImportService, tmp_path: Path) -> None:
+        source = tmp_path / "dsh"
+        _make_dsh(source)
+        first = service.sync_memory_incremental(str(source))
+        assert sorted(first["imported"]) == ["pending-note", "reference-arch", "user-profile"]
+        assert first["changed"] == 3
+        # 第二次：无变化，完全安静
+        second = service.sync_memory_incremental(str(source))
+        assert second["changed"] == 0
+        assert second["imported"] == [] and second["updated"] == []
+        assert second["skipped"] == 3
+
+    def test_dry_run_reports_without_writing(self, service: ImportService, tmp_path: Path) -> None:
+        source = tmp_path / "dsh"
+        _make_dsh(source)
+        dry = service.sync_memory_incremental(str(source), dry_run=True)
+        assert dry["changed"] == 3 and dry["dry_run"] is True
+        assert service.memory.stats()["total"] == 0  # 未写任何条目
+        assert not (tmp_path / "repo" / "memory" / "notes").exists() or not list(
+            (tmp_path / "repo" / "memory" / "notes").glob("*.md")
+        )
+
+    def test_source_update_overwrites_local(self, service: ImportService, tmp_path: Path) -> None:
+        source = tmp_path / "dsh"
+        _make_dsh(source)
+        service.sync_memory_incremental(str(source))
+        # 总机侧收编更新了条目正文
+        target = source / "brain" / "user-profile.md"
+        target.write_text(
+            "---\nname: user-profile\ndescription: 用户画像 v2\ntype: user\n"
+            "created: 2026-08-18\nupdated: 2026-10-11\n---\n\n用户画像正文第二版。\n",
+            encoding="utf-8", newline="\n",
+        )
+        dry = service.sync_memory_incremental(str(source), dry_run=True)
+        assert dry["updated"] == ["user-profile"] and dry["changed"] == 1
+        applied = service.sync_memory_incremental(str(source))
+        assert applied["updated"] == ["user-profile"]
+        detail = service.memory.get_entry("user-profile")
+        assert "第二版" in detail["body"]
+        # 覆盖后再次同步恢复安静
+        assert service.sync_memory_incremental(str(source))["changed"] == 0
+
+    def test_local_edit_is_protected(self, service: ImportService, tmp_path: Path) -> None:
+        source = tmp_path / "dsh"
+        _make_dsh(source)
+        service.sync_memory_incremental(str(source))
+        # 本地在来源未变的情况下编辑了条目
+        service.memory.update_entry("user-profile", {"body": "本地改过的正文。"})
+        result = service.sync_memory_incremental(str(source))
+        assert result["protected"] == ["user-profile"]
+        assert result["changed"] == 0
+        assert "本地改过的正文" in service.memory.get_entry("user-profile")["body"]
+        # 来源随后也更新：总机权威覆盖本地
+        target = source / "brain" / "user-profile.md"
+        target.write_text(
+            "---\nname: user-profile\ndescription: 用户画像 v3\ntype: user\n---\n\n来源第三版。\n",
+            encoding="utf-8", newline="\n",
+        )
+        result = service.sync_memory_incremental(str(source))
+        assert result["updated"] == ["user-profile"]
+        assert "来源第三版" in service.memory.get_entry("user-profile")["body"]
+
+
+    def test_manual_import_baseline_protects_local_edits(self, service: ImportService, tmp_path: Path) -> None:
+        """v1.11.2 修复回归：手动导入的条目首次同步全 skipped 时也落盘基线，
+        之后本地编辑走保护分支，不被来源同名内容覆盖。"""
+        source = tmp_path / "dsh"
+        _make_dsh(source)
+        service.run(str(source))  # 手动导入（此时没有同步状态）
+        first = service.sync_memory_incremental(str(source))
+        assert first["changed"] == 0 and first["skipped"] == 3  # 建立基线
+        service.memory.update_entry("user-profile", {"body": "手动导入后的本地编辑。"})
+        second = service.sync_memory_incremental(str(source))
+        assert second["protected"] == ["user-profile"] and second["changed"] == 0
+        assert "手动导入后的本地编辑" in service.memory.get_entry("user-profile")["body"]
+
+    def test_unreachable_source_reports_error(self, service: ImportService, tmp_path: Path) -> None:
+        result = service.sync_memory_incremental(str(tmp_path / "missing"))
+        assert result["changed"] == 0
+        assert result["errors"] and "不可达" in result["errors"][0]
