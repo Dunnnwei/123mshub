@@ -315,10 +315,16 @@ class SettingsPage(AdaptivePage):
             self._set_status(f"保存启动同步设置失败：{exc}")
 
     def choose_sync_source(self):
-        """v1.11.2：浏览选择自动同步来源目录（总机仓库根，含 memory.md + brain\）。"""
+        """v1.11.3 修复：浏览选择后即时落盘（与勾选开关同款），避免"选了但没保存"静默失效。"""
         value = QFileDialog.getExistingDirectory(self, "选择自动同步来源目录", self.sync_source_edit.text() or self.repo_edit.text())
         if value:
             self.sync_source_edit.setText(value)
+            try:
+                self.facade.save_config({"auto_sync_source": value})
+                self._set_status("已保存自动同步来源，稍后自动同步一次", emphasis=True)
+                self.statusMessage.emit("已保存自动同步来源")
+            except Exception as exc:
+                self._set_status(f"保存同步来源失败：{exc}")
 
     def choose_repo(self):
         value = QFileDialog.getExistingDirectory(self, "选择 123 MSHub 仓库", self.repo_edit.text())

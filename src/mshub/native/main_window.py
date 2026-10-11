@@ -737,6 +737,8 @@ class MainWindow(QMainWindow):
     def _auto_sync_apply(self, payload: object, source_text: str, source: Path) -> None:
         result = payload if isinstance(payload, dict) else {}
         if not result.get("changed"):
+            # v1.11.3 修复：无更新也报告一次——同步在跑但不可见，用户无从分辨"没配好"
+            self.statusBar().showMessage(f"自动同步完成：来源无更新（{source.name}）", 8000)
             return
         self.jobs.submit(
             "import", f"自动同步记忆 · {source.name or source}",
