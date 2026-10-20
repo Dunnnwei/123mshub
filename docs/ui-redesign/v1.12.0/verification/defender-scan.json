@@ -1,0 +1,35 @@
+{
+  "product": "123mshub",
+  "version": "1.12.0",
+  "scanner": "C:\\ProgramData\\Microsoft\\Windows Defender\\Platform\\CurrentVersion\\MpCmdRun.exe",
+  "antivirus_enabled": true,
+  "realtime_enabled": true,
+  "engine_version": "1.1.26090.9",
+  "signature_version": "1.461.110.0",
+  "signature_updated": "2026-10-20T00:13:15.0000000+08:00",
+  "signature_version_before": "1.461.110.0",
+  "scans": [
+    {
+      "target": "D:\\DiskWork\\PJ\\123mshub\\release\\native-v1.12.0\\123mshub",
+      "exit_code": 0,
+      "started_utc": "2026-10-20T06:24:41.8426401+00:00",
+      "finished_utc": "2026-10-20T06:24:42.2170577+00:00",
+      "stdout_file": "defender-bundle.txt",
+      "stderr_file": "defender-bundle-stderr.txt"
+    },
+    {
+      "target": "D:\\DiskWork\\PJ\\123mshub\\release\\123mshub-native-v1.12.0-win64.zip",
+      "exit_code": 0,
+      "started_utc": "2026-10-20T06:24:42.2187009+00:00",
+      "finished_utc": "2026-10-20T06:24:46.8618458+00:00",
+      "stdout_file": "defender-zip.txt",
+      "stderr_file": "defender-zip-stderr.txt"
+    }
+  ],
+  "authenticode": "NotSigned",
+  "exe_file_version": "1.12.0",
+  "exe_product_version": "1.12.0",
+  "exe_sha256": "28d616d419c7261e49c6e0309fdd3fb89144344abc5c4ee1c78f957dbb744591",
+  "zip_sha256": "62a04a49940f62a1f71657ba0abe670c31ec799f10bc99474de51269592f3776",
+  "limitations": "Current-host Microsoft Defender custom scans only; unsigned application. Other AV, SmartScreen reputation, and other computers are not covered."
+}

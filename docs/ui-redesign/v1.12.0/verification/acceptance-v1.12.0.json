@@ -1,0 +1,228 @@
+{
+  "product": "123mshub",
+  "version": "1.12.0",
+  "date": "2026-10-20",
+  "baseline": {
+    "version": "1.11.4",
+    "commit": "39a872eb180998c7482f14159f79fc5fc8d81056"
+  },
+  "environment": {
+    "os": "Windows 11 10.0.26200",
+    "screen": "ORAYDISPLAY (current host display)",
+    "python": "3.12.10",
+    "pyside6": "6.11.2",
+    "pyinstaller": "6.22.3"
+  },
+  "python_tests": {
+    "tests": "330",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0",
+    "time": "39.596"
+  },
+  "test_warnings": [
+    "Starlette TestClient httpx deprecation",
+    "AnyIO BlockingPortal alias deprecation"
+  ],
+  "frontend_compatibility": {
+    "typecheck": "passed",
+    "node_tests_passed": 9,
+    "scope": "Legacy web source typecheck and existing graph protocol tests; desktop graph bundle not rebuilt."
+  },
+  "haui": {
+    "source_version": "0.1.0",
+    "implementation": "Native Qt adapter of HAUI tokens, icons and fonts",
+    "palettes": 12,
+    "accent_choices": 9,
+    "light_dark_variants": 216,
+    "theme_seed_fields": 26
+  },
+  "exe_ui": [
+    {
+      "scale": "1.25",
+      "started_utc": "2026-10-20T06:24:03.5165398+00:00",
+      "seconds": 18.26,
+      "exit_code": 0,
+      "process_ids": [
+        7752,
+        3636
+      ],
+      "listener_samples": 28,
+      "listeners": [],
+      "frozen": true,
+      "passed": true,
+      "screenshot_count": 23,
+      "actual_dpr": [
+        1.25
+      ]
+    },
+    {
+      "scale": "1.5",
+      "started_utc": "2026-10-20T06:24:21.7873005+00:00",
+      "seconds": 18.0,
+      "exit_code": 0,
+      "process_ids": [
+        6988,
+        29020
+      ],
+      "listener_samples": 29,
+      "listeners": [],
+      "frozen": true,
+      "passed": true,
+      "screenshot_count": 23,
+      "actual_dpr": [
+        1.5
+      ]
+    }
+  ],
+  "ui_checks": {
+    "dpi125": {
+      "checks": {
+        "startup-and-memory-list": true,
+        "async-editor-save": true,
+        "memory-search": true,
+        "memory-search-reset": true,
+        "local-webengine-loaded": true,
+        "webengine-callback": true,
+        "graph-data-ready": true,
+        "graph-local-fonts": true,
+        "skills-local-install": true,
+        "security-list": true,
+        "appearance-settings-save": true,
+        "background-task-complete": true
+      },
+      "graph": {
+        "system": "HAUI",
+        "ready": true,
+        "nodes": 7,
+        "edges": 7,
+        "bg": "rgb(13, 17, 23)",
+        "overflow": false,
+        "fonts": true,
+        "light_bg": "rgb(255, 255, 255)",
+        "frames_differ": true
+      },
+      "errors": [],
+      "fonts": {
+        "body_font": "Microsoft YaHei UI",
+        "title_font": "Space Grotesk Light",
+        "brand_font": "Space Grotesk Light",
+        "version_font": "JetBrains Mono",
+        "cjk_glyphs": true
+      }
+    },
+    "dpi150": {
+      "checks": {
+        "startup-and-memory-list": true,
+        "async-editor-save": true,
+        "memory-search": true,
+        "memory-search-reset": true,
+        "local-webengine-loaded": true,
+        "webengine-callback": true,
+        "graph-data-ready": true,
+        "graph-local-fonts": true,
+        "skills-local-install": true,
+        "security-list": true,
+        "appearance-settings-save": true,
+        "background-task-complete": true
+      },
+      "graph": {
+        "system": "HAUI",
+        "ready": true,
+        "nodes": 7,
+        "edges": 7,
+        "bg": "rgb(13, 17, 23)",
+        "overflow": false,
+        "fonts": true,
+        "light_bg": "rgb(255, 255, 255)",
+        "frames_differ": true
+      },
+      "errors": [],
+      "fonts": {
+        "body_font": "Microsoft YaHei UI",
+        "title_font": "Space Grotesk Light",
+        "brand_font": "Space Grotesk Light",
+        "version_font": "JetBrains Mono",
+        "cjk_glyphs": true
+      }
+    }
+  },
+  "integrity": {
+    "version": "1.12.0",
+    "version_metadata_matches": true,
+    "files": 239,
+    "zip_crc_and_all_file_hashes": "pass",
+    "manifest_matches_bundle": true,
+    "frozen_source_modules": 56,
+    "assets": 28,
+    "exe_sha256": "28d616d419c7261e49c6e0309fdd3fb89144344abc5c4ee1c78f957dbb744591",
+    "zip_sha256": "62a04a49940f62a1f71657ba0abe670c31ec799f10bc99474de51269592f3776",
+    "zip_bytes": 164795616,
+    "bundle_bytes": 379349197
+  },
+  "upgrade_package": {
+    "passed": true,
+    "archive": "123mshub-native-v1.12.0-win64.zip",
+    "payload_files_checked": 238,
+    "manifest_version": "1.12.0",
+    "payload_root_detected": "123mshub",
+    "scope": "Final complete ZIP accepted by production updater extraction and all manifest hashes verified; running-process replacement was not exercised."
+  },
+  "credentials": {
+    "provided_credentials_absent": true,
+    "files_checked": 719,
+    "encodings": [
+      "UTF-8",
+      "UTF-16LE"
+    ],
+    "sigma_bundle_byte_identical_to_v1114_package": true
+  },
+  "dependency_audit": {
+    "checked_distributions": 84,
+    "known_vulnerabilities": 0,
+    "excluded_local_project": "mshub (not published on PyPI)"
+  },
+  "defender": {
+    "product": "123mshub",
+    "version": "1.12.0",
+    "scanner": "C:\\ProgramData\\Microsoft\\Windows Defender\\Platform\\CurrentVersion\\MpCmdRun.exe",
+    "antivirus_enabled": true,
+    "realtime_enabled": true,
+    "engine_version": "1.1.26090.9",
+    "signature_version": "1.461.110.0",
+    "signature_updated": "2026-10-20T00:13:15.0000000+08:00",
+    "signature_version_before": "1.461.110.0",
+    "scans": [
+      {
+        "target": "D:\\DiskWork\\PJ\\123mshub\\release\\native-v1.12.0\\123mshub",
+        "exit_code": 0,
+        "started_utc": "2026-10-20T06:24:41.8426401+00:00",
+        "finished_utc": "2026-10-20T06:24:42.2170577+00:00",
+        "stdout_file": "defender-bundle.txt",
+        "stderr_file": "defender-bundle-stderr.txt"
+      },
+      {
+        "target": "D:\\DiskWork\\PJ\\123mshub\\release\\123mshub-native-v1.12.0-win64.zip",
+        "exit_code": 0,
+        "started_utc": "2026-10-20T06:24:42.2187009+00:00",
+        "finished_utc": "2026-10-20T06:24:46.8618458+00:00",
+        "stdout_file": "defender-zip.txt",
+        "stderr_file": "defender-zip-stderr.txt"
+      }
+    ],
+    "authenticode": "NotSigned",
+    "exe_file_version": "1.12.0",
+    "exe_product_version": "1.12.0",
+    "exe_sha256": "28d616d419c7261e49c6e0309fdd3fb89144344abc5c4ee1c78f957dbb744591",
+    "zip_sha256": "62a04a49940f62a1f71657ba0abe670c31ec799f10bc99474de51269592f3776",
+    "limitations": "Current-host Microsoft Defender custom scans only; unsigned application. Other AV, SmartScreen reputation, and other computers are not covered."
+  },
+  "limitations": [
+    "UI automation used isolated synthetic repositories on this host; real user repositories and external AI/GitHub/proxy providers were not exercised end to end.",
+    "125% and 150% were explicit Qt DPR settings on the current ORAYDISPLAY, not physical testing on two monitors or different PCs/GPUs.",
+    "TCP listener checks sampled the owned process tree during UI tests; design uses local file/qrc WebChannel.",
+    "Upgrade archive extraction and manifest hashes passed; replacing an in-use installation and restarting on a second computer were not exercised.",
+    "Unsigned application. Microsoft Defender checks do not guarantee SmartScreen reputation or other antivirus products.",
+    "HAUI uses Qt widgets here; React/Radix runtime behavior is not claimed."
+  ]
+}

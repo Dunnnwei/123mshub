@@ -16,6 +16,7 @@ from ..i18n import LanguageController, localize
 from ..settings_service import detect_proxy, list_models, mask_secret, test_connection, validate_endpoint
 from ..task_runner import RequestScope, TaskRunner
 from ..widgets import button
+from ..haui import catalog as haui_catalog
 from ..ui import AdaptivePage, HeaderBand, copy_agent_prompt, label_controls, make_agent_prompt_button, scroll_form
 
 
@@ -23,6 +24,7 @@ class SettingsPage(AdaptivePage):
     saved = Signal(object)
     statusMessage = Signal(str)
     importRequested = Signal(str)
+    syncPreferencesChanged = Signal()
 
     def __init__(self, facade, theme, runner=None, jobs=None, language=None, parent=None):
         super().__init__(parent)
@@ -107,6 +109,14 @@ class SettingsPage(AdaptivePage):
         for text, value in [("跟随系统", "system"), ("亮色", "light"), ("暗色", "dark")]:
             self.theme_combo.addItem(text, value)
         form.addRow("主题", self.theme_combo)
+        self.palette_combo = QComboBox()
+        for key, preset in haui_catalog()["themes"].items():
+            self.palette_combo.addItem(preset["label"], key)
+        form.addRow("HAUI 调色板", self.palette_combo)
+        self.accent_combo = QComboBox()
+        for accent in haui_catalog()["accents"]:
+            self.accent_combo.addItem(accent["label"], accent["id"])
+        form.addRow("强调色", self.accent_combo)
         self.proxy = QLineEdit()
         proxy = QHBoxLayout()
         proxy.addWidget(self.proxy)
@@ -267,6 +277,8 @@ class SettingsPage(AdaptivePage):
         self.fetcher.setCurrentIndex(max(0, self.fetcher.findData(config.fetcher)))
         self.language.setCurrentIndex(max(0, self.language.findData(config.language)))
         self.theme_combo.setCurrentIndex(max(0, self.theme_combo.findData(self.theme.mode)))
+        self.palette_combo.setCurrentIndex(max(0, self.palette_combo.findData(self.theme.palette)))
+        self.accent_combo.setCurrentIndex(max(0, self.accent_combo.findData(self.theme.accent)))
         self.proxy.setText(config.proxy)
         self.mirrors.setPlainText("\n".join(config.mirrors))
         self.ai_base_url.setText(config.ai_base_url)
@@ -309,6 +321,7 @@ class SettingsPage(AdaptivePage):
         """v1.11.2：自动同步开关即时落盘（与启动检查同款单字段更新）。"""
         try:
             self.facade.save_config({"auto_sync_on_startup": bool(checked)})
+            self.syncPreferencesChanged.emit()
             self._set_status("已保存启动同步设置", emphasis=True)
             self.statusMessage.emit("已保存启动同步设置")
         except Exception as exc:
@@ -321,6 +334,7 @@ class SettingsPage(AdaptivePage):
             self.sync_source_edit.setText(value)
             try:
                 self.facade.save_config({"auto_sync_source": value})
+                self.syncPreferencesChanged.emit()
                 self._set_status("已保存自动同步来源，稍后自动同步一次", emphasis=True)
                 self.statusMessage.emit("已保存自动同步来源")
             except Exception as exc:
@@ -402,7 +416,7 @@ class SettingsPage(AdaptivePage):
             self.importRequested.emit(path)
 
     def save_config(self):
-        if self.jobs and any(j["status"] == "running" for j in self.jobs.list()):
+        if self.jobs and any(j["status"] in {"queued", "running"} for j in self.jobs.list()):
             self._set_status("请等待后台任务完成后保存设置，防止任务写入另一个仓库。")
             return
         try:
@@ -425,7 +439,7 @@ class SettingsPage(AdaptivePage):
             elif self._clear_github:
                 updates["github_token"] = ""
             config = self.facade.save_config(updates)
-            self.theme.apply(self.theme_combo.currentData())
+            self.theme.apply(self.theme_combo.currentData(), palette=self.palette_combo.currentData(), accent=self.accent_combo.currentData())
             self.language_controller.apply(config.language)
             self.load_config()
             self._set_status("设置已保存", emphasis=True)
@@ -498,7 +512,7 @@ class SettingsPage(AdaptivePage):
                 "ai_key": "", "github_token": "",
             })
             (self.facade.config_store.config_dir / "native-ui.ini").unlink(missing_ok=True)
-            self.theme.apply("system")
+            self.theme.apply("system", palette="nous", accent="default")
             self.language_controller.apply("system")
             self.load_config()
             self._set_status("已清除所有配置：请重新指定仓库路径并配置 AI 接口。")

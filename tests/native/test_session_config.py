@@ -47,6 +47,6 @@ def test_native_repo_argument_does_not_rewrite_config(tmp_path):
     before = config.read_bytes()
     env = os.environ.copy()
     env.update({"APPDATA": str(appdata), "PYTHONPATH": str(Path(__file__).parents[2] / "src"), "QT_QPA_PLATFORM": "offscreen"})
-    result = subprocess.run([sys.executable, "-m", "mshub.native", "--smoke-graph", "--repo", str(tmp_path / "temporary")], env=env, capture_output=True, text=True, timeout=10)
+    result = subprocess.run([sys.executable, "-m", "mshub.native", "--smoke-graph", "--repo", str(tmp_path / "temporary")], env=env, capture_output=True, text=True, encoding="utf-8", timeout=10)
     assert result.returncode in {0, 3}
     assert config.read_bytes() == before

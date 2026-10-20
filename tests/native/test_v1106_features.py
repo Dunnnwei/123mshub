@@ -28,24 +28,21 @@ def test_hermes_mono_tokens_match_design_token_source() -> None:
     }
     for mode, values in expected.items():
         assert tokens[mode].items() >= values.items()
-        assert PALETTES[mode].items() >= values.items()
+        assert PALETTES[mode] != tokens[mode]  # HAUI supersedes the desktop visual contract
 
 
 def test_hermes_qss_removes_chromatic_and_elevation_layers() -> None:
     for stylesheet in (LIGHT_QSS, DARK_QSS):
-        assert "#6366F1" in stylesheet
-        assert "#7C3AED" in stylesheet
-        assert "qlineargradient" in stylesheet
+        assert "qlineargradient" not in stylesheet
         assert "QFrame#jobPanel { background: transparent; border: none;" in stylesheet
-        assert "QToolButton#jobToggle:focus { background: transparent; border: none; outline: none; }" in stylesheet
-        assert "QListWidget#memoryList:focus { border: none; outline: none; }" in stylesheet
+        assert "QListWidget#memoryList:focus { border: 1px solid" in stylesheet
         assert "border-radius: 0" in stylesheet
 
 
 def test_theme_switch_keeps_flat_task_and_memory_focus_contract(qapp, native_facade) -> None:
     window = MainWindow(native_facade)
     try:
-        for mode, background in (("light", "#FFFFFF"), ("dark", "#0E0E0E")):
+        for mode, background in (("light", "#ffffff"), ("dark", "#0d1117")):
             assert window.theme.apply(mode) == mode
             assert background in qapp.styleSheet()
             assert window.job_panel.graphicsEffect().blurRadius() == 0
@@ -59,8 +56,8 @@ def test_built_graph_is_mono_and_uses_local_hashed_assets() -> None:
     html = index.read_text(encoding="utf-8")
     assert 'content="#FFFFFF"' in html
     assert "assets/" in html
-    assets = list((index.parent / "assets").glob("*.css"))
-    assert assets
-    css = assets[0].read_text(encoding="utf-8")
-    assert "#0E0E0E" in css and "#FFFFFF" in css
-    assert "#6366F1" in css and "#7C3AED" in css and "backdrop-filter" not in css
+    assert './haui.css' in html and './haui.js' in html
+    css = (index.parent / "haui.css").read_text(encoding="utf-8")
+    assert "var(--on-action)" in css
+    assert "Space Grotesk" in css and "JetBrains Mono" in css
+    assert "backdrop-filter" not in css

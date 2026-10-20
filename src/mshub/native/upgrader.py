@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import stat
 import shutil
 import tempfile
 import time
@@ -243,17 +244,27 @@ def _extract_zip_safely(archive: Path, destination: Path) -> None:
         if len(members) > MAX_ARCHIVE_MEMBERS:
             raise FetchError(f"升级包文件数超过上限（{MAX_ARCHIVE_MEMBERS}），已拒绝解压。")
         written_total = 0
+        root = destination.resolve()
+        seen: set[str] = set()
         for member in members:
+            parts = PurePosixPath(member.filename).parts
+            if (not parts or member.filename.startswith(("/", "\\"))
+                    or "\\" in member.filename or ".." in parts
+                    or any(":" in part or part.rstrip(". ") != part for part in parts)
+                    or any(re.fullmatch(r"(?i)(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\..*)?", part) for part in parts)
+                    or stat.S_ISLNK(member.external_attr >> 16)):
+                raise FetchError("升级包包含不安全路径，已停止解压。")
+            identity = "/".join(parts).casefold()
+            if identity in seen:
+                raise FetchError("升级包包含重复路径，已停止解压。")
+            seen.add(identity)
             if member.is_dir():
                 continue
-            parts = PurePosixPath(member.filename).parts
-            if not parts or member.filename.startswith(("/", "\\")) or ".." in parts or ":" in parts[0]:
-                raise FetchError("升级包包含不安全路径，已停止解压。")
             if member.file_size > MAX_EXTRACT_BYTES:
                 raise FetchError("升级包内单文件超出解压安全上限。")
             target = destination.joinpath(*parts)
             resolved = target.resolve()
-            if not str(resolved).startswith(str(destination.resolve())):
+            if not resolved.is_relative_to(root) or resolved == root:
                 raise FetchError("升级包路径试图跳出目标目录。")
             resolved.parent.mkdir(parents=True, exist_ok=True)
             with bundle.open(member) as source, resolved.open("wb") as output:
@@ -266,7 +277,7 @@ def _copy_over(src: Path, dst: Path) -> bool:
     返回是否走了"改名让位"路径（用于升级统计与提示）。
     """
     try:
-        if dst.exists() and dst.stat().st_size == src.stat().st_size and dst.read_bytes() == src.read_bytes():
+        if dst.exists() and dst.stat().st_size == src.stat().st_size and _same_contents(src, dst):
             return False
         shutil.copyfile(src, dst)
         return False
@@ -280,6 +291,17 @@ def _copy_over(src: Path, dst: Path) -> bool:
             raise FetchError(f"无法替换被占用的文件 {dst.name}：{exc}") from exc
         shutil.copyfile(src, dst)
         return True
+
+
+def _same_contents(left: Path, right: Path) -> bool:
+    """Bound upgrade comparison memory even for large QtWebEngine DLLs."""
+    with left.open("rb") as a, right.open("rb") as b:
+        while True:
+            chunk = a.read(1024 * 1024)
+            if chunk != b.read(1024 * 1024):
+                return False
+            if not chunk:
+                return True
 
 
 def _payload_root(extracted: Path) -> Path:

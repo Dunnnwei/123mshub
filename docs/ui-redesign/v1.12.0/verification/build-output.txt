@@ -1,0 +1,173 @@
+........................................................................ [ 21%]
+........................................................................ [ 43%]
+........................................................................ [ 65%]
+........................................................................ [ 87%]
+..........................................                               [100%]
+============================== warnings summary ===============================
+.venv\Lib\site-packages\fastapi\testclient.py:1
+  D:\DiskWork\PJ\123mshub\.venv\Lib\site-packages\fastapi\testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv\Lib\site-packages\starlette\testclient.py:53
+  D:\DiskWork\PJ\123mshub\.venv\Lib\site-packages\starlette\testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+330 passed, 2 warnings in 40.11s
+99 INFO: PyInstaller: 6.22.3, contrib hooks: 2026.7
+99 INFO: Python: 3.12.10
+118 INFO: Platform: Windows-11-10.0.26200-SP0
+118 INFO: Python environment: D:\DiskWork\PJ\123mshub\.venv
+121 INFO: Removing temporary files and cleaning cache in C:\Users\Administrator\AppData\Local\pyinstaller
+879 INFO: Module search paths (PYTHONPATH):
+['D:\\DiskWork\\PJ\\123mshub',
+ 'D:\\DiskWork\\PJ\\123mshub\\src',
+ 'C:\\Users\\Administrator\\AppData\\Local\\Programs\\Python\\Python312\\python312.zip',
+ 'C:\\Users\\Administrator\\AppData\\Local\\Programs\\Python\\Python312\\DLLs',
+ 'C:\\Users\\Administrator\\AppData\\Local\\Programs\\Python\\Python312\\Lib',
+ 'C:\\Users\\Administrator\\AppData\\Local\\Programs\\Python\\Python312',
+ 'D:\\DiskWork\\PJ\\123mshub\\.venv',
+ 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages',
+ 'D:\\DiskWork\\PJ\\123mshub\\src']
+1142 INFO: Appending 'datas' from .spec
+1142 INFO: checking Analysis
+1142 INFO: Building Analysis because Analysis-00.toc is non existent
+1142 INFO: Looking for Python shared library...
+1142 INFO: Using Python shared library: C:\Users\Administrator\AppData\Local\Programs\Python\Python312\python312.dll
+1142 INFO: Running Analysis Analysis-00.toc
+1142 INFO: Target bytecode optimization level: 0
+1142 INFO: Initializing module dependency graph...
+1144 INFO: Initializing module graph hook caches...
+1150 INFO: Analyzing modules for base_library.zip ...
+1933 INFO: Processing standard module hook 'hook-encodings.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+2201 INFO: Processing standard module hook 'hook-math.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+2617 INFO: Processing standard module hook 'hook-pickle.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+3023 INFO: Processing standard module hook 'hook-heapq.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+3197 INFO: Caching module dependency graph...
+3214 INFO: Analyzing D:\DiskWork\PJ\123mshub\src\mshub\native\__main__.py
+3228 INFO: Processing standard module hook 'hook-_ctypes.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+3232 INFO: Processing standard module hook 'hook-PySide6.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+3364 INFO: Processing standard module hook 'hook-shiboken6.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+3423 INFO: Processing standard module hook 'hook-PySide6.QtNetwork.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+4367 INFO: Processing standard module hook 'hook-PySide6.QtCore.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+5900 INFO: Processing standard module hook 'hook-PySide6.QtWidgets.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+7532 INFO: Processing standard module hook 'hook-PySide6.QtGui.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+22292 INFO: Processing standard module hook 'hook-certifi.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+22366 INFO: Processing standard module hook 'hook-multiprocessing.util.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+22432 INFO: Processing standard module hook 'hook-xml.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+22692 INFO: Processing standard module hook 'hook-anyio.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+22992 INFO: Processing pre-safe-import-module hook 'hook-typing_extensions.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+22993 INFO: SetuptoolsInfo: initializing cached setuptools info...
+23676 INFO: Processing standard module hook 'hook-platform.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+23720 INFO: Processing standard module hook 'hook-difflib.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+23770 INFO: Processing standard module hook 'hook-webbrowser.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+23781 INFO: Processing standard module hook 'hook-pygments.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+24677 INFO: Processing standard module hook 'hook-rich.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+25349 INFO: Processing standard module hook 'hook-sysconfig.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+25444 INFO: Processing standard module hook 'hook-keyring.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+25856 INFO: Processing pre-safe-import-module hook 'hook-jaraco.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+25857 INFO: Setuptools: 'jaraco' appears to be a partial setuptools-vendored copy - extending search paths to ['D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\jaraco', 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\setuptools\\_vendor\\jaraco']!
+25858 INFO: Processing pre-safe-import-module hook 'hook-jaraco.context.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+25862 INFO: Processing pre-safe-import-module hook 'hook-backports.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+25863 INFO: Setuptools: 'backports' appears to be a full setuptools-vendored copy - creating alias to 'setuptools._vendor.backports'!
+25865 INFO: Processing standard module hook 'hook-setuptools.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+25870 INFO: Processing pre-safe-import-module hook 'hook-distutils.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+25883 INFO: Processing pre-safe-import-module hook 'hook-jaraco.functools.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+25888 INFO: Processing pre-safe-import-module hook 'hook-more_itertools.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+25945 INFO: Processing standard module hook 'hook-_osx_support.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+25951 INFO: Processing pre-safe-import-module hook 'hook-packaging.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+26052 INFO: Processing pre-safe-import-module hook 'hook-jaraco.text.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+26053 INFO: Setuptools: 'jaraco.text' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.jaraco.text'!
+26056 INFO: Processing standard module hook 'hook-setuptools._vendor.jaraco.text.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+26058 INFO: Processing pre-safe-import-module hook 'hook-importlib_resources.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+26214 INFO: Processing pre-safe-import-module hook 'hook-tomli.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+26402 INFO: Processing pre-safe-import-module hook 'hook-wheel.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+26403 INFO: Setuptools: 'wheel' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.wheel'!
+26508 INFO: Processing pre-safe-import-module hook 'hook-importlib_metadata.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+26508 INFO: Setuptools: 'importlib_metadata' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.importlib_metadata'!
+26527 INFO: Processing standard module hook 'hook-setuptools._vendor.importlib_metadata.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+26537 INFO: Processing pre-safe-import-module hook 'hook-zipp.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+26538 INFO: Setuptools: 'zipp' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.zipp'!
+26554 INFO: Processing standard module hook 'hook-sqlite3.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+26974 INFO: Processing standard module hook 'hook-PySide6.QtSvg.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+27303 INFO: Processing standard module hook 'hook-PySide6.QtWebChannel.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+27612 INFO: Processing standard module hook 'hook-PySide6.QtWebEngineCore.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+28515 INFO: Processing standard module hook 'hook-PySide6.QtWebEngineWidgets.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+28858 INFO: Processing standard module hook 'hook-PySide6.QtPrintSupport.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+29301 INFO: Processing module hooks (post-graph stage)...
+29418 INFO: Processing standard module hook 'hook-win32ctypes.core.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+30098 INFO: Processing standard module hook 'hook-pycparser.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+30245 INFO: Processing pre-safe-import-module hook 'hook-gi.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+30272 INFO: Processing standard module hook 'hook-PIL.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+30315 INFO: Processing standard module hook 'hook-PIL.Image.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+30550 INFO: Processing standard module hook 'hook-xml.etree.cElementTree.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+30587 INFO: Processing standard module hook 'hook-xml.dom.domreg.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+30730 INFO: Processing standard module hook 'hook-PIL.ImageFilter.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+31617 INFO: Processing standard module hook 'hook-PySide6.QtPositioning.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+32254 INFO: Processing standard module hook 'hook-PySide6.QtQuick.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+33396 INFO: Processing standard module hook 'hook-PySide6.QtOpenGL.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+35497 INFO: Processing standard module hook 'hook-PySide6.QtQml.py' from 'D:\\DiskWork\\PJ\\123mshub\\packaging\\native\\hooks'
+37584 INFO: Processing standard module hook 'hook-PySide6.QtQuickWidgets.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+37987 WARNING: Hidden import "pycparser.lextab" not found!
+37987 WARNING: Hidden import "pycparser.yacctab" not found!
+38097 INFO: Processing standard module hook 'hook-PIL.SpiderImagePlugin.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+38125 INFO: Performing binary vs. data reclassification (316 entries)
+38157 INFO: Looking for ctypes DLLs
+38173 INFO: Analyzing run-time hooks ...
+38177 INFO: Including run-time hook 'pyi_rth_inspect.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+38179 INFO: Including run-time hook 'pyi_rth_pyside6.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+38179 INFO: Processing pre-find-module-path hook 'hook-_pyi_rth_utils.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_find_module_path'
+38181 INFO: Processing standard module hook 'hook-_pyi_rth_utils.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+38183 INFO: Including run-time hook 'pyi_rth_pkgutil.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+38184 INFO: Including run-time hook 'pyi_rth_multiprocessing.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+38186 INFO: Including run-time hook 'pyi_rth_setuptools.py' from 'D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+38204 INFO: Creating base_library.zip...
+38215 INFO: Looking for dynamic libraries
+38832 INFO: Extra DLL search directories (AddDllDirectory): ['D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\shiboken6']
+38832 INFO: Extra DLL search directories (PATH): ['D:\\DiskWork\\PJ\\123mshub\\.venv\\Lib\\site-packages\\PySide6']
+39754 INFO: Warnings written to D:\DiskWork\PJ\123mshub\build\native-pyinstaller\123mshub_native\warn-123mshub_native.txt
+39793 INFO: Graph cross-reference written to D:\DiskWork\PJ\123mshub\build\native-pyinstaller\123mshub_native\xref-123mshub_native.html
+39814 INFO: checking PYZ
+39814 INFO: Building PYZ because PYZ-00.toc is non existent
+39814 INFO: Building PYZ (ZlibArchive) D:\DiskWork\PJ\123mshub\build\native-pyinstaller\123mshub_native\PYZ-00.pyz
+40305 INFO: Building PYZ (ZlibArchive) D:\DiskWork\PJ\123mshub\build\native-pyinstaller\123mshub_native\PYZ-00.pyz completed successfully.
+40317 INFO: checking PKG
+40317 INFO: Building PKG because PKG-00.toc is non existent
+40317 INFO: Building PKG (CArchive) 123mshub.pkg
+40335 INFO: Building PKG (CArchive) 123mshub.pkg completed successfully.
+40335 INFO: Bootloader D:\DiskWork\PJ\123mshub\.venv\Lib\site-packages\PyInstaller\bootloader\Windows-64bit-intel\runw.exe
+40335 INFO: checking EXE
+40335 INFO: Building EXE because EXE-00.toc is non existent
+40335 INFO: Building EXE from EXE-00.toc
+40335 INFO: Copying bootloader EXE to D:\DiskWork\PJ\123mshub\build\native-pyinstaller\123mshub_native\123mshub.exe
+40364 INFO: Copying icon to EXE
+40392 INFO: Copying version information to EXE
+40420 INFO: Copying 0 resources to EXE
+40420 INFO: Embedding manifest in EXE
+40448 INFO: Appending PKG archive to EXE
+40483 INFO: Fixing EXE headers
+40644 INFO: Building EXE from EXE-00.toc completed successfully.
+40647 INFO: checking COLLECT
+40647 INFO: Building COLLECT because COLLECT-00.toc is non existent
+40647 INFO: Building COLLECT COLLECT-00.toc
+41074 INFO: Building COLLECT COLLECT-00.toc completed successfully.
+41078 INFO: Build complete! The results are available in: D:\DiskWork\PJ\123mshub\release\native-v1.12.0
+WebEngine runtime prune complete: 361.75 MB
+Manifest: 238 files
+{
+  "version": "1.12.0",
+  "files": 239,
+  "zip_crc_and_all_file_hashes": "pass",
+  "manifest_matches_bundle": true,
+  "frozen_source_modules": 56,
+  "assets": 28,
+  "exe_sha256": "28d616d419c7261e49c6e0309fdd3fb89144344abc5c4ee1c78f957dbb744591",
+  "zip_sha256": "62a04a49940f62a1f71657ba0abe670c31ec799f10bc99474de51269592f3776",
+  "zip_bytes": 164795616,
+  "bundle_bytes": 379349197
+}
+原生 onedir 已生成：D:\DiskWork\PJ\123mshub\release\native-v1.12.0\123mshub
+EXE SHA-256：28D616D419C7261E49C6E0309FDD3FB89144344ABC5C4EE1C78F957DBB744591
+完整包 zip SHA-256：62a04a49940f62a1f71657ba0abe670c31ec799f10bc99474de51269592f3776
+目录体积（MB）：361.78
+完整包：D:\DiskWork\PJ\123mshub\release\123mshub-native-v1.12.0-win64.zip（MB：157.16）

@@ -4,6 +4,11 @@ from PySide6.QtWidgets import (QApplication, QAbstractButton, QComboBox, QDockWi
     QGroupBox, QLabel, QLineEdit, QListWidget, QPlainTextEdit, QPushButton, QTabWidget, QTableWidget, QWidget)
 
 EN = {
+    "集中管理技能与程序；查看来源、版本和安全状态。": "Manage skills and programs, with source, version and safety details.",
+    "通过离线或 AI 检查确认条目风险；人工信任会保留记录。": "Review risks with offline or AI checks. Manual trust decisions are recorded.",
+    "HAUI 调色板": "HAUI palette", "强调色": "Accent color", "调色板默认": "Palette default",
+    "蓝色": "Blue", "绿色": "Green", "琥珀": "Amber", "玫瑰": "Rose", "紫色": "Violet",
+    "青色": "Teal", "橙色": "Orange", "石板": "Slate",
     "记忆仓库": "Memory", "记忆图示": "Memory graph", "技能仓库": "Skills",
     "安全中心": "Safety", "设置选项": "Settings", "本地共享记忆与技能": "Shared memory & skills",
     "复制注入提示词": "Copy connection prompt", "准备就绪": "Ready", "后台任务": "Background tasks", "编辑选中": "Edit selected", "关于 123 MSHub": "About 123 MSHub", "记忆编辑": "Memory editor",

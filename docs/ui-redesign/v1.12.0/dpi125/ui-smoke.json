@@ -1,0 +1,179 @@
+{
+  "version": "1.12.0",
+  "frozen": true,
+  "platform": "windows",
+  "scale": "1",
+  "checks": {
+    "startup-and-memory-list": true,
+    "async-editor-save": true,
+    "memory-search": true,
+    "memory-search-reset": true,
+    "local-webengine-loaded": true,
+    "webengine-callback": true,
+    "graph-data-ready": true,
+    "graph-local-fonts": true,
+    "skills-local-install": true,
+    "security-list": true,
+    "appearance-settings-save": true,
+    "background-task-complete": true
+  },
+  "screenshots": [
+    {
+      "file": "memory-light.png",
+      "width": 1800,
+      "height": 1125,
+      "dpr": 1.25
+    },
+    {
+      "file": "memory-editor.png",
+      "width": 1375,
+      "height": 1025,
+      "dpr": 1.25
+    },
+    {
+      "file": "memory-preview.png",
+      "width": 1375,
+      "height": 1025,
+      "dpr": 1.25
+    },
+    {
+      "file": "memory-selection.png",
+      "width": 1800,
+      "height": 1125,
+      "dpr": 1.25
+    },
+    {
+      "file": "memory-dark.png",
+      "width": 1800,
+      "height": 1125,
+      "dpr": 1.25
+    },
+    {
+      "file": "graph-dark.png",
+      "width": 1800,
+      "height": 1125,
+      "dpr": 1.25
+    },
+    {
+      "file": "graph-settings.png",
+      "width": 1800,
+      "height": 1125,
+      "dpr": 1.25
+    },
+    {
+      "file": "graph-light.png",
+      "width": 1800,
+      "height": 1125,
+      "dpr": 1.25
+    },
+    {
+      "file": "skills-light.png",
+      "width": 1800,
+      "height": 1125,
+      "dpr": 1.25
+    },
+    {
+      "file": "skill-add.png",
+      "width": 975,
+      "height": 700,
+      "dpr": 1.25
+    },
+    {
+      "file": "skill-metadata.png",
+      "width": 1375,
+      "height": 1025,
+      "dpr": 1.25
+    },
+    {
+      "file": "security-light.png",
+      "width": 1800,
+      "height": 1125,
+      "dpr": 1.25
+    },
+    {
+      "file": "security-dark.png",
+      "width": 1800,
+      "height": 1125,
+      "dpr": 1.25
+    },
+    {
+      "file": "settings-0-dark.png",
+      "width": 1800,
+      "height": 1125,
+      "dpr": 1.25
+    },
+    {
+      "file": "settings-1-dark.png",
+      "width": 1800,
+      "height": 1125,
+      "dpr": 1.25
+    },
+    {
+      "file": "settings-2-dark.png",
+      "width": 1800,
+      "height": 1125,
+      "dpr": 1.25
+    },
+    {
+      "file": "settings-everforest.png",
+      "width": 1800,
+      "height": 1125,
+      "dpr": 1.25
+    },
+    {
+      "file": "about.png",
+      "width": 550,
+      "height": 413,
+      "dpr": 1.25
+    },
+    {
+      "file": "import-preview.png",
+      "width": 1150,
+      "height": 813,
+      "dpr": 1.25
+    },
+    {
+      "file": "confirmation.png",
+      "width": 368,
+      "height": 129,
+      "dpr": 1.25
+    },
+    {
+      "file": "task-panel.png",
+      "width": 1800,
+      "height": 1125,
+      "dpr": 1.25
+    },
+    {
+      "file": "memory-english.png",
+      "width": 1800,
+      "height": 1125,
+      "dpr": 1.25
+    },
+    {
+      "file": "memory-minimum-size.png",
+      "width": 1200,
+      "height": 800,
+      "dpr": 1.25
+    }
+  ],
+  "errors": [],
+  "body_font": "Microsoft YaHei UI",
+  "title_font": "Space Grotesk Light",
+  "brand_font": "Space Grotesk Light",
+  "version_font": "JetBrains Mono",
+  "cjk_glyphs": true,
+  "graph_messages": [],
+  "graph": {
+    "system": "HAUI",
+    "ready": true,
+    "nodes": 7,
+    "edges": 7,
+    "bg": "rgb(13, 17, 23)",
+    "overflow": false,
+    "fonts": true,
+    "light_bg": "rgb(255, 255, 255)",
+    "frames_differ": true
+  },
+  "passed": true
+}

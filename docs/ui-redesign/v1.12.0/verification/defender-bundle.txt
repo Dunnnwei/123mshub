@@ -1,0 +1,3 @@
+Scan starting...
+Scan finished.
+Scanning D:\DiskWork\PJ\123mshub\release\native-v1.12.0\123mshub found no threats.

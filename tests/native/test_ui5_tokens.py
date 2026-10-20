@@ -28,7 +28,7 @@ def test_ui5_runtime_palette_is_shared_by_native_and_direct_consumers() -> None:
         assert token["action"] == "#6366F1"
         assert token["action_gradient_start"] == "#6366F1"
         assert token["action_gradient_end"] == "#7C3AED"
-        assert PALETTES[mode] == token
+        assert PALETTES[mode] != token  # v1.12 desktop uses HAUI; legacy API remains stable
         assert "#6366F1" in action_gradient(mode)
         assert "#7C3AED" in action_gradient(mode)
         assert css_variables(mode)["--ui5-action"] == "#6366F1"

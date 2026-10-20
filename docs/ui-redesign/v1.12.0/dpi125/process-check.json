@@ -1,0 +1,18 @@
+{
+  "scale": "1.25",
+  "started_utc": "2026-10-20T06:24:03.5165398+00:00",
+  "seconds": 18.26,
+  "exit_code": 0,
+  "process_ids": [
+    7752,
+    3636
+  ],
+  "listener_samples": 28,
+  "listeners": [],
+  "frozen": true,
+  "passed": true,
+  "screenshot_count": 23,
+  "actual_dpr": [
+    1.25
+  ]
+}

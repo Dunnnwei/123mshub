@@ -46,8 +46,7 @@ class ListTableDelegate(QStyledItemDelegate):
             selection = QColor(tokens["selection"])
             painter.fillRect(rect, selection)
         elif option.state & QStyle.StateFlag.State_MouseOver:
-            hover = QColor(tokens["action"])
-            hover.setAlpha(26)
+            hover = QColor(tokens["hover"])
             painter.fillRect(rect, hover)
         # The memory rows use one quiet bottom rule rather than a grid or a
         # leading accent bar.  Drawing it per cell makes the rule continuous
@@ -137,7 +136,7 @@ class ListTableCard(QFrame):
         layout.setSpacing(0)
         layout.addWidget(self.header)
         layout.addWidget(table, 1)
-        QTimer.singleShot(0, self._finish_initialization)
+        QTimer.singleShot(0, self, self._finish_initialization)
 
     def _finish_initialization(self) -> None:
         self.sync_header()
@@ -177,16 +176,16 @@ class ListTableCard(QFrame):
 
     def resizeEvent(self, event) -> None:  # noqa: N802
         super().resizeEvent(event)
-        QTimer.singleShot(0, self.sync_header)
+        QTimer.singleShot(0, self, self.sync_header)
 
     def eventFilter(self, watched, event) -> bool:  # noqa: N802
         # A direct table resize (including the viewport shrinking when its
         # vertical scrollbar appears) does not resize the wrapper frame. Keep
         # the visible Hermes header exactly aligned with the scroll viewport.
         if watched in (self.table, self.table.viewport()) and event.type() == QEvent.Type.Resize:
-            QTimer.singleShot(0, self.sync_header)
+            QTimer.singleShot(0, self, self.sync_header)
         return super().eventFilter(watched, event)
 
     def showEvent(self, event) -> None:  # noqa: N802
         super().showEvent(event)
-        QTimer.singleShot(0, self.sync_header)
+        QTimer.singleShot(0, self, self.sync_header)

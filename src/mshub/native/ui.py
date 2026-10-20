@@ -38,7 +38,7 @@ def show_toast(anchor: QWidget, text: str, duration_ms: int = 1500) -> None:
     toast.move(max(8, min(top_left.x(), window.width() - toast.width() - 8)), max(8, top_left.y()))
     toast.show()
     toast.raise_()
-    QTimer.singleShot(duration_ms, toast.close)
+    QTimer.singleShot(duration_ms, toast, toast.close)
 
 
 class RichHoverToolTip(QObject):
@@ -351,12 +351,7 @@ class ElideLabel(QLabel):
 
 
 class HeaderBand(QFrame):
-    """v1.10.0B（Stitch 结构移植）：页头横向信息带。
-
-    结构对齐 Stitch 稿：``[眉标胶囊] [大标题] | [副题···] ---- [动作按钮组]``
-    （原来是竖排三行标签，视觉上与旧版无结构差异）。副题吸收 divider+stretch，
-    动作组用 :attr:`actions` 布局自行 addWidget。
-    """
+    """HAUI page heading: plain context, title and an adaptive action row."""
 
     def __init__(self, eyebrow: str, title: str, subtitle: str, parent=None):
         super().__init__(parent)
@@ -364,20 +359,23 @@ class HeaderBand(QFrame):
         # v1.10.0C：垂直方向锁 Maximum——页面内容为空（列表未填充）时根布局会把
         # 多余高度摊给页头，眉标胶囊被拉成高条；钉在 sizeHint 上五页高度一致
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
-        row = QHBoxLayout(self)
-        row.setContentsMargins(18, 12, 18, 12)
-        row.setSpacing(12)
+        self.row = QBoxLayout(QBoxLayout.Direction.LeftToRight, self)
+        row = self.row
+        row.setContentsMargins(0, 0, 0, 20)
+        row.setSpacing(16)
+        words = QWidget(objectName="headerWords")
+        words.setMinimumWidth(0)
+        labels = QVBoxLayout(words)
+        labels.setContentsMargins(0, 0, 0, 0)
+        labels.setSpacing(4)
         if eyebrow:
-            row.addWidget(QLabel(eyebrow, objectName="eyebrow"))
-        row.addWidget(QLabel(title, objectName="title"))
-        divider = QFrame()
-        divider.setObjectName("headerDivider")
-        divider.setFixedWidth(1)
-        divider.setFrameShape(QFrame.Shape.NoFrame)
-        row.addWidget(divider)
-        self.subtitle = QLabel(subtitle, objectName="muted")
-        self.subtitle.setWordWrap(False)
-        row.addWidget(self.subtitle, 1)
+            labels.addWidget(QLabel(eyebrow, objectName="eyebrow"))
+        labels.addWidget(QLabel(title, objectName="title"))
+        self.subtitle = ElideLabel(subtitle)
+        self.subtitle.setObjectName("muted")
+        self.subtitle.setMinimumWidth(0)
+        labels.addWidget(self.subtitle)
+        row.addWidget(words, 1)
         self.actions_widget = QWidget()
         # 全局 QWidget 底色规则会把动作区刷成灰块，页头带内必须透明；
         # 注意必须带选择器——裸 background 会级联进子按钮，把渐变主按钮洗掉
@@ -387,6 +385,12 @@ class HeaderBand(QFrame):
         self.actions.setContentsMargins(0, 0, 0, 0)
         self.actions.setSpacing(8)
         row.addWidget(self.actions_widget)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        stacked = self.width() < 850
+        self.row.setDirection(QBoxLayout.Direction.TopToBottom if stacked else QBoxLayout.Direction.LeftToRight)
+        self.row.setAlignment(self.actions_widget, Qt.AlignmentFlag.AlignLeft if stacked else Qt.AlignmentFlag.AlignVCenter)
 
 
 class PageHeader(QWidget):
@@ -468,8 +472,8 @@ class DataTable(QTableWidget):
         self.verticalHeader().hide()
         # Stitch table rows use a compact 44px rhythm; keep it readable while
         # preserving the checkbox target and avoiding a sparse dashboard.
-        self.verticalHeader().setDefaultSectionSize(44)
-        self.verticalHeader().setMinimumSectionSize(44)
+        self.verticalHeader().setDefaultSectionSize(52)
+        self.verticalHeader().setMinimumSectionSize(52)
         self.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Fixed)
         self.horizontalHeader().setMinimumSectionSize(32)
         self.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
@@ -543,6 +547,9 @@ def prepare_dialog(dialog):
         dialog.layout().setContentsMargins(24, 20, 24, 20)
         dialog.layout().setSpacing(12)
     label_controls(dialog)
+    from .theme import current_palette
+    from .ui_icons import decorate_controls
+    decorate_controls(dialog, current_palette())
     screen = dialog.screen()
     if screen:
         available = screen.availableGeometry()

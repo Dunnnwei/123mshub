@@ -1,0 +1,8 @@
+{
+  "passed": true,
+  "archive": "123mshub-native-v1.12.0-win64.zip",
+  "payload_files_checked": 238,
+  "manifest_version": "1.12.0",
+  "payload_root_detected": "123mshub",
+  "scope": "Final complete ZIP accepted by production updater extraction and all manifest hashes verified; running-process replacement was not exercised."
+}

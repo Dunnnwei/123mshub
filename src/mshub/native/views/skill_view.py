@@ -144,7 +144,7 @@ class SkillsPage(ShiftRangeCheckMixin, CheckableTableMixin, AdaptivePage):
     def _build(self):
         root = QVBoxLayout(self); root.setContentsMargins(20, 14, 20, 12); root.setSpacing(12)
         # v1.10.0B（Stitch 结构）：页头 = 横向信息带（眉标胶囊+标题+分隔线+副题，动作组右侧）
-        band = HeaderBand("技能资产", "技能仓库", "复用已有仓库能力；业务安装、更新、安全与对账沿用现有服务层。")
+        band = HeaderBand("技能资产", "技能仓库", "集中管理技能与程序；查看来源、版本和安全状态。")
         add = QPushButton("添加技能 / 程序"); add.setObjectName("ghost"); add.clicked.connect(self.open_add); band.actions.addWidget(add)
         self.agent_button = make_agent_prompt_button(self, self.copy_prompt); band.actions.addWidget(self.agent_button)
         root.addWidget(band)
@@ -846,7 +846,7 @@ class SecurityPage(ShiftRangeCheckMixin, CheckableTableMixin, AdaptivePage):
     def _build(self):
         root = QVBoxLayout(self); root.setContentsMargins(20, 14, 20, 12); root.setSpacing(12)
         # v1.10.0B（Stitch 结构）：页头 = 横向信息带
-        band = HeaderBand("安全审核", "安全中心", "需要确认的条目可路线 A 离线检查、路线 B AI 检查，人工信任会保留记录。")
+        band = HeaderBand("安全审核", "安全中心", "通过离线或 AI 检查确认条目风险；人工信任会保留记录。")
         self.agent_button = make_agent_prompt_button(self, self.copy_prompt); band.actions.addWidget(self.agent_button)
         root.addWidget(band)
         route_hint = QLabel("推荐先用路线 A · 离线；路线 B · AI 会把摘要发送到已配置接口。"); route_hint.setObjectName("helper"); route_hint.setWordWrap(True); root.addWidget(route_hint)

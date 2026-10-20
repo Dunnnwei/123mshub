@@ -15,7 +15,7 @@ class NavigationDelegate(QStyledItemDelegate):
     """Keep native item selection/localization and draw a separate total column."""
 
     def sizeHint(self, option, index):
-        return QSize(180, 44)
+        return QSize(180, 42)
 
     def paint(self, painter, option, index):
         opt = QStyleOptionViewItem(option)
@@ -36,9 +36,9 @@ class NavigationDelegate(QStyledItemDelegate):
         count_width = 34 if count is not None else 0
         font = QFont(system_font_family())
         font.setPixelSize(TYPOGRAPHY["nav"])
-        font.setWeight(QFont.Weight.Bold)
+        font.setWeight(QFont.Weight.DemiBold if selected else QFont.Weight.Normal)
         painter.setFont(font)
-        painter.setPen(QColor(palette["accent"] if selected else palette["ink"]))
+        painter.setPen(QColor(palette["accent"] if selected else palette["sidebar_ink"]))
         text_rect = content.adjusted(30, 0, -count_width, 0)
         painter.drawText(text_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
                          painter.fontMetrics().elidedText(label, Qt.TextElideMode.ElideRight, text_rect.width()))

@@ -28,16 +28,16 @@ def _wait_for(window, predicate, timeout_ms: int = 2500) -> None:
 
 
 def test_neutral_canvas_tokens_and_theme_detection(qapp):
-    assert PALETTES["light"]["bg"] == "#FFFFFF"
-    assert PALETTES["dark"]["bg"] == "#0E0E0E"
+    assert PALETTES["light"]["bg"] == "#ffffff"
+    assert PALETTES["dark"]["bg"] == "#0d1117"
     from PySide6.QtCore import QSettings
     from mshub.native.theme import ThemeController
 
     controller = ThemeController(QSettings())
     controller.apply("light")
-    assert current_palette()["bg"] == "#FFFFFF"
+    assert current_palette()["bg"] == "#ffffff"
     controller.apply("dark")
-    assert current_palette()["bg"] == "#0E0E0E"
+    assert current_palette()["bg"] == "#0d1117"
 
 
 def test_task_panel_starts_collapsed_and_expands_for_first_task(qapp, native_facade):
@@ -68,9 +68,10 @@ def test_search_leading_icons_are_centered_and_transparent(qapp, native_facade):
     window.close()
 
 
-def test_memory_list_and_job_toggle_have_no_focus_border(qapp, native_facade):
+def test_memory_list_and_job_toggle_have_visible_keyboard_focus(qapp, native_facade):
     window = MainWindow(native_facade)
     stylesheet = qapp.styleSheet()
-    assert "QListWidget#memoryList:focus { border: none; outline: none; }" in stylesheet
-    assert "QToolButton#jobToggle:focus" in stylesheet
+    accent = current_palette()["accent"]
+    assert f"QListWidget#memoryList:focus {{ border: 1px solid {accent}; }}" in stylesheet
+    assert f"QPushButton:focus, QToolButton:focus {{ border: 1px solid {accent}; }}" in stylesheet
     window.close()

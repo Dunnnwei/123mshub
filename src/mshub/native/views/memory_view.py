@@ -59,12 +59,12 @@ def _type_colors_cached() -> dict:
 
 
 def _type_pill_style(color: str) -> str:
-    """Return a flat Mono Clean category label without translucent pill chrome."""
+    """HAUI's compact semantic tag, using the live appearance tokens."""
     palette = _current_palette()
     return (
         f"color:{color};border:1px solid {color};"
-        f"background:{palette.get('inset', '#F9F9F9')};border-radius:0;"
-        "font-size:10px;font-weight:650;padding:1px 0;"
+        f"background:{palette.get('inset', '#F9F9F9')};border-radius:3px;"
+        "font-size:11px;font-weight:500;padding:1px 0;"
     )
 
 
@@ -162,7 +162,7 @@ class MemoryPage(ShiftRangeCheckMixin, AdaptivePage):
         self.type_edit.currentIndexChanged.connect(self._mark_dirty)
         self._set_editor_enabled(False)
         label_controls(self)
-        QTimer.singleShot(0, self._equalize_header_actions)
+        QTimer.singleShot(0, self, self._equalize_header_actions)
 
     def _equalize_header_actions(self) -> None:
         """Keep the three header actions on one shared hit-target grid."""
@@ -394,6 +394,8 @@ class MemoryPage(ShiftRangeCheckMixin, AdaptivePage):
             meta["tags"].setStyleSheet("")
             meta["source"].setStyleSheet("")
             meta["time"].setStyleSheet("")
+            type_key = str(meta["pill"].property("pillType") or "reference")
+            meta["color"] = _type_colors_cached().get(type_key, _current_palette()["ink"])
             meta["pill"].setStyleSheet(_type_pill_style(meta["color"]))
 
     def _memory_tooltip_text(self, pos) -> str:

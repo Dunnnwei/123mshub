@@ -1,0 +1,2 @@
+# HAUI provenance hashes cover the exact bytes, including line endings.
+src/mshub/native/haui/** -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol

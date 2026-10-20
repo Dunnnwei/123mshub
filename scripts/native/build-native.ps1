@@ -14,12 +14,14 @@ Set-Location -LiteralPath $projectRoot
 $python = Join-Path $projectRoot ".venv\Scripts\python.exe"
 $env:PYTHONPATH = Join-Path $projectRoot "src"
 $env:QT_QPA_PLATFORM = "offscreen"
+$env:PYTHONUTF8 = "1"
 
 if (-not (Test-Path -LiteralPath $python)) {
     throw "找不到 .venv\Scripts\python.exe，请先创建开发环境。"
 }
 
-& $python -m pytest
+New-Item -ItemType Directory -Path (Join-Path $projectRoot 'build') -Force | Out-Null
+& $python -m pytest --tb=short --junitxml=build/release-tests.xml
 if ($LASTEXITCODE -ne 0) { throw "测试失败，停止打包。" }
 
 $release = Join-Path $projectRoot "release\native-v$Version"
@@ -43,6 +45,12 @@ $internal = Join-Path $root "_internal"
 foreach ($required in @(
     (Join-Path $root "123mshub.exe"),
     (Join-Path $internal "mshub\native\graph\index.html"),
+    (Join-Path $internal "mshub\native\graph\haui.css"),
+    (Join-Path $internal "mshub\native\graph\haui-tokens.js"),
+    (Join-Path $internal "mshub\native\haui\themes.json"),
+    (Join-Path $internal "mshub\native\haui\native.qss"),
+    (Join-Path $internal "mshub\native\haui\fonts\SpaceGrotesk-Latin.ttf"),
+    (Join-Path $internal "mshub\native\haui\licenses\Tabler-MIT.txt"),
     (Join-Path $internal "mshub\ui5\tokens.json"),
     (Join-Path $internal "PySide6\QtWebEngineProcess.exe"),
     (Join-Path $internal "PySide6\resources\icudtl.dat"),
@@ -72,7 +80,7 @@ if (-not $SkipSmoke) {
         Stop-Process -Id $process.Id -Force
         throw "原生 smoke 创建了 TCP 监听，违反零监听红线。"
     }
-    if (-not $process.WaitForExit(15000)) {
+    if (-not $process.WaitForExit(30000)) {
         Stop-Process -Id $process.Id -Force
         throw "原生 onedir 图谱冒烟超时。"
     }
@@ -81,6 +89,24 @@ if (-not $SkipSmoke) {
 
 $hash = Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $root "123mshub.exe")
 Set-Content -LiteralPath (Join-Path $release "SHA256SUMS.txt") -Value "$($hash.Hash.ToLowerInvariant())  123mshub\123mshub.exe" -Encoding ascii
+
+$readme = Join-Path $release "README-完整包.txt"
+Set-Content -LiteralPath $readme -Encoding UTF8 -Value @(
+    "123 MSHub 完整包 v$Version（含 HAUI 界面与图形运行环境）",
+    "",
+    "完整解压后运行 123mshub\123mshub.exe；无需 Python、Node.js 或另下环境包。",
+    "升级：设置选项 → 检查更新，或下载完整包解压到新目录后选择原仓库。",
+    "配置保存在 %APPDATA%\mshub，仓库数据位于你指定的目录。升级保留配置及数据。",
+    "外观：设置选项中可独立选择主题、HAUI 调色板和强调色，点击保存设置生效。",
+    "字体与主题的来源及许可证见 _internal\mshub\native\haui。",
+    "本版使用标准 onedir，无 UPX、无混淆、无需管理员权限；未进行代码签名。",
+    "下载后可用 SHA256SUMS.txt 核对完整包；本机扫描结果见发布验收报告。",
+    "",
+    "下载页：https://github.com/Dunnnwei/123mshub/releases"
+)
+Copy-Item -LiteralPath $readme -Destination (Join-Path $root 'README-完整包.txt')
+& $python (Join-Path $projectRoot 'scripts/native/verify-release.py') --manifest-only
+if ($LASTEXITCODE -ne 0) { throw '发布文件清单生成失败。' }
 
 # ---- v1.9.0：取消环境包分离——单一完整包 ----------------------------------
 # 用户反馈：v1.7.4 的「程序包 + 环境包」拆分造成使用不便（首装要下两个包、
@@ -109,17 +135,8 @@ Set-Content -LiteralPath (Join-Path $release "SHA256SUMS.txt") -Encoding ascii -
     "$zipHash  123mshub-native-v$Version-win64.zip"
 )
 
-$readme = Join-Path $release "README-完整包.txt"
-Set-Content -LiteralPath $readme -Encoding UTF8 -Value @(
-    "123 MSHub 完整包 v$Version（单一包，含图形运行环境）",
-    "",
-    "解压到任意目录，运行 123mshub\123mshub.exe 即可；无需另下环境包。",
-    "更新方式一：程序内「设置选项 → 检查更新」，从 GitHub 一键升级（配置与仓库数据保留）。",
-    "更新方式二：下载新版完整包，解压覆盖旧目录（或换新目录后用原仓库路径）。",
-    "配置保存在 %APPDATA%\mshub，仓库数据在你指定的目录，均不受覆盖解压影响。",
-    "",
-    "下载页：https://github.com/Dunnnwei/123mshub/releases"
-)
+& $python (Join-Path $projectRoot 'scripts/native/verify-release.py')
+if ($LASTEXITCODE -ne 0) { throw '最终发布包校验失败。' }
 
 Write-Host "原生 onedir 已生成：$root"
 Write-Host "EXE SHA-256：$($hash.Hash)"

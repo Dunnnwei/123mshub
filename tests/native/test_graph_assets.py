@@ -17,4 +17,4 @@ def test_graph_island_is_local_and_has_bridge(native_facade) -> None:
     combined = "\n".join(path.read_text(encoding="utf-8") for path in js_files)
     assert "getGraph" in combined
     assert "openMemory" in combined
-    assert all("http://" not in path.read_text(encoding="utf-8") and "https://" not in path.read_text(encoding="utf-8") for path in root.rglob("*.*") if path.is_file())
+    assert all("http://" not in path.read_text(encoding="utf-8").replace("http://www.w3.org/2000/svg", "") and "https://" not in path.read_text(encoding="utf-8").replace("http://www.w3.org/2000/svg", "") for path in root.rglob("*.*") if path.is_file())

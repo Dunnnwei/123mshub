@@ -47,14 +47,12 @@ def test_graph_bridge_persists_settings_and_explicit_palette(native_facade: Memo
     bridge = GraphBridge(native_facade, "dark")
     palette = json.loads(bridge.getPalette())
     assert palette["theme"] == "dark"
-    assert palette["background"] == "#141414"
-    assert palette["label"] == "#EAEAEA"
-    assert palette["accent"] == "#A78BFA"
-    assert palette["types"]["user"] == "#818CF8"
-    assert palette["types"]["project"] == "#A78BFA"
-    assert palette["types"]["reference"] == "#7C3AED"
-    assert palette["types"]["feedback"] == "#C4B5FD"
-    assert palette["line"] == "#363636"
+    from mshub.native.theme import PALETTES
+    assert palette["system"] == "HAUI"
+    assert palette["background"] == PALETTES["dark"]["surface"]
+    assert palette["label"] == PALETTES["dark"]["ink"]
+    assert palette["controls"] == PALETTES["dark"]
+    assert len(set(palette["types"].values())) == 4
     assert bridge.writeGraphSettings('{"labelThreshold": 12, "forces": {"center": 2}}') is True
     restored = GraphBridge(native_facade, "dark")
     settings = json.loads(restored.readGraphSettings())

@@ -17,22 +17,26 @@ Claude Desktop、Cursor 等）管理两类共享资产：
 读共享记忆、用共享技能库、投递新记忆的完整协议。程序只做管理与审查，
 不管同步——同步、迁移、复制由你自己的工具搞定（网盘、NAS、U 盘都行）。
 
-![记忆仓库 · v1.11.1 暗色主题](docs/images/screenshot-memory-dark.png)
+当前版本 **v1.12.0**：采用本地 HAUI 设计系统的原生适配，统一全部桌面页面、弹窗和图谱外观；提供 12 套调色板与 9 种强调色选择。记忆、技能、安全、同步和升级的数据及操作保持兼容。详见 [发布说明](RELEASE_NOTES.md) 与 [验收报告](docs/ui-redesign/v1.12.0-验收报告.md)。
 
-![记忆图示 · v1.11.1 暗色主题](docs/images/screenshot-graph-dark.png)
+以下画面取自 Windows 完整包，在隔离测试仓库中运行，内容为合成验收数据。
 
-![技能仓库 · v1.11.1 暗色主题](docs/images/screenshot-skills-dark.png)
+![记忆仓库 · v1.12.0 HAUI 亮色主题](docs/ui-redesign/v1.12.0/dpi150/memory-light.png)
 
-![安全中心 · v1.11.1 暗色主题](docs/images/screenshot-security-dark.png)
+![记忆图示 · v1.12.0 HAUI 暗色主题](docs/ui-redesign/v1.12.0/dpi150/graph-dark.png)
 
-![设置选项 · v1.11.1 暗色主题](docs/images/screenshot-settings-dark.png)
+![技能仓库 · v1.12.0 HAUI 亮色主题](docs/ui-redesign/v1.12.0/dpi150/skills-light.png)
+
+![安全中心 · v1.12.0 HAUI 暗色主题](docs/ui-redesign/v1.12.0/dpi150/security-dark.png)
+
+![设置选项 · v1.12.0 HAUI Everforest 调色板](docs/ui-redesign/v1.12.0/dpi150/settings-everforest.png)
 
 ---
 
 ## 快速开始（三步）
 
 1. **解压即用**：从 [GitHub Releases](https://github.com/Dunnnwei/123mshub/releases) 下载
-   **完整包** `123mshub-native-vX.Y.Z-win64.zip`（v1.9.0 起单一包，约 170MB，含 PySide6/Qt
+   **完整包** `123mshub-native-vX.Y.Z-win64.zip`（v1.9.0 起单一包，约 157 MiB，含 PySide6/Qt
    图形运行环境），解压到任意目录，双击 `123mshub\123mshub.exe` 即可，无需另下环境包。
    更新方式一（推荐）：程序内「设置选项 → 检查更新」一键从 GitHub 升级，配置与仓库数据
    全保留；更新方式二：下载新版完整包解压覆盖旧目录。

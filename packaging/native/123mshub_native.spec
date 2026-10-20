@@ -22,7 +22,11 @@ graph_datas = [
 ]
 
 icon_root = project_root / "packaging/native/icons"
-datas = graph_datas + [
+haui_root = src_root / "mshub/native/haui"
+haui_datas = [(str(path), str(Path("mshub/native/haui") / path.relative_to(haui_root).parent))
+              for path in haui_root.rglob("*")
+              if path.is_file() and path.suffix not in {".py", ".pyc"} and "__pycache__" not in path.parts]
+datas = graph_datas + haui_datas + [
     (str(project_root / "README.md"), "."),
     (str(src_root / "mshub/native/design_tokens.json"), "mshub/native"),
     (str(src_root / "mshub/ui5/tokens.json"), "mshub/ui5"),
@@ -71,6 +75,7 @@ exe = EXE(
     upx=False,
     console=False,
     exclude_binaries=True,
+    version=str(project_root / "packaging/native/version-info.txt"),
 )
 coll = COLLECT(
     exe,

@@ -99,9 +99,17 @@ def main(argv: list[str] | None = None) -> int:
     group.add_argument("--repo-and-save", help="使用此仓库并明确保存为默认仓库")
     parser.add_argument("--config-dir", type=Path, help="独立配置目录（不读写系统钥匙串，供测试/便携会话）")
     parser.add_argument("--smoke-graph", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--smoke-ui", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--evidence-dir", type=Path, help=argparse.SUPPRESS)
     parser.add_argument("--smoke-float", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--smoke-float-stable", action="store_true", help=argparse.SUPPRESS)  # v1.6.0：模拟"页面稳定后"场景，等 8s 再查呼吸
     args = parser.parse_args(argv)
+    if args.smoke_ui:
+        if not args.repo or not args.config_dir or not args.evidence_dir:
+            parser.error("--smoke-ui requires --repo, --config-dir and --evidence-dir")
+        for folder in (Path(args.repo), args.config_dir):
+            if folder.exists() and any(folder.iterdir()):
+                parser.error("--smoke-ui requires empty repository and config directories")
     append_smoke("args-parsed")
 
     from PySide6.QtCore import QLockFile, QTimer
@@ -131,6 +139,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.repo_and_save:
         store.save({"repo_root": args.repo_and_save})
     facade = MemoryFacade(store)
+    if args.smoke_ui:
+        from .smoke_ui import run_ui_smoke
+        try:
+            return run_ui_smoke(app, facade, args.evidence_dir)
+        finally:
+            lock.unlock()
     if args.smoke_graph or args.smoke_float or args.smoke_float_stable:
         # Packaging QA path: instantiate the real local WebEngine island and
         # let it load its qrc WebChannel bootstrap and graph assets. This is
@@ -148,7 +162,7 @@ def main(argv: list[str] | None = None) -> int:
             append_smoke("no-webengine")
             print("图谱 WebEngine 未创建（请使用 Windows 图形平台运行 smoke-graph）", file=sys.stderr)
             return 3
-        failure = {"message": ""}
+        failure = {"message": "", "checked": False}
 
         def record_status(message: str) -> None:
             append_smoke(f"status={message}")
@@ -158,7 +172,8 @@ def main(argv: list[str] | None = None) -> int:
         graph.statusMessage.connect(record_status)
         def stop_smoke() -> None:
             append_smoke("timer")
-            app.quit()
+            failure["message"] = "图谱验收超时，未完成就绪或动效检查"
+            app.exit(3)
 
         def check_graph_ready() -> None:
             if graph.web_view is None:
@@ -199,6 +214,7 @@ def main(argv: list[str] | None = None) -> int:
                 failure["message"] = "图谱脚本未完成 WebChannel/Sigma 渲染"
                 app.quit()
                 return
+            failure["checked"] = True
             graph.web_view.page().runJavaScript(
                 "window.mshubDiagRender ? window.mshubDiagRender() : 'no-diag-render'",
                 lambda value: append_smoke(f"diag-render={value}"),
@@ -249,7 +265,7 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 app.quit()
 
-        QTimer.singleShot(5000 if args.smoke_graph else 15000, stop_smoke if args.smoke_graph else (lambda: None))
+        QTimer.singleShot(15000 if args.smoke_graph else 30000, graph, stop_smoke)
         # smoke-float 需要等异步暖缓存 + WebChannel 握手 + 页面 render 完成，
         # 2.5s 对真实库偏紧（曾实测 nodes=0 的假就绪），放宽到 4.5s。
         QTimer.singleShot(2500 if args.smoke_graph else 4500, check_graph_ready)
@@ -257,7 +273,7 @@ def main(argv: list[str] | None = None) -> int:
         result = int(app.exec())
         append_smoke(f"after-exec={result}")
         lock.unlock()
-        if failure["message"]:
+        if failure["message"] or not failure["checked"]:
             print(failure["message"], file=sys.stderr)
             return 3
         return result

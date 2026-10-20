@@ -15,6 +15,7 @@ class JobController(QObject):
         self._callbacks = {}
         self._retry_callbacks = {}
         self._mutations = set()
+        self._last_state = None
         self.timer = QTimer(self)
         self.timer.setInterval(200)
         self.timer.timeout.connect(self.poll)
@@ -56,7 +57,8 @@ class JobController(QObject):
         return job
 
     def poll(self):
-        for job in self.manager.list_jobs():
+        rows = self.manager.list_jobs()
+        for job in rows:
             if job["status"] != "running" and job["id"] not in self._observed:
                 identifier = job["id"]
                 self._observed.add(identifier)
@@ -67,7 +69,14 @@ class JobController(QObject):
                 if identifier in self._mutations:
                     self._mutations.discard(identifier)
                     self.repositoryChanged.emit()
-        self.changed.emit()
+        active = {job["id"] for job in rows}
+        self._observed.intersection_update(active)
+        for identifier in set(self._retry_callbacks) - active:
+            self._retry_callbacks.pop(identifier, None)
+        state = tuple(tuple(job.get(key) for key in ("id", "status", "progress", "phase", "detail", "error")) for job in rows)
+        if state != self._last_state:
+            self._last_state = state
+            self.changed.emit()
 
     def list(self):
         return sorted(self.manager.list_jobs(), key=lambda j: j["created_at"], reverse=True)

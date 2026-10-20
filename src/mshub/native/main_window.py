@@ -44,7 +44,7 @@ from .branding import apply_brand_icon, show_about
 from .ui import label_controls, show_toast
 from .ui_icons import decorate_controls, tinted_icon
 from .shell_widgets import NAV_COUNT_ALERT_ROLE, NAV_COUNT_ROLE, NavigationDelegate, TaskActivityIcon
-from .navigation_symbols import STITCH_NAV_SVGS
+from .haui import icons as haui_icons
 from .. import __version__
 if TYPE_CHECKING:
     from .views.graph_view import GraphView
@@ -54,7 +54,7 @@ from .views.skill_view import SkillsPage, SecurityPage
 from .views.import_view import ImportDialog
 
 
-_NAV_SVGS = STITCH_NAV_SVGS
+_NAV_SVGS = haui_icons()
 
 
 def _nav_icon(key: str, mode: str) -> QIcon:
@@ -111,14 +111,14 @@ class MainWindow(QMainWindow):
         outer = QHBoxLayout(container)
         # v1.7.4：侧边栏浮动面板——四边 16px 外边距；侧栏与内容区的 16px
         # 间隙由 splitter 把手宽度提供（把手已透明化）。圆角 16 在 theme.py。
-        outer.setContentsMargins(8, 8, 8, 8)
+        outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
         self.sidebar = QFrame()
         self.sidebar.setObjectName("sidebar")
         # The 14px brand plus the v1.10.0D micro version pill must remain
         # readable at the normal desktop breakpoint; 236px is the minimum
         # width that keeps the three brand elements on one line.
-        self.sidebar.setMinimumWidth(236)
+        self.sidebar.setMinimumWidth(248)
         # v1.7.2：上限从 236 放宽，配合 QSplitter 支持鼠标拖宽侧栏
         self.sidebar.setMaximumWidth(560)
         # Hermes Mono is flat; keep the effect object for the existing theme
@@ -128,10 +128,10 @@ class MainWindow(QMainWindow):
         self.sidebar_shadow.setOffset(0, 0)
         self.sidebar.setGraphicsEffect(self.sidebar_shadow)
         sidebar_layout = QVBoxLayout(self.sidebar)
-        sidebar_layout.setContentsMargins(12, 18, 12, 12)
+        sidebar_layout.setContentsMargins(16, 24, 16, 16)
         self.brand_label = QLabel("123 MSHub", objectName="brandName")
         self.brand_label.setAccessibleName("123 MSHub")
-        self.brand_label.setFont(QFont(ensure_brand_fonts(), 14, 700))
+        self.brand_label.setFont(QFont("Space Grotesk Light", 12, QFont.Weight.DemiBold))
         self.brand_subtitle = QLabel("本地共享记忆与技能")
         self.brand_subtitle.setObjectName("muted")
         self.brand_logo = QLabel(objectName="brandLogo")
@@ -139,7 +139,7 @@ class MainWindow(QMainWindow):
         brand_row = QHBoxLayout()
         # Keep the 14px template brand and the v1.10.0D pill on one line in
         # the fixed-width Silk sidebar; the compact gap preserves hierarchy.
-        brand_row.setSpacing(2)
+        brand_row.setSpacing(8)
         brand_row.addWidget(self.brand_logo)
         brand_row.addWidget(self.brand_label, 1)
         self.brand_version = QLabel(f"v{__version__}")
@@ -156,7 +156,7 @@ class MainWindow(QMainWindow):
         self.nav.setAccessibleName("主导航")
         # 导航是鼠标/触控入口；去掉 QAbstractItemView 默认的整块焦点框，
         # 避免模板里的浮起胶囊被一圈高亮矩形包住。点击导航仍会切换页面。
-        self.nav.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.nav.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.nav.setFont(QFont(ensure_brand_fonts(), 13, QFont.Weight.Bold))
         self.nav.setItemDelegate(NavigationDelegate(self.nav))
         self.nav.setIconSize(QSize(20, 20))
@@ -295,7 +295,7 @@ class MainWindow(QMainWindow):
         # v1.7.4：把手加宽为 16 充当浮动侧栏与内容区的间隙（把手透明，见 theme.py）
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
         self.splitter.setChildrenCollapsible(False)
-        self.splitter.setHandleWidth(16)
+        self.splitter.setHandleWidth(6)
         self.splitter.addWidget(self.sidebar)
 
         self.pages = QStackedWidget()
@@ -358,7 +358,9 @@ class MainWindow(QMainWindow):
         # 延迟挂网是刻意的——不能回退 v1.8.1 的首帧优化；singleShot 排在
         # QApplication 就绪之后（v1.8.1 教训：排在创建之前会静默不触发）。
         self.update_scope = RequestScope(self.runner, self)
-        QTimer.singleShot(8000, self._startup_update_check)
+        self.sync_scope = RequestScope(self.runner, self)
+        self.settings_page.syncPreferencesChanged.connect(self._sync_preferences_changed)
+        QTimer.singleShot(8000, self, self._startup_update_check)
 
     def _startup_update_check(self) -> None:
         """v1.9.1（需求 A）：启动自动检查更新——失败静默放弃，发现新版仅轻提示。"""
@@ -396,6 +398,7 @@ class MainWindow(QMainWindow):
 
     def _settings_saved(self, _config) -> None:
         """v1.7.4：设置保存（含两个清除入口）后，把所有数据页拉一次新。"""
+        self.sync_scope.cancel_all()
         for key in ("memory", "skills", "security"):
             self._set_nav_count(key, 0)
         self.memory_page.refresh()
@@ -404,7 +407,7 @@ class MainWindow(QMainWindow):
         if self.graph_page is not None:
             self.graph_page.refresh_graph()
         # v1.11.2：保存设置后立即尝试同步一次——刚填好「自动同步来源」不必等下次启动
-        QTimer.singleShot(600, self._startup_auto_sync)
+        QTimer.singleShot(600, self, self._startup_auto_sync)
 
     def _apply_sidebar_shadow(self, mode: str) -> None:
         """v1.7.4：浮动侧栏投影颜色随主题；v1.10.0 任务悬浮卡投影同走这里。"""
@@ -422,7 +425,7 @@ class MainWindow(QMainWindow):
         if hasattr(self, "brand_label"):
             brand_size = 36
             self.brand_logo.setFixedSize(brand_size, brand_size)
-            self.brand_label.setFont(QFont(ensure_brand_fonts(), 13 if compact else 14, 700))
+            self.brand_label.setFont(QFont("Space Grotesk Light", 12, QFont.Weight.DemiBold))
             self.brand_label.setText("123" if compact else "123 MSHub")
             self.brand_subtitle.setVisible(not compact)
             self.brand_version.setVisible(not compact)
@@ -482,7 +485,7 @@ class MainWindow(QMainWindow):
         # 首次显示布局稳定后应用任务面板布局（singleShot(0) 等布局结算完成）
         if not getattr(self, "_job_layout_applied", False):
             self._job_layout_applied = True
-            QTimer.singleShot(0, lambda: self._apply_job_layout(54 if self._jobs_collapsed else self._job_panel_height()))
+            QTimer.singleShot(0, self, lambda: self._apply_job_layout(54 if self._jobs_collapsed else self._job_panel_height()))
 
     def _save_job_layout(self) -> None:
         if not self._jobs_collapsed:
@@ -708,12 +711,16 @@ class MainWindow(QMainWindow):
         # v1.6.0：预热 GraphView，消除首次点击"记忆图示"时的 QWebEngine 冷启动闪屏。
         # v1.8.1：预热整体提前到 show 之前（见 show_after_graph_prewarm），这里保留
         # 幂等兜底——万一预热被跳过（异常路径），启动 500ms 后仍会补一次。
-        QTimer.singleShot(500, self._prewarm_graph_page)
+        QTimer.singleShot(500, self, self._prewarm_graph_page)
         # v1.7.2：未配置仓库路径 / AI 密钥时弹窗说明哪些功能不可用 + 三步上手流程。
-        QTimer.singleShot(600, self._maybe_show_setup_hint)
+        QTimer.singleShot(600, self, self._maybe_show_setup_hint)
         # v1.11.2：启动后后台自动同步上次导入来源的记忆——dry_run 预判，无变化完全
         # 静默；有变化才以任务形式提交（单线程队列，与手动导入互斥），完成自动刷新。
-        QTimer.singleShot(2200, self._startup_auto_sync)
+        QTimer.singleShot(2200, self, self._startup_auto_sync)
+
+    def _sync_preferences_changed(self) -> None:
+        self.sync_scope.cancel_all()
+        QTimer.singleShot(0, self, self._startup_auto_sync)
 
     def _startup_auto_sync(self) -> None:
         """v1.11.2：只读预判外部来源是否有记忆更新；失败静默，绝不影响启动。"""
@@ -728,22 +735,34 @@ class MainWindow(QMainWindow):
         if not source_text or not Path(source_text).is_dir():
             return
         source = Path(source_text)
-        handle = self.runner.submit(self.facade.sync_memory_incremental, source_text, dry_run=True)
-        handle.signals.finished.connect(
-            lambda _identifier, payload: self._auto_sync_apply(payload, source_text, source)
+        snapshot = self._sync_identity(config)
+        self.sync_scope.call(
+            "auto-sync", self.facade.sync_memory_incremental,
+            lambda payload: self._auto_sync_apply(payload, source_text, source, snapshot),
+            lambda _error: None, source_text, dry_run=True,
         )
-        handle.signals.failed.connect(lambda _identifier, _payload: None)
 
-    def _auto_sync_apply(self, payload: object, source_text: str, source: Path) -> None:
+    @staticmethod
+    def _sync_identity(config) -> tuple:
+        return (config.repo_root, config.memory_root_override,
+                str(config.auto_sync_source or config.last_import_source or "").strip(),
+                bool(config.auto_sync_on_startup))
+
+    def _auto_sync_apply(self, payload: object, source_text: str, source: Path, snapshot=None) -> None:
+        snapshot = snapshot or self._sync_identity(self.facade.config())
+        if snapshot != self._sync_identity(self.facade.config()) or not snapshot[-1]:
+            return
         result = payload if isinstance(payload, dict) else {}
         if not result.get("changed"):
             # v1.11.3 修复：无更新也报告一次——同步在跑但不可见，用户无从分辨"没配好"
             self.statusBar().showMessage(f"自动同步完成：来源无更新（{source.name}）", 8000)
             return
-        self.jobs.submit(
-            "import", f"自动同步记忆 · {source.name or source}",
-            lambda: self.facade.sync_memory_incremental(source_text),
-        )
+        def sync_current_source():
+            if snapshot != self._sync_identity(self.facade.config()):
+                return {"skipped": True, "summary": "同步配置已变更，已跳过旧任务"}
+            return self.facade.sync_memory_incremental(source_text)
+
+        self.jobs.submit("import", f"自动同步记忆 · {source.name or source}", sync_current_source)
         self.statusBar().showMessage(
             f"检测到来源记忆更新：新增 {len(result.get('imported') or [])} 条、"
             f"更新 {len(result.get('updated') or [])} 条，已提交后台同步"
@@ -766,7 +785,7 @@ class MainWindow(QMainWindow):
 
             def eventFilter(self, obj, ev) -> bool:  # noqa: N803 - Qt virtual method name
                 if ev.type() == QEvent.Type.WinIdChange:
-                    QTimer.singleShot(150, self._on_recreate)
+                    QTimer.singleShot(150, self, self._on_recreate)
                 return False
 
         revealed = {"done": False}
@@ -777,13 +796,13 @@ class MainWindow(QMainWindow):
             revealed["done"] = True
             self.removeEventFilter(self._reveal_spy)
             self.show()
-            QTimer.singleShot(0, self.startup)
+            QTimer.singleShot(0, self, self.startup)
 
         # Spy 实例必须挂在 self 上保活：局部实例被 GC 时过滤器会被静默卸载。
         self._reveal_spy = _RevealOnRecreate(reveal)
         self._reveal_spy.setParent(self)
         self.installEventFilter(self._reveal_spy)
-        QTimer.singleShot(timeout_ms, reveal)
+        QTimer.singleShot(timeout_ms, self, reveal)
         try:
             self._ensure_graph_page()
         except Exception:
@@ -904,7 +923,7 @@ class MainWindow(QMainWindow):
         import logging
 
         expected = ensure_brand_fonts()
-        for name, widget in (("brand", self.brand_label), ("nav", self.nav)):
+        for name, widget in (("nav", self.nav),):
             actual = QFontInfo(widget.font()).family()
             if actual != expected:
                 logging.getLogger(__name__).warning("%s font fallback: expected %s, got %s", name, expected, actual)

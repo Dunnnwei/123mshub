@@ -9,7 +9,7 @@ from PySide6.QtWidgets import QApplication, QHBoxLayout, QLabel, QVBoxLayout, QW
 
 from ..graph_bridge import GraphBridge
 from ..memory_facade import MemoryFacade
-from ..task_runner import TaskRunner
+from ..task_runner import TaskRunner, RequestScope
 from ..ui import HeaderBand, copy_agent_prompt, make_agent_prompt_button
 
 try:  # QtWebEngine is part of the native extra, but keep service imports usable without it.
@@ -28,7 +28,7 @@ if _WEB_ENGINE_AVAILABLE:
         def javaScriptConsoleMessage(self, level, message, lineNumber, sourceID):  # noqa: N802
             # A worker fallback may log a warning; only script errors make the
             # smoke path fail.  Never surface source text or repository data.
-            if int(level) >= 2:
+            if level == QWebEnginePage.JavaScriptConsoleMessageLevel.ErrorMessageLevel:
                 self.consoleError.emit(f"{message}（{sourceID}:{lineNumber}）")
 
     class _LocalOnlyInterceptor(QWebEngineUrlRequestInterceptor):
@@ -48,6 +48,7 @@ class GraphView(QWidget):
         super().__init__(parent)
         self.facade = facade
         self.runner = runner or TaskRunner(self)
+        self.scope = RequestScope(self.runner, self)
         self.bridge = GraphBridge(facade, theme, self)
         self._profile = None
         self.web_view = None
@@ -56,26 +57,21 @@ class GraphView(QWidget):
         self._warm_graph_cache()
 
     def _warm_graph_cache(self) -> None:
-        handle = self.runner.submit(self.facade.graph, "link")
-
-        def ready(_identifier: int, payload: object) -> None:
+        def ready(payload: object) -> None:
             if isinstance(payload, dict):
                 self.bridge.set_graph_cache("link", payload)
-
-        handle.signals.finished.connect(ready)
+        self.scope.call("graph", self.facade.graph, ready, lambda _error: None, "link")
 
     def refresh_graph(self) -> None:
         """Invalidate the read cache and ask the local page to reload data."""
         self.bridge.invalidate()
-        handle = self.runner.submit(self.facade.graph, "link")
-
-        def ready(_identifier, payload):
+        def ready(payload):
             if isinstance(payload, dict):
                 self.bridge.set_graph_cache("link", payload)
                 if self.web_view is not None:
                     self.web_view.page().runJavaScript("window.mshubReloadGraph && window.mshubReloadGraph()")
 
-        handle.signals.finished.connect(ready)
+        self.scope.call("graph", self.facade.graph, ready, self.statusMessage.emit, "link")
 
     @staticmethod
     def graph_asset_path() -> Path:
@@ -87,8 +83,8 @@ class GraphView(QWidget):
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(14, 12, 14, 12)
-        layout.setSpacing(10)
+        layout.setContentsMargins(28, 24, 28, 16)
+        layout.setSpacing(16)
         # v1.10.0D：图谱与其余四页共用 Stitch 页头层级；图谱岛内部只
         # 保留搜索、筛选、画布和节点浏览，不再显示第二个偏大的标题。
         band = HeaderBand("记忆关系", "记忆图示", "双链关系在画布上自然展开；悬停节点查看关联。")
@@ -104,7 +100,9 @@ class GraphView(QWidget):
             layout.addWidget(label, 1)
             return
         self.web_view = QWebEngineView(self)
-        config_dir = self.facade.config_store.config_dir / "web-profile"
+        # Chromium's profile/cache paths must be absolute. A relative
+        # --config-dir can otherwise stall renderer IPC for many seconds.
+        config_dir = (self.facade.config_store.config_dir / "web-profile").expanduser().resolve()
         config_dir.mkdir(parents=True, exist_ok=True)
         (config_dir / "cache").mkdir(parents=True, exist_ok=True)
         self._profile = QWebEngineProfile("123mshub-native", self)
