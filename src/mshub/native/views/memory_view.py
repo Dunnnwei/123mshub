@@ -87,6 +87,7 @@ class MemoryPage(ShiftRangeCheckMixin, AdaptivePage):
         self._request_id = 0; self._current_name = ""; self._creating = False; self._loading = False; self._dirty = False; self._refreshing_listing = False; self._items: list[dict[str, Any]] = []
         # 每行的文字控件引用：刷新/重译后统一复位行内样式（见 _paint_selected_rows）
         self._row_meta: list[dict[str, Any]] = []
+        self._sort_key, self._sort_descending = "updated", True
         self._build_ui()
 
     def _build_ui(self):
@@ -107,7 +108,7 @@ class MemoryPage(ShiftRangeCheckMixin, AdaptivePage):
         root.addWidget(stats_widget)
         toolbar = QHBoxLayout(); toolbar.setSpacing(10); self.search = QLineEdit(); self.search.setPlaceholderText("搜索标题、描述、标签或正文全文"); self.search.setAccessibleName("搜索记忆"); self.search.setAccessibleDescription("搜索标题、描述、标签或正文全文"); self.search.setClearButtonEnabled(True); self.search.textChanged.connect(self.refresh); toolbar.addWidget(self.search, 1)
         self.type_filter = QComboBox(); self.type_filter.addItem("全部类型", ""); [self.type_filter.addItem(label, value) for label, value in TYPE_OPTIONS]; self.type_filter.currentIndexChanged.connect(self.refresh); toolbar.addWidget(self.type_filter)
-        self.sort = QComboBox(); self.sort.addItem("最近更新", "updated"); self.sort.addItem("创建时间", "created"); self.sort.addItem("名称", "name"); self.sort.currentIndexChanged.connect(self.refresh); toolbar.addWidget(self.sort)
+        self.sort = QComboBox(); self.sort.addItem("最近更新", "updated"); self.sort.addItem("创建时间", "created"); self.sort.addItem("名称", "name"); self.sort.addItem("关联标签", "tags"); self.sort.addItem("分类", "type"); self.sort.addItem("来源渠道", "source"); self.sort.currentIndexChanged.connect(self._sort_changed); toolbar.addWidget(self.sort)
         self.inbox_button = QPushButton("投递箱"); self.inbox_button.clicked.connect(self.open_inbox); toolbar.addWidget(self.inbox_button); root.addLayout(toolbar)
         self.batch_bar = QWidget(); batch = FlowLayout(self.batch_bar, spacing=8); self.batch_hint = QLabel("勾选列表中的条目进行批量操作"); self.batch_hint.setObjectName("muted"); batch.addWidget(self.batch_hint); self.batch_type = QComboBox(); self.batch_type.addItem("批量改分类…", ""); [self.batch_type.addItem(label, value) for label, value in TYPE_OPTIONS]; batch.addWidget(self.batch_type); self.batch_type.activated.connect(self.batch_update_type); self.batch_tags = QLineEdit(); self.batch_tags.setPlaceholderText("批量标签（逗号）"); self.batch_tags.setMaximumWidth(180); batch.addWidget(self.batch_tags); bt = QPushButton("应用标签"); bt.clicked.connect(self.batch_update_tags); batch.addWidget(bt); ai = QPushButton("AI 补全主题"); ai.clicked.connect(self.batch_ai); batch.addWidget(ai); bd = QPushButton("批量删除"); bd.setObjectName("danger"); bd.setToolTip(SOFT_DELETE_MEMORY_TIP + "\n（批量操作对勾选的每一条执行同样的软删除；列表聚焦时也可按 Delete 键触发。）"); bd.clicked.connect(self.batch_delete); batch.addWidget(bd); root.addWidget(self.batch_bar); self.batch_bar.hide()
         splitter = QSplitter(Qt.Orientation.Horizontal); splitter.setChildrenCollapsible(False)
@@ -121,12 +122,20 @@ class MemoryPage(ShiftRangeCheckMixin, AdaptivePage):
         self.master_check.setToolTip("勾选/取消当前列表全部条目")
         self.master_check.toggled.connect(self._toggle_all_rows)
         hlay.addWidget(self.master_check)
-        hlay.addWidget(QLabel("记忆条目 / 语义摘要"))
-        hlay.addStretch(1)
         # 列宽常量与数据行严格一致（行内同名列用 setFixedWidth 对齐）
         self._col_tags, self._col_type, self._col_source, self._col_time = 116, 62, 104, 86
-        for text, width in (("关联标签", self._col_tags), ("分类", self._col_type), ("来源渠道", self._col_source), ("同步时间", self._col_time)):
-            col = QLabel(text); col.setFixedWidth(width); col.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter); hlay.addWidget(col)
+        self.sort_headers: dict[str, QPushButton] = {}
+        for key, text, width in (("name", "记忆条目 / 语义摘要", 0), ("tags", "关联标签", self._col_tags), ("type", "分类", self._col_type), ("source", "来源渠道", self._col_source), ("updated", "同步时间", self._col_time)):
+            col = QPushButton(text)
+            col.setObjectName("memorySortHeader")
+            col.setProperty("i18n_text", text)
+            col.setCursor(Qt.CursorShape.PointingHandCursor)
+            col.clicked.connect(lambda _checked=False, key=key: self._sort_header_clicked(key))
+            self.sort_headers[key] = col
+            if width:
+                col.setFixedWidth(width)
+            hlay.addWidget(col, 0 if width else 1)
+        self._update_sort_headers()
         card_layout.addWidget(header_row)
         self.entry_list = QListWidget(); self.entry_list.setObjectName("memoryList"); self.entry_list.setAccessibleName("记忆条目列表"); self.entry_list.setAccessibleDescription("使用方向键选择，Enter 或双击编辑"); self.entry_list.setMinimumWidth(340); self.entry_list.currentItemChanged.connect(self._selection_changed); self.entry_list.itemDoubleClicked.connect(lambda _item: self.edit_selected())
         self._rich_tooltip = RichHoverToolTip(self.entry_list, self._memory_tooltip_text)
@@ -204,17 +213,54 @@ class MemoryPage(ShiftRangeCheckMixin, AdaptivePage):
 
     def refresh(self, *_): self._request_id += 1; self._timer.start()
 
-    def _refresh_now(self):
+    def _refresh_now(self, *, scroll_to_top=False):
         rid = self._request_id; query = self.search.text().strip(); type_filter = str(self.type_filter.currentData() or ""); sort = str(self.sort.currentData() or "updated")
-        self.scope.call("list", self.facade.list_entries, lambda result: self._apply_listing(result) if rid == self._request_id else None, lambda msg: self._set_status(f"读取失败：{msg}", error=True), query=query, type_filter=type_filter, sort=sort)
+        self.scope.call("list", self.facade.list_entries, lambda result: self._apply_listing(result, scroll_to_top=scroll_to_top) if rid == self._request_id else None, lambda msg: self._set_status(f"读取失败：{msg}", error=True), query=query, type_filter=type_filter, sort=sort)
 
     def refresh_sync(self):
         self._timer.stop(); result = self.facade.list_entries(query=self.search.text().strip(), type_filter=str(self.type_filter.currentData() or ""), sort=str(self.sort.currentData() or "updated")); self._apply_listing(result); return result
 
-    def _apply_listing(self, result):
+    def _sort_changed(self, *_):
+        self._sort_key = str(self.sort.currentData() or "updated")
+        self._sort_descending = self._sort_key in {"updated", "created"}
+        self._resort_listing()
+
+    def _sort_header_clicked(self, key: str):
+        self._sort_descending = (not self._sort_descending if key == self._sort_key
+                                 else key in {"updated", "created"})
+        self._sort_key = key
+        blocked = self.sort.blockSignals(True)
+        self.sort.setCurrentIndex(self.sort.findData(key))
+        self.sort.blockSignals(blocked)
+        self._resort_listing()
+
+    def _update_sort_headers(self):
+        for key, button in self.sort_headers.items():
+            label = tr(str(button.property("i18n_text")))
+            arrow = (" ↓" if self._sort_descending else " ↑") if key == self._sort_key else ""
+            button.setText(label + arrow)
+            button.setAccessibleName(label + arrow)
+
+    def _resort_listing(self):
+        self._update_sort_headers()
+        if hasattr(self, "_last_result"):
+            self._apply_listing(self._last_result, scroll_to_top=True)
+        # Replace any older pending read: its eventual selection restoration
+        # must not undo this explicit jump, nor discard an outstanding filter.
+        if self._timer.isActive() or "list" in self.scope.pending:
+            self._timer.stop()
+            self._refresh_now(scroll_to_top=True)
+
+    def _apply_listing(self, result, *, scroll_to_top=False):
         self.invalidate_shift_anchor()  # v1.9.1：行号即将重建，旧 Shift 锚点作废（审查 P1-3）
+        checked = set(self._selected_names())
         self._last_result = result
         self._items = list(result.get("items") or [])
+        self._items.sort(key=lambda item: str(item.get("name") or "").casefold())
+        def sort_value(item):
+            value = item.get(self._sort_key) or ""
+            return (", ".join(value) if isinstance(value, list) else str(value)).casefold()
+        self._items.sort(key=sort_value, reverse=self._sort_descending)
         selected = self._current_name
         had_current = bool(selected)
         auto_load_name = ""
@@ -242,6 +288,7 @@ class MemoryPage(ShiftRangeCheckMixin, AdaptivePage):
                 check = QCheckBox()
                 check.setAccessibleName(f"选择 {item.get('title') or item.get('name') or '记忆条目'}")
                 check.setProperty("memory_name", item.get("name", ""))
+                check.setChecked(item.get("name", "") in checked)
                 check.stateChanged.connect(lambda _state: self._update_batch_bar())
                 lay.addWidget(check)
                 self._hook_shift_checkbox(check, len(self._row_checks))  # v1.9.0：Shift 连选
@@ -315,14 +362,20 @@ class MemoryPage(ShiftRangeCheckMixin, AdaptivePage):
             self.entry_list.blockSignals(was_blocked)
             self._refreshing_listing = False
         # 刷新/保存后滚回原选中行（不再跳回列表开头），并复位行内文字样式
-        if target >= 0:
+        if scroll_to_top:
+            self.entry_list.doItemsLayout()
+            self.entry_list.scrollToTop()
+        elif target >= 0:
             current_item = self.entry_list.item(target)
             if current_item is not None:
                 self.entry_list.scrollToItem(current_item, QAbstractItemView.ScrollHint.PositionAtCenter)
         self._paint_selected_rows()
         if auto_load_name:
             self._load_detail(auto_load_name)
-        self._apply_stats(result); self.empty_card.setVisible(not self._items); self.content_splitter.setVisible(bool(self._items)); self.edit_window_button.setEnabled(bool(self._items)); self.batch_bar.setVisible(False); self._set_status(f"已刷新 {len(self._items)} 条")
+        self._apply_stats(result); self.empty_card.setVisible(not self._items); self.content_splitter.setVisible(bool(self._items)); self.edit_window_button.setEnabled(bool(self._items)); self._update_batch_bar(); self._set_status(f"已刷新 {len(self._items)} 条")
+        blocked = self.master_check.blockSignals(True)
+        self.master_check.setChecked(bool(self._items) and len(self._selected_names()) == len(self._items))
+        self.master_check.blockSignals(blocked)
 
     def _apply_stats(self, result):
         stats = result.get("stats") or {"total": len(self._items), "inbox_pending": result.get("inbox_pending", 0), "types": {}}
@@ -339,6 +392,7 @@ class MemoryPage(ShiftRangeCheckMixin, AdaptivePage):
 
     def retranslate(self):
         self._equalize_header_actions()
+        self._update_sort_headers()
         self.shift_hint.setText(tr(SHIFT_RANGE_HINT))
         if hasattr(self, "_last_result"):
             self._apply_listing(self._last_result)

@@ -1,0 +1,193 @@
+{
+  "version": "1.12.1",
+  "frozen": true,
+  "platform": "windows",
+  "scale": "1",
+  "checks": {
+    "startup-and-memory-list": true,
+    "async-editor-save": true,
+    "memory-search": true,
+    "memory-search-reset": true,
+    "local-webengine-loaded": true,
+    "webengine-callback": true,
+    "graph-data-ready": true,
+    "graph-local-fonts": true,
+    "startup-recovers-synced-skill": true,
+    "security-list": true,
+    "appearance-settings-save": true,
+    "background-task-complete": true,
+    "memory-all-header-sorts-at-top": true,
+    "skills-all-header-sorts-at-top": true
+  },
+  "screenshots": [
+    {
+      "file": "memory-light.png",
+      "width": 2160,
+      "height": 1308,
+      "dpr": 1.5
+    },
+    {
+      "file": "memory-editor.png",
+      "width": 1650,
+      "height": 1044,
+      "dpr": 1.5
+    },
+    {
+      "file": "memory-preview.png",
+      "width": 1650,
+      "height": 1044,
+      "dpr": 1.5
+    },
+    {
+      "file": "memory-selection.png",
+      "width": 2160,
+      "height": 1308,
+      "dpr": 1.5
+    },
+    {
+      "file": "memory-dark.png",
+      "width": 2160,
+      "height": 1308,
+      "dpr": 1.5
+    },
+    {
+      "file": "graph-dark.png",
+      "width": 2160,
+      "height": 1308,
+      "dpr": 1.5
+    },
+    {
+      "file": "graph-settings.png",
+      "width": 2160,
+      "height": 1308,
+      "dpr": 1.5
+    },
+    {
+      "file": "graph-light.png",
+      "width": 2160,
+      "height": 1308,
+      "dpr": 1.5
+    },
+    {
+      "file": "skills-light.png",
+      "width": 2160,
+      "height": 1308,
+      "dpr": 1.5
+    },
+    {
+      "file": "skill-add.png",
+      "width": 1170,
+      "height": 840,
+      "dpr": 1.5
+    },
+    {
+      "file": "skill-metadata.png",
+      "width": 1650,
+      "height": 1044,
+      "dpr": 1.5
+    },
+    {
+      "file": "security-light.png",
+      "width": 2160,
+      "height": 1308,
+      "dpr": 1.5
+    },
+    {
+      "file": "security-dark.png",
+      "width": 2160,
+      "height": 1308,
+      "dpr": 1.5
+    },
+    {
+      "file": "settings-0-dark.png",
+      "width": 2160,
+      "height": 1308,
+      "dpr": 1.5
+    },
+    {
+      "file": "settings-1-dark.png",
+      "width": 2160,
+      "height": 1308,
+      "dpr": 1.5
+    },
+    {
+      "file": "settings-2-dark.png",
+      "width": 2160,
+      "height": 1308,
+      "dpr": 1.5
+    },
+    {
+      "file": "settings-everforest.png",
+      "width": 2160,
+      "height": 1308,
+      "dpr": 1.5
+    },
+    {
+      "file": "about.png",
+      "width": 660,
+      "height": 495,
+      "dpr": 1.5
+    },
+    {
+      "file": "import-preview.png",
+      "width": 1380,
+      "height": 975,
+      "dpr": 1.5
+    },
+    {
+      "file": "confirmation.png",
+      "width": 441,
+      "height": 155,
+      "dpr": 1.5
+    },
+    {
+      "file": "task-panel.png",
+      "width": 2160,
+      "height": 1308,
+      "dpr": 1.5
+    },
+    {
+      "file": "memory-english.png",
+      "width": 2160,
+      "height": 1308,
+      "dpr": 1.5
+    },
+    {
+      "file": "memory-minimum-size.png",
+      "width": 1440,
+      "height": 960,
+      "dpr": 1.5
+    },
+    {
+      "file": "memory-sort-top.png",
+      "width": 1920,
+      "height": 1230,
+      "dpr": 1.5
+    },
+    {
+      "file": "skills-sort-top.png",
+      "width": 1920,
+      "height": 1230,
+      "dpr": 1.5
+    }
+  ],
+  "errors": [],
+  "body_font": "Microsoft YaHei UI",
+  "title_font": "Space Grotesk Light",
+  "brand_font": "Space Grotesk Light",
+  "version_font": "JetBrains Mono",
+  "cjk_glyphs": true,
+  "graph_messages": [],
+  "graph": {
+    "system": "HAUI",
+    "ready": true,
+    "nodes": 7,
+    "edges": 7,
+    "bg": "rgb(13, 17, 23)",
+    "overflow": false,
+    "fonts": true,
+    "light_bg": "rgb(255, 255, 255)",
+    "frames_differ": true
+  },
+  "passed": true
+}

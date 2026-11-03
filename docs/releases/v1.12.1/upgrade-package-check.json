@@ -1,0 +1,9 @@
+{
+  "version": "1.12.1",
+  "production_upgrader_identical_to_v1120": true,
+  "safe_extraction": true,
+  "payload_root_found": true,
+  "manifest_hashes_checked": 238,
+  "zip_sha256": "24ec05d4045be81de810ce1614d09aa934e3b6be615ecfef4df4d340f6742514",
+  "running_install_replacement_tested": false
+}

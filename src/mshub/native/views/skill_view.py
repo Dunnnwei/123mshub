@@ -231,6 +231,8 @@ class SkillsPage(ShiftRangeCheckMixin, CheckableTableMixin, AdaptivePage):
 
     def _apply_rows(self):
         self.invalidate_shift_anchor()  # v1.9.1：行号即将重建，旧 Shift 锚点作废（审查 P1-3）
+        keep_top = (self._sort_col is not None and not self._pending_focus
+                    and self.table.verticalScrollBar().value() == 0)
         # v1.7.4：重建行前记住勾选与选中项，排序/刷新后不丢多选，并跳回原选中行
         checked = {(name, library) for name, library in self.table.selected_names()}
         previous = self.current
@@ -265,6 +267,8 @@ class SkillsPage(ShiftRangeCheckMixin, CheckableTableMixin, AdaptivePage):
             self.table.setRowHeight(row, 52)
         self.empty_card.setVisible(not self.items); self.content_splitter.setVisible(bool(self.items)); self._set_status(f"已加载 {len(self.items)} 项")
         self._restore_selection(focus, previous)
+        if keep_top:
+            self.table.scrollToTop()
 
     def _restore_selection(self, focus, previous):
         """v1.7.4：刷新/排序后选中原选中行（或编辑保存的目标行）并滚动到可视区。"""
@@ -940,6 +944,7 @@ class SecurityPage(ShiftRangeCheckMixin, CheckableTableMixin, AdaptivePage):
 
     def _apply(self, data):
         self.invalidate_shift_anchor()  # v1.9.1：行号即将重建，旧 Shift 锚点作废（审查 P1-3）
+        keep_top = self._sort_col is not None and self.table.verticalScrollBar().value() == 0
         self.items = list(data.get("items") or {})
         self.totalChanged.emit(len(self.items))
         self.pendingChanged.emit(sum(str(item.get("security_status") or "unchecked").casefold() != "safe" for item in self.items))
@@ -994,6 +999,8 @@ class SecurityPage(ShiftRangeCheckMixin, CheckableTableMixin, AdaptivePage):
             anchor = self.table.item(target, 1)
             if anchor is not None:
                 self.table.scrollToItem(anchor, QTableWidget.ScrollHint.PositionAtCenter)
+        if keep_top:
+            self.table.scrollToTop()
 
     def _security_tooltip_text(self, pos) -> str:
         row = self.table.rowAt(pos.y())

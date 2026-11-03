@@ -41,6 +41,10 @@ if ($LASTEXITCODE -ne 0) { throw "PyInstaller 打包失败。" }
 
 $root = $releaseRoot
 & (Join-Path $projectRoot "scripts\native\prune-webengine.ps1") -BundleRoot $root
+$exeVersion = (Get-Item -LiteralPath (Join-Path $root '123mshub.exe')).VersionInfo
+if ($exeVersion.FileVersion -ne $Version -or $exeVersion.ProductVersion -ne $Version) {
+    throw "EXE 版本资源与发布版本不一致，请更新 packaging/native/version-info.txt 后重新构建。"
+}
 $internal = Join-Path $root "_internal"
 foreach ($required in @(
     (Join-Path $root "123mshub.exe"),

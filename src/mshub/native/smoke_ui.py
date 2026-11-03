@@ -8,6 +8,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 from pathlib import Path
 import sys
 import time
@@ -80,6 +81,17 @@ def run_ui_smoke(app, facade, destination: Path) -> int:
         source.mkdir()
         (source / "SKILL.md").write_text("---\ndescription: 离线整理项目笔记并输出检查清单。\n---\n# 交付检查\n只读取指定的本地资料。\n", encoding="utf-8")
         facade.repository.install(str(source), item_name="release-review", local_dir_name="release-review", tags=["验收", "本地"])
+        # Simulate another PC syncing only a skill directory into a repository
+        # whose local database already contains one installed skill.
+        installed = facade.skills()["items"][0]
+        original = facade.repo_root() / installed["local_dir"]
+        synced = original.with_name("synced-at-startup")
+        shutil.copytree(original, synced)
+        manifest_file = synced / "_manifest.json"
+        manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
+        manifest["name"] = "synced-at-startup"
+        manifest_file.write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
+        assert len(facade.skills()["items"]) == 1
         window = MainWindow(facade)
         window._ui_settings().setValue("setupHint/suppressed", True)
         geometry = app.primaryScreen().availableGeometry()
@@ -152,7 +164,7 @@ def run_ui_smoke(app, facade, destination: Path) -> int:
         assert first != second, "Graph idle motion did not change rendered pixels"
 
         window.nav.setCurrentRow(2)
-        wait(lambda: len(window.skills_page.items) == 1, "skills-local-install")
+        wait(lambda: {item["name"] for item in window.skills_page.items} == {"release-review", "synced-at-startup"}, "startup-recovers-synced-skill")
         shot("skills-light")
         for name, dialog in (("skill-add", AddSkillDialog(window.skills_page)),
                              ("skill-metadata", MetadataDialog(window.skills_page, window.skills_page.items[0]))):
@@ -160,7 +172,7 @@ def run_ui_smoke(app, facade, destination: Path) -> int:
             shot(name, dialog)
             dialog.close()
         window.nav.setCurrentRow(3)
-        wait(lambda: len(window.security_page.items) == 1, "security-list")
+        wait(lambda: len(window.security_page.items) == 2, "security-list")
         shot("security-light")
         window.theme.apply("dark")
         shot("security-dark")
@@ -207,6 +219,47 @@ def run_ui_smoke(app, facade, destination: Path) -> int:
         window.language.apply("zh-CN")
         window.resize(960, 640)
         shot("memory-minimum-size")
+
+        # Exercise long-list scrolling through the real frozen widgets; these
+        # synthetic rows are presentation fixtures, never written to user data.
+        window.resize(1280, 820)
+        pump(.4)
+        page = window.memory_page
+        base = page._items[0]
+        page._apply_listing({"items": [{**base, "name": f"sort-{i:02}", "title": f"排序验收 {i:02}",
+                              "tags": [f"tag-{39-i:02}"], "source": ("manual", "imported")[i % 2],
+                              "updated": f"2026-10-{i % 28 + 1:02}"} for i in range(40)]})
+        page._row_checks[7].setChecked(True)
+        checked = set(page._selected_names())
+        for key, button in page.sort_headers.items():
+            for _ in range(2):
+                page.entry_list.scrollToBottom()
+                assert page.entry_list.verticalScrollBar().value() > 0
+                button.click()
+                assert page.entry_list.verticalScrollBar().value() == 0, key
+                assert set(page._selected_names()) == checked
+        report["checks"]["memory-all-header-sorts-at-top"] = True
+        shot("memory-sort-top")
+        window.nav.setCurrentRow(2)
+        pump(.6)
+        page = window.skills_page
+        base = page.items[0]
+        page.items = [{**base, "name": f"sort-{i:02}", "tags": [f"tag-{39-i:02}"],
+                       "updated_at": f"2026-10-{i % 28 + 1:02}",
+                       "provider": ("github", "local")[i % 2],
+                       "security_status": ("unchecked", "safe", "warning")[i % 3]} for i in range(40)]
+        page._apply_rows()
+        page.table.selectRow(20)
+        page.table.cellWidget(7, 0).setChecked(True)
+        for column in (1, 2, 4, 5, 6):
+            for _ in range(2):
+                page.table.scrollToBottom()
+                assert page.table.verticalScrollBar().value() > 0
+                page.table_card.header.sectionClicked.emit(column)
+                assert page.table.verticalScrollBar().value() == 0, column
+                assert page._checked() == [("sort-07", base["library"])]
+        report["checks"]["skills-all-header-sorts-at-top"] = True
+        shot("skills-sort-top")
         assert not report["errors"], report["errors"]
         report["passed"] = True
     except Exception:

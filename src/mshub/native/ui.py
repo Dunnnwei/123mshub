@@ -217,6 +217,9 @@ class CheckableTableMixin:
             self._sort_order = Qt.SortOrder.AscendingOrder
         self.table.horizontalHeader().setSortIndicator(col, self._sort_order)
         self._apply_sort(col, self._sort_order)
+        # Explicit sorting starts at the first result. Keep the selected and
+        # checked identities; ordinary refresh/edit-save still restores them.
+        self.table.scrollToTop()
 
 
 SHIFT_RANGE_HINT = "双击可打开编辑  ·  可使用 Shift 连选"

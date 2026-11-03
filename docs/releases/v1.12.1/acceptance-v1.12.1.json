@@ -1,0 +1,228 @@
+{
+  "product": "123mshub",
+  "version": "1.12.1",
+  "date": "2026-11-03",
+  "baseline": {
+    "version": "1.12.0",
+    "commit": "16956f8a3b85eb90d6df8d68d98d5fcba4bfd8f9"
+  },
+  "environment": {
+    "windows": "Windows-11-10.0.26200-SP0",
+    "python": "3.12.10",
+    "PySide6": "6.11.2",
+    "pyinstaller": "6.22.3"
+  },
+  "python_tests": {
+    "name": "pytest",
+    "errors": "0",
+    "failures": "0",
+    "skipped": "0",
+    "tests": "347",
+    "time": "69.907",
+    "timestamp": "2026-11-03T19:34:00.767313+08:00",
+    "hostname": "DWHOME"
+  },
+  "new_regression_tests": 17,
+  "ui_runs": [
+    {
+      "scale": "1.25",
+      "started_utc": "2026-11-03T11:38:52.7496988+00:00",
+      "seconds": 22.95,
+      "exit_code": 0,
+      "process_ids": [
+        8092,
+        17256
+      ],
+      "listener_samples": 23,
+      "listeners": [],
+      "frozen": true,
+      "passed": true,
+      "screenshot_count": 25,
+      "actual_dpr": [
+        1.25
+      ]
+    },
+    {
+      "scale": "1.5",
+      "started_utc": "2026-11-03T11:39:15.7414576+00:00",
+      "seconds": 22.08,
+      "exit_code": 0,
+      "process_ids": [
+        32880,
+        33812
+      ],
+      "listener_samples": 22,
+      "listeners": [],
+      "frozen": true,
+      "passed": true,
+      "screenshot_count": 25,
+      "actual_dpr": [
+        1.5
+      ]
+    }
+  ],
+  "bundle": {
+    "version": "1.12.1",
+    "version_metadata_matches": true,
+    "files": 239,
+    "zip_crc_and_all_file_hashes": "pass",
+    "manifest_matches_bundle": true,
+    "frozen_source_modules": [
+      "mshub",
+      "mshub.ai_gateway",
+      "mshub.ai_presets",
+      "mshub.config",
+      "mshub.database",
+      "mshub.errors",
+      "mshub.fetcher",
+      "mshub.fsretry",
+      "mshub.importer",
+      "mshub.indexer",
+      "mshub.jobs",
+      "mshub.libraries",
+      "mshub.manifest",
+      "mshub.memory",
+      "mshub.memory_service",
+      "mshub.models",
+      "mshub.native",
+      "mshub.native.app",
+      "mshub.native.branding",
+      "mshub.native.column_resize",
+      "mshub.native.graph_bridge",
+      "mshub.native.haui",
+      "mshub.native.i18n",
+      "mshub.native.job_controller",
+      "mshub.native.list_table",
+      "mshub.native.main_window",
+      "mshub.native.memory_facade",
+      "mshub.native.session_config",
+      "mshub.native.settings_service",
+      "mshub.native.shell_widgets",
+      "mshub.native.smoke_ui",
+      "mshub.native.starfield",
+      "mshub.native.state",
+      "mshub.native.task_runner",
+      "mshub.native.theme",
+      "mshub.native.ui",
+      "mshub.native.ui_icons",
+      "mshub.native.upgrader",
+      "mshub.native.views",
+      "mshub.native.views.graph_view",
+      "mshub.native.views.import_view",
+      "mshub.native.views.memory_view",
+      "mshub.native.views.settings_view",
+      "mshub.native.views.skill_view",
+      "mshub.native.widgets",
+      "mshub.parser",
+      "mshub.process",
+      "mshub.prompts",
+      "mshub.recovery",
+      "mshub.repository",
+      "mshub.scanner",
+      "mshub.syncsafe",
+      "mshub.tags",
+      "mshub.tidy",
+      "mshub.translation",
+      "mshub.urltool"
+    ],
+    "assets": [
+      "mshub/native/haui/check-dark.svg",
+      "mshub/native/haui/check-light.svg",
+      "mshub/native/haui/chevron-dark.svg",
+      "mshub/native/haui/chevron-light.svg",
+      "mshub/native/haui/icons.json",
+      "mshub/native/haui/manifest.json",
+      "mshub/native/haui/native.qss",
+      "mshub/native/haui/themes.json",
+      "mshub/native/haui/fonts/JetBrainsMono-Latin.ttf",
+      "mshub/native/haui/fonts/JetBrainsMono-Latin.woff2",
+      "mshub/native/haui/fonts/JetBrainsMono-OFL.txt",
+      "mshub/native/haui/fonts/SpaceGrotesk-Latin.ttf",
+      "mshub/native/haui/fonts/SpaceGrotesk-Latin.woff2",
+      "mshub/native/haui/fonts/SpaceGrotesk-OFL.txt",
+      "mshub/native/haui/licenses/Catppuccin-MIT.txt",
+      "mshub/native/haui/licenses/Everforest-MIT.txt",
+      "mshub/native/haui/licenses/GitHub-MIT.txt",
+      "mshub/native/haui/licenses/HAUI-MIT.txt",
+      "mshub/native/haui/licenses/HAUI-NOTICES.md",
+      "mshub/native/haui/licenses/NousResearch-MIT.txt",
+      "mshub/native/haui/licenses/Solarized-MIT.txt",
+      "mshub/native/haui/licenses/Tabler-MIT.txt",
+      "mshub/native/graph/haui-tokens.js",
+      "mshub/native/graph/haui.css",
+      "mshub/native/graph/haui.js",
+      "mshub/native/graph/index.html",
+      "mshub/native/graph/assets/index-Clzdw5xW.js",
+      "mshub/native/graph/assets/index-CoSVdF6z.css"
+    ],
+    "exe_sha256": "02eef907c147fe3314b8c35ffbaf3c925f90801709f861b85f25b617d9a2b21f",
+    "zip_sha256": "24ec05d4045be81de810ce1614d09aa934e3b6be615ecfef4df4d340f6742514",
+    "zip_bytes": 164800268,
+    "bundle_bytes": 379353687
+  },
+  "upgrade": {
+    "version": "1.12.1",
+    "production_upgrader_identical_to_v1120": true,
+    "safe_extraction": true,
+    "payload_root_found": true,
+    "manifest_hashes_checked": 238,
+    "zip_sha256": "24ec05d4045be81de810ce1614d09aa934e3b6be615ecfef4df4d340f6742514",
+    "running_install_replacement_tested": false
+  },
+  "credentials": {
+    "provided_credentials_absent": true,
+    "files_checked": 729,
+    "encodings": [
+      "UTF-8",
+      "UTF-16LE"
+    ]
+  },
+  "defender": {
+    "product": "123mshub",
+    "version": "1.12.1",
+    "scanner": "C:\\ProgramData\\Microsoft\\Windows Defender\\Platform\\CurrentVersion\\MpCmdRun.exe",
+    "antivirus_enabled": true,
+    "realtime_enabled": true,
+    "engine_version": "1.1.26100.4",
+    "signature_version": "1.463.104.0",
+    "signature_updated": "2026-11-03T11:26:39.0000000+08:00",
+    "signature_version_before": "1.463.104.0",
+    "scans": [
+      {
+        "target": "D:\\DiskWork\\PJ\\123mshub\\release\\native-v1.12.1\\123mshub",
+        "exit_code": 0,
+        "started_utc": "2026-11-03T11:38:55.2584626+00:00",
+        "finished_utc": "2026-11-03T11:38:55.7318139+00:00",
+        "stdout_file": "defender-bundle.txt",
+        "stderr_file": "defender-bundle-stderr.txt"
+      },
+      {
+        "target": "D:\\DiskWork\\PJ\\123mshub\\release\\123mshub-native-v1.12.1-win64.zip",
+        "exit_code": 0,
+        "started_utc": "2026-11-03T11:38:55.7369057+00:00",
+        "finished_utc": "2026-11-03T11:39:00.3332181+00:00",
+        "stdout_file": "defender-zip.txt",
+        "stderr_file": "defender-zip-stderr.txt"
+      }
+    ],
+    "authenticode": "NotSigned",
+    "exe_file_version": "1.12.1",
+    "exe_product_version": "1.12.1",
+    "exe_sha256": "02eef907c147fe3314b8c35ffbaf3c925f90801709f861b85f25b617d9a2b21f",
+    "zip_sha256": "24ec05d4045be81de810ce1614d09aa934e3b6be615ecfef4df4d340f6742514",
+    "limitations": "Current-host Microsoft Defender custom scans only; unsigned application. Other AV, SmartScreen reputation, and other computers are not covered."
+  },
+  "sync_findings": {
+    "v1120_memory_only_startup_reproduced": true,
+    "populated_database_new_directory_recovered_on_startup": true,
+    "late_arrival_manual_reconcile_passed": true,
+    "continuous_filesystem_watcher_added": false
+  },
+  "limitations": [
+    "Synthetic isolated repositories on this Windows host; the actual cloud sync provider and a second PC were not tested.",
+    "125% and 150% are explicit Qt DPR settings on this host, not multiple physical devices.",
+    "Real updater extraction and all manifest hashes passed; replacing the running daily installation was not performed.",
+    "Unsigned application. Current-host Microsoft Defender scans do not establish SmartScreen reputation or other antivirus acceptance.",
+    "External AI providers and full GitHub skill-install flows were not part of this patch acceptance."
+  ]
+}

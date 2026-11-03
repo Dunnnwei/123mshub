@@ -695,19 +695,22 @@ class MainWindow(QMainWindow):
         return graph
 
     def startup(self) -> None:
-        """Start read-only self-heal and then populate the first page."""
-        def healed(_identifier: int, _payload: object) -> None:
-            self.memory_page.refresh()
-            self.statusBar().showMessage("仓库已准备，记忆列表正在加载")
+        """Reconcile synced skills and memories once, off the UI thread."""
+        if getattr(self, "_startup_reconcile_started", False):
+            return
+        self._startup_reconcile_started = True
 
-        def failed(_identifier: int, payload: object) -> None:
-            self.memory_page.refresh()
-            message = payload.get("error") if isinstance(payload, dict) else payload
-            self.statusBar().showMessage(f"自愈提示：{message}")
+        def reconciled(job) -> None:
+            if job["status"] == "done":
+                self.statusBar().showMessage("启动识别完成，仓库列表正在刷新")
+            else:
+                self.statusBar().showMessage(f"启动识别提示：{job.get('error') or '请查看任务详情并重试'}")
 
-        handle = self.runner.submit(self.facade.heal)
-        handle.signals.finished.connect(healed)
-        handle.signals.failed.connect(failed)
+        # Use the same serialized mutation queue and reconciliation as the
+        # manual action. repositoryChanged refreshes all pages after completion,
+        # including a skills page opened while reconciliation was still running.
+        self.jobs.submit("reconcile", "启动识别已同步条目", self.facade.rebuild,
+                         callback=reconciled)
         # v1.6.0：预热 GraphView，消除首次点击"记忆图示"时的 QWebEngine 冷启动闪屏。
         # v1.8.1：预热整体提前到 show 之前（见 show_after_graph_prewarm），这里保留
         # 幂等兜底——万一预热被跳过（异常路径），启动 500ms 后仍会补一次。

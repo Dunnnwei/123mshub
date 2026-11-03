@@ -56,6 +56,8 @@ QPushButton#danger:disabled { color: @disabled; background: @control; }
 QPushButton#metric { color: @muted; background: transparent; min-height: 28px; padding: 2px 9px; font-size: 12px; }
 QPushButton#metric:hover { color: @accent; background: @hover; }
 QPushButton#metric:checked { color: @accent; background: @selection; }
+QPushButton#memorySortHeader { min-height: 22px; padding: 0; background: transparent; color: @muted; font-size: 12px; font-weight: 500; text-align: left; }
+QPushButton#memorySortHeader:hover { color: @accent; background: @hover; }
 QLabel#badge { color: @accent; background: @control; border: none; border-radius: 3px; padding: 2px 7px; font-size: 11px; }
 QLabel#error, QLabel#inboxWarning, QLabel#statusError { color: @error; background: @error_soft; padding: 8px; border: none; }
 QLabel#statusOk { color: @ok; background: @ok_soft; padding: 8px; }
